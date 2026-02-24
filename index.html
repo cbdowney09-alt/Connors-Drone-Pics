@@ -1,0 +1,932 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Connor’s Drone Pics | Drone Photos for Real Estate & Roofing</title>
+  <meta name="description" content="Fast, sharp drone photos for real estate listings and roof inspections. Next-day delivery available. Serving your area." />
+  <meta name="theme-color" content="#0b1220" />
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="Connor’s Drone Pics" />
+  <meta property="og:description" content="Drone photos for real estate and roofing—fast turnaround, crisp results." />
+  <meta property="og:type" content="website" />
+  <meta property="og:image" content="assets/og.jpg" />
+  <meta property="og:url" content="https://your-domain.com" />
+
+  <!-- Basic Schema -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "LocalBusiness",
+    "name": "Connor's Drone Pics",
+    "description": "Drone photography for real estate businesses and roofing companies.",
+    "url": "https://your-domain.com",
+    "telephone": "+1-555-555-5555",
+    "email": "hello@your-domain.com",
+    "areaServed": "Your City / Region",
+    "priceRange": "$$",
+    "sameAs": []
+  }
+  </script>
+
+  <style>
+    :root{
+      --bg:#070b14;
+      --panel:#0b1220;
+      --panel2:#0f1830;
+      --text:#e8eefc;
+      --muted:#b6c3e6;
+      --line: rgba(255,255,255,.10);
+      --accent:#6ee7ff;
+      --accent2:#a78bfa;
+      --good:#34d399;
+      --warn:#fbbf24;
+      --bad:#fb7185;
+      --shadow: 0 18px 55px rgba(0,0,0,.45);
+      --radius: 18px;
+      --max: 1120px;
+      --pad: clamp(16px, 3vw, 28px);
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      background: radial-gradient(1200px 700px at 20% 0%, rgba(110,231,255,.18), transparent 55%),
+                  radial-gradient(900px 600px at 90% 10%, rgba(167,139,250,.18), transparent 60%),
+                  linear-gradient(180deg, var(--bg), #050816 65%, #040611);
+      color:var(--text);
+      font-family:var(--sans);
+      line-height:1.5;
+    }
+    a{color:inherit}
+    .wrap{max-width:var(--max); margin:0 auto; padding:0 var(--pad)}
+    .nav{
+      position:sticky; top:0; z-index:50;
+      backdrop-filter:saturate(140%) blur(10px);
+      background: rgba(7,11,20,.65);
+      border-bottom:1px solid var(--line);
+    }
+    .nav-inner{
+      display:flex; align-items:center; justify-content:space-between;
+      padding:12px var(--pad);
+      max-width:var(--max); margin:0 auto;
+    }
+    .brand{
+      display:flex; align-items:center; gap:10px; text-decoration:none;
+      font-weight:800; letter-spacing:.2px;
+    }
+    .logo{
+      width:34px; height:34px; border-radius:10px;
+      background: linear-gradient(135deg, rgba(110,231,255,.95), rgba(167,139,250,.95));
+      box-shadow: 0 10px 30px rgba(110,231,255,.18);
+      position:relative; overflow:hidden;
+    }
+    .logo:after{
+      content:""; position:absolute; inset:-20%;
+      background: radial-gradient(circle at 35% 35%, rgba(255,255,255,.9), transparent 45%);
+      transform: rotate(12deg);
+    }
+    .nav-links{display:flex; gap:18px; align-items:center}
+    .nav-links a{
+      text-decoration:none; color:var(--muted);
+      font-weight:600; font-size:14px;
+      padding:8px 10px; border-radius:12px;
+    }
+    .nav-links a:hover{background:rgba(255,255,255,.06); color:var(--text)}
+    .btn{
+      display:inline-flex; align-items:center; justify-content:center;
+      gap:10px;
+      padding:12px 14px;
+      border-radius:14px;
+      border:1px solid rgba(255,255,255,.16);
+      background: rgba(255,255,255,.06);
+      color:var(--text);
+      text-decoration:none;
+      font-weight:800;
+      box-shadow: none;
+      transition: transform .12s ease, background .12s ease, border-color .12s ease;
+      cursor:pointer;
+    }
+    .btn:hover{transform: translateY(-1px); background: rgba(255,255,255,.09); border-color: rgba(255,255,255,.22)}
+    .btn.primary{
+      border: 1px solid rgba(110,231,255,.35);
+      background: linear-gradient(135deg, rgba(110,231,255,.18), rgba(167,139,250,.14));
+    }
+    .btn.primary:hover{border-color: rgba(110,231,255,.55)}
+    .btn.small{padding:9px 12px; font-size:14px}
+    .pill{
+      display:inline-flex; align-items:center; gap:8px;
+      padding:8px 10px; border-radius:999px;
+      background: rgba(255,255,255,.06);
+      border:1px solid rgba(255,255,255,.12);
+      color:var(--muted);
+      font-weight:700;
+      font-size:13px;
+    }
+    .hero{
+      padding: 54px 0 18px;
+    }
+    .grid{
+      display:grid;
+      gap:24px;
+      grid-template-columns: 1.05fr .95fr;
+      align-items:start;
+    }
+    @media (max-width: 920px){
+      .grid{grid-template-columns: 1fr}
+      .nav-links{display:none}
+    }
+    h1{
+      font-size: clamp(34px, 4.2vw, 54px);
+      line-height:1.05;
+      margin: 14px 0 14px;
+      letter-spacing: -0.7px;
+    }
+    .lead{
+      font-size: clamp(16px, 1.4vw, 18px);
+      color: var(--muted);
+      max-width: 54ch;
+      margin: 0 0 18px;
+    }
+    .hero-cta{display:flex; gap:12px; flex-wrap:wrap; margin-top: 18px}
+    .card{
+      background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
+      border:1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+    .hero-card{padding: 18px}
+    .stat-row{
+      display:grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-top: 12px;
+    }
+    @media (max-width: 520px){
+      .stat-row{grid-template-columns: 1fr}
+    }
+    .stat{
+      padding: 12px;
+      border-radius: 14px;
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(11,18,32,.55);
+    }
+    .stat b{display:block; font-size: 18px}
+    .stat span{display:block; color:var(--muted); font-size: 13px; margin-top: 4px}
+    .mini{
+      display:flex; align-items:center; justify-content:space-between;
+      gap:10px; padding: 12px; border-radius: 14px;
+      background: rgba(11,18,32,.55);
+      border:1px solid rgba(255,255,255,.10);
+      margin-top: 10px;
+      color: var(--muted);
+      font-weight:700;
+      font-size: 13px;
+    }
+    .mini code{
+      font-family: var(--mono);
+      background: rgba(255,255,255,.06);
+      padding: 6px 8px;
+      border-radius: 10px;
+      border:1px solid rgba(255,255,255,.10);
+      color: var(--text);
+      font-weight:800;
+      font-size: 12px;
+    }
+    .section{padding: 36px 0}
+    .section h2{
+      font-size: clamp(22px, 2.4vw, 30px);
+      margin: 0 0 8px;
+      letter-spacing: -0.4px;
+    }
+    .section p.sub{
+      color: var(--muted);
+      margin: 0 0 18px;
+      max-width: 70ch;
+    }
+
+    .two{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    @media (max-width: 920px){ .two{grid-template-columns:1fr} }
+
+    .list{
+      display:grid; gap:10px;
+      padding: 16px;
+    }
+    .li{
+      display:flex; gap:10px; align-items:flex-start;
+      padding: 12px;
+      border-radius: 14px;
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(11,18,32,.55);
+    }
+    .dot{
+      width:10px; height:10px; border-radius: 999px;
+      margin-top: 6px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      flex: 0 0 auto;
+    }
+    .li b{display:block}
+    .li span{display:block; color:var(--muted); font-size: 14px; margin-top: 2px}
+
+    .gallery{
+      display:grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 12px;
+    }
+    .shot{
+      position:relative;
+      overflow:hidden;
+      border-radius: 18px;
+      border:1px solid rgba(255,255,255,.12);
+      background: rgba(11,18,32,.55);
+      min-height: 150px;
+    }
+    .shot img{
+      width:100%; height:100%;
+      object-fit: cover;
+      display:block;
+      transform: scale(1.03);
+      transition: transform .25s ease;
+    }
+    .shot:hover img{transform: scale(1.08)}
+    .shot .cap{
+      position:absolute; left:12px; right:12px; bottom:12px;
+      padding: 10px 12px;
+      border-radius: 14px;
+      background: rgba(7,11,20,.72);
+      border: 1px solid rgba(255,255,255,.12);
+      color: var(--text);
+      font-weight: 800;
+      font-size: 14px;
+      backdrop-filter: blur(8px);
+    }
+    .span-6{grid-column: span 6}
+    .span-4{grid-column: span 4}
+    .span-8{grid-column: span 8}
+    @media (max-width: 920px){
+      .span-6,.span-4,.span-8{grid-column: span 12}
+    }
+
+    .pricing{
+      display:grid; gap:14px;
+      grid-template-columns: repeat(3, 1fr);
+    }
+    @media (max-width: 980px){ .pricing{grid-template-columns:1fr} }
+    .price-card{padding: 18px}
+    .price-top{
+      display:flex; align-items:center; justify-content:space-between; gap:12px;
+      margin-bottom: 10px;
+    }
+    .badge{
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: .25px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border:1px solid rgba(255,255,255,.14);
+      background: rgba(255,255,255,.06);
+      color: var(--muted);
+    }
+    .price{
+      font-size: 34px; font-weight: 950; letter-spacing: -0.6px; margin: 8px 0 6px;
+    }
+    .price small{font-size: 13px; color: var(--muted); font-weight: 800}
+    .feat{margin: 12px 0 0; padding:0; list-style:none; display:grid; gap:10px}
+    .feat li{
+      display:flex; gap:10px; align-items:flex-start;
+      color: var(--muted);
+      font-weight:700;
+      background: rgba(11,18,32,.55);
+      border:1px solid rgba(255,255,255,.10);
+      padding: 10px 12px;
+      border-radius: 14px;
+    }
+    .tick{color: var(--good); font-weight: 900}
+
+    .form{
+      padding: 18px;
+    }
+    form{display:grid; gap:12px}
+    .row{display:grid; grid-template-columns:1fr 1fr; gap:12px}
+    @media (max-width: 720px){ .row{grid-template-columns:1fr} }
+    label{font-weight:800; font-size: 13px; color: var(--muted)}
+    input, textarea, select{
+      width:100%;
+      margin-top: 6px;
+      padding: 12px 12px;
+      border-radius: 14px;
+      border:1px solid rgba(255,255,255,.14);
+      background: rgba(7,11,20,.55);
+      color: var(--text);
+      outline:none;
+      font-size: 15px;
+    }
+    textarea{min-height: 110px; resize: vertical}
+    input:focus, textarea:focus, select:focus{
+      border-color: rgba(110,231,255,.55);
+      box-shadow: 0 0 0 4px rgba(110,231,255,.10);
+    }
+    .hint{
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: -2px;
+    }
+    .footer{
+      border-top: 1px solid var(--line);
+      margin-top: 40px;
+      padding: 24px 0 36px;
+      color: var(--muted);
+    }
+    .footer .cols{
+      display:grid; gap: 14px;
+      grid-template-columns: 1.1fr .9fr .9fr;
+      align-items:start;
+    }
+    @media (max-width: 920px){ .footer .cols{grid-template-columns: 1fr} }
+
+    .kicker{color: var(--muted); font-weight:900; letter-spacing:.18em; text-transform:uppercase; font-size: 12px}
+    .hr{height:1px; background: var(--line); margin: 18px 0}
+    .note{
+      font-size: 12px; color: rgba(182,195,230,.85);
+    }
+
+    /* small utility */
+    .sr-only{
+      position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0;
+    }
+  </style>
+</head>
+
+<body>
+  <header class="nav" role="banner">
+    <div class="nav-inner">
+      <a class="brand" href="#top" aria-label="Connor's Drone Pics home">
+        <span class="logo" aria-hidden="true"></span>
+        <span>Connor’s Drone Pics</span>
+      </a>
+
+      <nav class="nav-links" aria-label="Primary">
+        <a href="#services">Services</a>
+        <a href="#portfolio">Portfolio</a>
+        <a href="#pricing">Pricing</a>
+        <a href="#faq">FAQ</a>
+        <a href="#quote">Get a Quote</a>
+      </nav>
+
+      <a class="btn primary small" href="#quote">Book / Quote</a>
+    </div>
+  </header>
+
+  <main id="top">
+    <!-- HERO -->
+    <section class="hero">
+      <div class="wrap grid">
+        <div>
+          <div class="pill" title="Fast turnaround & business-friendly deliverables">
+            <span aria-hidden="true">🚁</span>
+            <span>Drone photos that sell listings & document roofs</span>
+          </div>
+
+          <h1>Clean aerial shots for real estate teams and roofers—delivered fast.</h1>
+
+          <p class="lead">
+            Stop wasting time with “a guy with a drone.” Get consistent, sharp imagery and practical deliverables
+            that your clients actually use: MLS-ready photos, site context, roof condition documentation, and progress shots.
+          </p>
+
+          <div class="hero-cta">
+            <a class="btn primary" href="#quote">Request a quote</a>
+            <a class="btn" href="#portfolio">See work</a>
+            <a class="btn" href="tel:+15555555555" aria-label="Call Connor's Drone Pics">Call</a>
+          </div>
+
+          <div class="hr"></div>
+
+          <div class="two">
+            <div class="li">
+              <div class="dot" aria-hidden="true"></div>
+              <div>
+                <b>Real Estate</b>
+                <span>Exterior aerials, neighborhood context, lot lines (as-needed), community amenities.</span>
+              </div>
+            </div>
+
+            <div class="li">
+              <div class="dot" aria-hidden="true"></div>
+              <div>
+                <b>Roofing</b>
+                <span>Before/after, storm documentation, progress updates, hard-to-reach angles—no ladder drama.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <aside class="card hero-card" aria-label="Quick details">
+          <div class="kicker">What you get</div>
+
+          <div class="stat-row">
+            <div class="stat">
+              <b>Next-day</b>
+              <span>Delivery options available</span>
+            </div>
+            <div class="stat">
+              <b>MLS-ready</b>
+              <span>Correct sizes / formats</span>
+            </div>
+            <div class="stat">
+              <b>Business-first</b>
+              <span>Simple ordering & reuse</span>
+            </div>
+          </div>
+
+          <div class="mini">
+            <span>Typical turnaround</span>
+            <code>24–48 hours</code>
+          </div>
+          <div class="mini">
+            <span>Coverage area</span>
+            <code>Your City / Region</code>
+          </div>
+          <div class="mini">
+            <span>Email</span>
+            <code>hello@your-domain.com</code>
+          </div>
+
+          <div class="hr"></div>
+
+          <div class="note">
+            Note: You’re selling to businesses. They care about reliability, speed, and “don’t make me babysit this.”
+            This page is built to reassure them and get them to request a quote.
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- SERVICES -->
+    <section id="services" class="section">
+      <div class="wrap">
+        <h2>Services that match how pros actually work</h2>
+        <p class="sub">
+          Pick a package or request a custom shoot. If you’re a roofer, you can repeat this monthly/weekly for progress shots.
+          If you’re real estate, you can standardize your listing media.
+        </p>
+
+        <div class="two">
+          <div class="card list" aria-label="Real estate services">
+            <div class="kicker">Real Estate</div>
+
+            <div class="li">
+              <div class="dot" aria-hidden="true"></div>
+              <div>
+                <b>Listing Aerials</b>
+                <span>Hero exterior shots, property context, approach angles, clean horizon.</span>
+              </div>
+            </div>
+            <div class="li">
+              <div class="dot" aria-hidden="true"></div>
+              <div>
+                <b>Neighborhood & Amenities</b>
+                <span>Parks, water, trails, schools (where appropriate), community features.</span>
+              </div>
+            </div>
+            <div class="li">
+              <div class="dot" aria-hidden="true"></div>
+              <div>
+                <b>Land / Lots</b>
+                <span>Wide context shots; optional lot overlays if you provide boundary data.</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="card list" aria-label="Roofing services">
+            <div class="kicker">Roofing</div>
+
+            <div class="li">
+              <div class="dot" aria-hidden="true"></div>
+              <div>
+                <b>Condition Documentation</b>
+                <span>Clear angles for missing shingles, flashing, pooling, impact points.</span>
+              </div>
+            </div>
+            <div class="li">
+              <div class="dot" aria-hidden="true"></div>
+              <div>
+                <b>Before / After</b>
+                <span>Marketing shots that prove the transformation (and reduce disputes).</span>
+              </div>
+            </div>
+            <div class="li">
+              <div class="dot" aria-hidden="true"></div>
+              <div>
+                <b>Progress Updates</b>
+                <span>Repeatable shots from consistent angles for crews, PMs, and clients.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PORTFOLIO -->
+    <section id="portfolio" class="section">
+      <div class="wrap">
+        <h2>Portfolio</h2>
+        <p class="sub">
+          Replace these placeholders with your real shots. If your work looks average, you will lose to competitors immediately.
+          Your portfolio is the business.
+        </p>
+
+        <div class="gallery" aria-label="Gallery">
+          <!-- Replace images in assets/ -->
+          <figure class="shot span-8">
+            <img src="assets/portfolio-1.jpg" alt="Aerial view of a house with landscaping" loading="lazy" />
+            <figcaption class="cap">Listing hero shot</figcaption>
+          </figure>
+
+          <figure class="shot span-4">
+            <img src="assets/portfolio-2.jpg" alt="Aerial of roof showing condition detail" loading="lazy" />
+            <figcaption class="cap">Roof detail angle</figcaption>
+          </figure>
+
+          <figure class="shot span-4">
+            <img src="assets/portfolio-3.jpg" alt="Wide neighborhood context shot" loading="lazy" />
+            <figcaption class="cap">Neighborhood context</figcaption>
+          </figure>
+
+          <figure class="shot span-4">
+            <img src="assets/portfolio-4.jpg" alt="Before and after roof replacement" loading="lazy" />
+            <figcaption class="cap">Before / after</figcaption>
+          </figure>
+
+          <figure class="shot span-4">
+            <img src="assets/portfolio-5.jpg" alt="Construction progress aerial view" loading="lazy" />
+            <figcaption class="cap">Progress update</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <!-- PRICING -->
+    <section id="pricing" class="section">
+      <div class="wrap">
+        <h2>Pricing</h2>
+        <p class="sub">
+          Keep this simple. Business buyers hate fuzzy pricing, but they’ll accept “starting at” if you clearly define what’s included.
+          Change these numbers to match your market.
+        </p>
+
+        <div class="pricing" aria-label="Pricing tiers">
+          <div class="card price-card">
+            <div class="price-top">
+              <div>
+                <div class="kicker">Starter</div>
+                <div style="color:var(--muted); font-weight:800; font-size:14px;">Quick aerial set</div>
+              </div>
+              <span class="badge">Real estate</span>
+            </div>
+
+            <div class="price">$149 <small>/ property</small></div>
+            <ul class="feat">
+              <li><span class="tick">✓</span> 8–12 edited photos</li>
+              <li><span class="tick">✓</span> MLS-ready + high-res</li>
+              <li><span class="tick">✓</span> 48-hour delivery</li>
+              <li><span class="tick">✓</span> Simple license for marketing</li>
+            </ul>
+
+            <div class="hr"></div>
+            <a class="btn primary" href="#quote">Get this</a>
+          </div>
+
+          <div class="card price-card">
+            <div class="price-top">
+              <div>
+                <div class="kicker">Pro</div>
+                <div style="color:var(--muted); font-weight:800; font-size:14px;">Best seller</div>
+              </div>
+              <span class="badge">Most popular</span>
+            </div>
+
+            <div class="price">$249 <small>/ site</small></div>
+            <ul class="feat">
+              <li><span class="tick">✓</span> 15–25 edited photos</li>
+              <li><span class="tick">✓</span> Detail angles + wide context</li>
+              <li><span class="tick">✓</span> 24–48 hour delivery</li>
+              <li><span class="tick">✓</span> Priority scheduling</li>
+            </ul>
+
+            <div class="hr"></div>
+            <a class="btn primary" href="#quote">Get this</a>
+          </div>
+
+          <div class="card price-card">
+            <div class="price-top">
+              <div>
+                <div class="kicker">Roofing Bundle</div>
+                <div style="color:var(--muted); font-weight:800; font-size:14px;">Documentation + marketing</div>
+              </div>
+              <span class="badge">Roofing</span>
+            </div>
+
+            <div class="price">$199 <small>/ visit</small></div>
+            <ul class="feat">
+              <li><span class="tick">✓</span> Before/after or condition set</li>
+              <li><span class="tick">✓</span> Problem-area close angles</li>
+              <li><span class="tick">✓</span> Optional repeat schedule</li>
+              <li><span class="tick">✓</span> Delivery organized by roof side</li>
+            </ul>
+
+            <div class="hr"></div>
+            <a class="btn primary" href="#quote">Get this</a>
+          </div>
+        </div>
+
+        <p class="note" style="margin-top:14px">
+          Harsh truth: if you can’t clearly explain what the buyer gets, they assume you’re amateur.
+          Define deliverables like a contractor: counts, formats, turnaround, and usage rights.
+        </p>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section id="faq" class="section">
+      <div class="wrap">
+        <h2>FAQ</h2>
+        <p class="sub">Answer the objections that stop buyers from booking.</p>
+
+        <div class="two">
+          <div class="card list">
+            <div class="li">
+              <div class="dot" aria-hidden="true"></div>
+              <div>
+                <b>How fast is delivery?</b>
+                <span>Standard is 24–48 hours. Rush options available depending on schedule.</span>
+              </div>
+            </div>
+            <div class="li">
+              <div class="dot" aria-hidden="true"></div>
+              <div>
+                <b>What files do I get?</b>
+                <span>High-res JPGs + web/MLS-ready sizes. Organized folders so your team doesn’t waste time.</span>
+              </div>
+            </div>
+            <div class="li">
+              <div class="dot" aria-hidden="true"></div>
+              <div>
+                <b>Do you travel?</b>
+                <span>Yes—travel fee applies outside the core service area.</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="card list">
+            <div class="li">
+              <div class="dot" aria-hidden="true"></div>
+              <div>
+                <b>Can you do recurring shoots?</b>
+                <span>Yes. Roofers and builders use weekly/monthly progress shots.</span>
+              </div>
+            </div>
+            <div class="li">
+              <div class="dot" aria-hidden="true"></div>
+              <div>
+                <b>Are you licensed/insured?</b>
+                <span>Put your actual details here. If you’re not, fix that—serious buyers will ask.</span>
+              </div>
+            </div>
+            <div class="li">
+              <div class="dot" aria-hidden="true"></div>
+              <div>
+                <b>How do I book?</b>
+                <span>Fill the quote form. You’ll get a response with next available times and total price.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- QUOTE -->
+    <section id="quote" class="section">
+      <div class="wrap">
+        <h2>Request a quote</h2>
+        <p class="sub">
+          This form uses a mailto fallback (works anywhere). For real business, wire this to Formspree/Netlify Forms
+          or a backend endpoint so you don’t lose leads.
+        </p>
+
+        <div class="two">
+          <div class="card form">
+            <form id="quoteForm" novalidate>
+              <div class="row">
+                <div>
+                  <label for="name">Name</label>
+                  <input id="name" name="name" autocomplete="name" required placeholder="Connor / Alex / Sam" />
+                </div>
+                <div>
+                  <label for="company">Company</label>
+                  <input id="company" name="company" autocomplete="organization" placeholder="ABC Realty / XYZ Roofing" />
+                </div>
+              </div>
+
+              <div class="row">
+                <div>
+                  <label for="email">Email</label>
+                  <input id="email" name="email" type="email" autocomplete="email" required placeholder="you@company.com" />
+                </div>
+                <div>
+                  <label for="phone">Phone</label>
+                  <input id="phone" name="phone" autocomplete="tel" placeholder="(555) 555-5555" />
+                </div>
+              </div>
+
+              <div class="row">
+                <div>
+                  <label for="type">Project type</label>
+                  <select id="type" name="type" required>
+                    <option value="" selected disabled>Select one</option>
+                    <option>Real estate listing</option>
+                    <option>Roof condition documentation</option>
+                    <option>Before / after marketing</option>
+                    <option>Construction progress</option>
+                    <option>Other</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label for="timing">When do you need it?</label>
+                  <select id="timing" name="timing" required>
+                    <option value="" selected disabled>Select one</option>
+                    <option>ASAP (rush)</option>
+                    <option>This week</option>
+                    <option>Next week</option>
+                    <option>Flexible</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label for="address">Site address / area</label>
+                <input id="address" name="address" placeholder="123 Main St, City, ST" />
+                <div class="hint">If you don’t want to share the full address yet, provide the neighborhood/city.</div>
+              </div>
+
+              <div>
+                <label for="details">Details</label>
+                <textarea id="details" name="details" placeholder="What deliverables do you need? Photo count, angles, deadlines, special notes..."></textarea>
+              </div>
+
+              <button class="btn primary" type="submit">Send request</button>
+              <div id="formMsg" class="hint" role="status" aria-live="polite"></div>
+            </form>
+          </div>
+
+          <div class="card list" aria-label="Contact details">
+            <div class="kicker">Direct contact</div>
+
+            <div class="li">
+              <div class="dot" aria-hidden="true"></div>
+              <div>
+                <b>Phone</b>
+                <span><a href="tel:+15555555555">+1 (555) 555-5555</a></span>
+              </div>
+            </div>
+
+            <div class="li">
+              <div class="dot" aria-hidden="true"></div>
+              <div>
+                <b>Email</b>
+                <span><a href="mailto:hello@your-domain.com">hello@your-domain.com</a></span>
+              </div>
+            </div>
+
+            <div class="li">
+              <div class="dot" aria-hidden="true"></div>
+              <div>
+                <b>Availability</b>
+                <span>Weekdays + select weekends. Weather-dependent for safe flights.</span>
+              </div>
+            </div>
+
+            <div class="li">
+              <div class="dot" aria-hidden="true"></div>
+              <div>
+                <b>Proof you’re legit</b>
+                <span>Add: insurance, licensing, and a short “process” to reduce buyer anxiety.</span>
+              </div>
+            </div>
+
+            <div class="hr"></div>
+            <p class="note">
+              Harsh truth: if you don’t show credibility (portfolio + reliability + clear deliverables),
+              roofers and agencies will assume you’re a hobbyist and squeeze you on price.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer class="footer">
+      <div class="wrap">
+        <div class="cols">
+          <div>
+            <a class="brand" href="#top">
+              <span class="logo" aria-hidden="true"></span>
+              <span>Connor’s Drone Pics</span>
+            </a>
+            <p class="note" style="margin-top:10px; max-width: 65ch;">
+              Drone photos for real estate businesses and roofers. Fast turnaround. Clean deliverables.
+            </p>
+          </div>
+
+          <div>
+            <div class="kicker">Pages</div>
+            <div class="hr"></div>
+            <div style="display:grid; gap:10px; font-weight:800;">
+              <a href="#services">Services</a>
+              <a href="#portfolio">Portfolio</a>
+              <a href="#pricing">Pricing</a>
+              <a href="#quote">Get a Quote</a>
+            </div>
+          </div>
+
+          <div>
+            <div class="kicker">Service area</div>
+            <div class="hr"></div>
+            <div class="note">
+              Your City / Region<br />
+              Travel available (fee outside core radius)
+            </div>
+          </div>
+        </div>
+
+        <div class="hr"></div>
+        <div class="note">© <span id="year"></span> Connor’s Drone Pics. All rights reserved.</div>
+      </div>
+    </footer>
+  </main>
+
+  <script>
+    // Footer year
+    document.getElementById('year').textContent = new Date().getFullYear();
+
+    // Quote form: simple client-side validation + mailto fallback
+    const form = document.getElementById('quoteForm');
+    const msg = document.getElementById('formMsg');
+
+    function isEmail(v){
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v || '').trim());
+    }
+
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      msg.textContent = "";
+
+      const data = Object.fromEntries(new FormData(form).entries());
+
+      const missing = [];
+      if (!data.name?.trim()) missing.push("Name");
+      if (!isEmail(data.email)) missing.push("Valid email");
+      if (!data.type?.trim()) missing.push("Project type");
+      if (!data.timing?.trim()) missing.push("Timing");
+
+      if (missing.length) {
+        msg.textContent = "Please provide: " + missing.join(", ") + ".";
+        return;
+      }
+
+      // Build email
+      const subject = encodeURIComponent(`Quote request: ${data.type} (${data.timing})`);
+      const body = encodeURIComponent(
+`Name: ${data.name}
+Company: ${data.company || "-"}
+Email: ${data.email}
+Phone: ${data.phone || "-"}
+Project type: ${data.type}
+Timing: ${data.timing}
+Address/Area: ${data.address || "-"} 
+
+Details:
+${data.details || "-"}`
+      );
+
+      // TODO: Replace with your real email
+      const to = "hello@your-domain.com";
+      const mailto = `mailto:${to}?subject=${subject}&body=${body}`;
+
+      // Open mail client
+      window.location.href = mailto;
+
+      msg.textContent = "Opening your email app… if nothing happens, email us directly at " + to + ".";
+      form.reset();
+    });
+  </script>
+</body>
+</html>

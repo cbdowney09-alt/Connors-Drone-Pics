@@ -1,932 +1,821 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Connor’s Drone Pics | Drone Photos for Real Estate & Roofing</title>
-  <meta name="description" content="Fast, sharp drone photos for real estate listings and roof inspections. Next-day delivery available. Serving your area." />
-  <meta name="theme-color" content="#0b1220" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Knoxville Canvas</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 
-  <!-- Open Graph -->
-  <meta property="og:title" content="Connor’s Drone Pics" />
-  <meta property="og:description" content="Drone photos for real estate and roofing—fast turnaround, crisp results." />
-  <meta property="og:type" content="website" />
-  <meta property="og:image" content="assets/og.jpg" />
-  <meta property="og:url" content="https://your-domain.com" />
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #22253a;
+    --border: rgba(255,255,255,0.08);
+    --text: #f0f2ff;
+    --text2: #8b90b0;
+    --accent: #4f6ef7;
 
-  <!-- Basic Schema -->
-  <script type="application/ld+json">
-  {
-    "@context": "https://schema.org",
-    "@type": "LocalBusiness",
-    "name": "Connor's Drone Pics",
-    "description": "Drone photography for real estate businesses and roofing companies.",
-    "url": "https://your-domain.com",
-    "telephone": "+1-555-555-5555",
-    "email": "hello@your-domain.com",
-    "areaServed": "Your City / Region",
-    "priceRange": "$$",
-    "sameAs": []
+    --c-none:     #6b7280;
+    --c-hanger:   #f59e0b;
+    --c-interest: #10b981;
+    --c-no:       #ef4444;
+    --c-dnr:      #7c3aed;
   }
-  </script>
 
-  <style>
-    :root{
-      --bg:#070b14;
-      --panel:#0b1220;
-      --panel2:#0f1830;
-      --text:#e8eefc;
-      --muted:#b6c3e6;
-      --line: rgba(255,255,255,.10);
-      --accent:#6ee7ff;
-      --accent2:#a78bfa;
-      --good:#34d399;
-      --warn:#fbbf24;
-      --bad:#fb7185;
-      --shadow: 0 18px 55px rgba(0,0,0,.45);
-      --radius: 18px;
-      --max: 1120px;
-      --pad: clamp(16px, 3vw, 28px);
-      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
-    }
-    *{box-sizing:border-box}
-    html,body{height:100%}
-    body{
-      margin:0;
-      background: radial-gradient(1200px 700px at 20% 0%, rgba(110,231,255,.18), transparent 55%),
-                  radial-gradient(900px 600px at 90% 10%, rgba(167,139,250,.18), transparent 60%),
-                  linear-gradient(180deg, var(--bg), #050816 65%, #040611);
-      color:var(--text);
-      font-family:var(--sans);
-      line-height:1.5;
-    }
-    a{color:inherit}
-    .wrap{max-width:var(--max); margin:0 auto; padding:0 var(--pad)}
-    .nav{
-      position:sticky; top:0; z-index:50;
-      backdrop-filter:saturate(140%) blur(10px);
-      background: rgba(7,11,20,.65);
-      border-bottom:1px solid var(--line);
-    }
-    .nav-inner{
-      display:flex; align-items:center; justify-content:space-between;
-      padding:12px var(--pad);
-      max-width:var(--max); margin:0 auto;
-    }
-    .brand{
-      display:flex; align-items:center; gap:10px; text-decoration:none;
-      font-weight:800; letter-spacing:.2px;
-    }
-    .logo{
-      width:34px; height:34px; border-radius:10px;
-      background: linear-gradient(135deg, rgba(110,231,255,.95), rgba(167,139,250,.95));
-      box-shadow: 0 10px 30px rgba(110,231,255,.18);
-      position:relative; overflow:hidden;
-    }
-    .logo:after{
-      content:""; position:absolute; inset:-20%;
-      background: radial-gradient(circle at 35% 35%, rgba(255,255,255,.9), transparent 45%);
-      transform: rotate(12deg);
-    }
-    .nav-links{display:flex; gap:18px; align-items:center}
-    .nav-links a{
-      text-decoration:none; color:var(--muted);
-      font-weight:600; font-size:14px;
-      padding:8px 10px; border-radius:12px;
-    }
-    .nav-links a:hover{background:rgba(255,255,255,.06); color:var(--text)}
-    .btn{
-      display:inline-flex; align-items:center; justify-content:center;
-      gap:10px;
-      padding:12px 14px;
-      border-radius:14px;
-      border:1px solid rgba(255,255,255,.16);
-      background: rgba(255,255,255,.06);
-      color:var(--text);
-      text-decoration:none;
-      font-weight:800;
-      box-shadow: none;
-      transition: transform .12s ease, background .12s ease, border-color .12s ease;
-      cursor:pointer;
-    }
-    .btn:hover{transform: translateY(-1px); background: rgba(255,255,255,.09); border-color: rgba(255,255,255,.22)}
-    .btn.primary{
-      border: 1px solid rgba(110,231,255,.35);
-      background: linear-gradient(135deg, rgba(110,231,255,.18), rgba(167,139,250,.14));
-    }
-    .btn.primary:hover{border-color: rgba(110,231,255,.55)}
-    .btn.small{padding:9px 12px; font-size:14px}
-    .pill{
-      display:inline-flex; align-items:center; gap:8px;
-      padding:8px 10px; border-radius:999px;
-      background: rgba(255,255,255,.06);
-      border:1px solid rgba(255,255,255,.12);
-      color:var(--muted);
-      font-weight:700;
-      font-size:13px;
-    }
-    .hero{
-      padding: 54px 0 18px;
-    }
-    .grid{
-      display:grid;
-      gap:24px;
-      grid-template-columns: 1.05fr .95fr;
-      align-items:start;
-    }
-    @media (max-width: 920px){
-      .grid{grid-template-columns: 1fr}
-      .nav-links{display:none}
-    }
-    h1{
-      font-size: clamp(34px, 4.2vw, 54px);
-      line-height:1.05;
-      margin: 14px 0 14px;
-      letter-spacing: -0.7px;
-    }
-    .lead{
-      font-size: clamp(16px, 1.4vw, 18px);
-      color: var(--muted);
-      max-width: 54ch;
-      margin: 0 0 18px;
-    }
-    .hero-cta{display:flex; gap:12px; flex-wrap:wrap; margin-top: 18px}
-    .card{
-      background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
-      border:1px solid var(--line);
-      border-radius: var(--radius);
-      box-shadow: var(--shadow);
-    }
-    .hero-card{padding: 18px}
-    .stat-row{
-      display:grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 10px;
-      margin-top: 12px;
-    }
-    @media (max-width: 520px){
-      .stat-row{grid-template-columns: 1fr}
-    }
-    .stat{
-      padding: 12px;
-      border-radius: 14px;
-      border:1px solid rgba(255,255,255,.10);
-      background: rgba(11,18,32,.55);
-    }
-    .stat b{display:block; font-size: 18px}
-    .stat span{display:block; color:var(--muted); font-size: 13px; margin-top: 4px}
-    .mini{
-      display:flex; align-items:center; justify-content:space-between;
-      gap:10px; padding: 12px; border-radius: 14px;
-      background: rgba(11,18,32,.55);
-      border:1px solid rgba(255,255,255,.10);
-      margin-top: 10px;
-      color: var(--muted);
-      font-weight:700;
-      font-size: 13px;
-    }
-    .mini code{
-      font-family: var(--mono);
-      background: rgba(255,255,255,.06);
-      padding: 6px 8px;
-      border-radius: 10px;
-      border:1px solid rgba(255,255,255,.10);
-      color: var(--text);
-      font-weight:800;
-      font-size: 12px;
-    }
-    .section{padding: 36px 0}
-    .section h2{
-      font-size: clamp(22px, 2.4vw, 30px);
-      margin: 0 0 8px;
-      letter-spacing: -0.4px;
-    }
-    .section p.sub{
-      color: var(--muted);
-      margin: 0 0 18px;
-      max-width: 70ch;
-    }
+  html, body { height: 100%; width: 100%; overflow: hidden; background: var(--bg); font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif; color: var(--text); }
 
-    .two{
-      display:grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 16px;
-    }
-    @media (max-width: 920px){ .two{grid-template-columns:1fr} }
+  #header {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+    background: var(--bg);
+    padding: env(safe-area-inset-top, 16px) 16px 12px;
+    padding-top: max(env(safe-area-inset-top), 16px);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
 
-    .list{
-      display:grid; gap:10px;
-      padding: 16px;
-    }
-    .li{
-      display:flex; gap:10px; align-items:flex-start;
-      padding: 12px;
-      border-radius: 14px;
-      border:1px solid rgba(255,255,255,.10);
-      background: rgba(11,18,32,.55);
-    }
-    .dot{
-      width:10px; height:10px; border-radius: 999px;
-      margin-top: 6px;
-      background: linear-gradient(135deg, var(--accent), var(--accent2));
-      flex: 0 0 auto;
-    }
-    .li b{display:block}
-    .li span{display:block; color:var(--muted); font-size: 14px; margin-top: 2px}
+  #header h1 { font-size: 18px; font-weight: 700; letter-spacing: -0.3px; }
+  #header h1 span { color: var(--accent); }
 
-    .gallery{
-      display:grid;
-      grid-template-columns: repeat(12, 1fr);
-      gap: 12px;
-    }
-    .shot{
-      position:relative;
-      overflow:hidden;
-      border-radius: 18px;
-      border:1px solid rgba(255,255,255,.12);
-      background: rgba(11,18,32,.55);
-      min-height: 150px;
-    }
-    .shot img{
-      width:100%; height:100%;
-      object-fit: cover;
-      display:block;
-      transform: scale(1.03);
-      transition: transform .25s ease;
-    }
-    .shot:hover img{transform: scale(1.08)}
-    .shot .cap{
-      position:absolute; left:12px; right:12px; bottom:12px;
-      padding: 10px 12px;
-      border-radius: 14px;
-      background: rgba(7,11,20,.72);
-      border: 1px solid rgba(255,255,255,.12);
-      color: var(--text);
-      font-weight: 800;
-      font-size: 14px;
-      backdrop-filter: blur(8px);
-    }
-    .span-6{grid-column: span 6}
-    .span-4{grid-column: span 4}
-    .span-8{grid-column: span 8}
-    @media (max-width: 920px){
-      .span-6,.span-4,.span-8{grid-column: span 12}
-    }
+  #stats-row {
+    display: flex; gap: 6px; align-items: center; flex-wrap: wrap;
+  }
 
-    .pricing{
-      display:grid; gap:14px;
-      grid-template-columns: repeat(3, 1fr);
-    }
-    @media (max-width: 980px){ .pricing{grid-template-columns:1fr} }
-    .price-card{padding: 18px}
-    .price-top{
-      display:flex; align-items:center; justify-content:space-between; gap:12px;
-      margin-bottom: 10px;
-    }
-    .badge{
-      font-size: 12px;
-      font-weight: 900;
-      letter-spacing: .25px;
-      padding: 6px 10px;
-      border-radius: 999px;
-      border:1px solid rgba(255,255,255,.14);
-      background: rgba(255,255,255,.06);
-      color: var(--muted);
-    }
-    .price{
-      font-size: 34px; font-weight: 950; letter-spacing: -0.6px; margin: 8px 0 6px;
-    }
-    .price small{font-size: 13px; color: var(--muted); font-weight: 800}
-    .feat{margin: 12px 0 0; padding:0; list-style:none; display:grid; gap:10px}
-    .feat li{
-      display:flex; gap:10px; align-items:flex-start;
-      color: var(--muted);
-      font-weight:700;
-      background: rgba(11,18,32,.55);
-      border:1px solid rgba(255,255,255,.10);
-      padding: 10px 12px;
-      border-radius: 14px;
-    }
-    .tick{color: var(--good); font-weight: 900}
+  .stat-pill {
+    font-size: 11px; font-weight: 600; padding: 3px 8px;
+    border-radius: 20px; letter-spacing: 0.2px;
+    display: flex; align-items: center; gap: 4px;
+  }
+  .stat-pill .dot { width: 7px; height: 7px; border-radius: 50%; }
 
-    .form{
-      padding: 18px;
-    }
-    form{display:grid; gap:12px}
-    .row{display:grid; grid-template-columns:1fr 1fr; gap:12px}
-    @media (max-width: 720px){ .row{grid-template-columns:1fr} }
-    label{font-weight:800; font-size: 13px; color: var(--muted)}
-    input, textarea, select{
-      width:100%;
-      margin-top: 6px;
-      padding: 12px 12px;
-      border-radius: 14px;
-      border:1px solid rgba(255,255,255,.14);
-      background: rgba(7,11,20,.55);
-      color: var(--text);
-      outline:none;
-      font-size: 15px;
-    }
-    textarea{min-height: 110px; resize: vertical}
-    input:focus, textarea:focus, select:focus{
-      border-color: rgba(110,231,255,.55);
-      box-shadow: 0 0 0 4px rgba(110,231,255,.10);
-    }
-    .hint{
-      color: var(--muted);
-      font-size: 12px;
-      margin-top: -2px;
-    }
-    .footer{
-      border-top: 1px solid var(--line);
-      margin-top: 40px;
-      padding: 24px 0 36px;
-      color: var(--muted);
-    }
-    .footer .cols{
-      display:grid; gap: 14px;
-      grid-template-columns: 1.1fr .9fr .9fr;
-      align-items:start;
-    }
-    @media (max-width: 920px){ .footer .cols{grid-template-columns: 1fr} }
+  #map {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 1;
+  }
 
-    .kicker{color: var(--muted); font-weight:900; letter-spacing:.18em; text-transform:uppercase; font-size: 12px}
-    .hr{height:1px; background: var(--line); margin: 18px 0}
-    .note{
-      font-size: 12px; color: rgba(182,195,230,.85);
-    }
+  .leaflet-tile-pane { filter: brightness(1); }
 
-    /* small utility */
-    .sr-only{
-      position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0;
-    }
-  </style>
+  /* Bottom sheet */
+  #sheet {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    z-index: 2000;
+    background: var(--surface);
+    border-radius: 20px 20px 0 0;
+    border-top: 1px solid var(--border);
+    padding: 0 0 max(env(safe-area-inset-bottom), 20px);
+    transform: translateY(100%);
+    transition: transform 0.32s cubic-bezier(0.32, 0.72, 0, 1);
+    max-height: 70vh;
+    overflow-y: auto;
+  }
+  #sheet.open { transform: translateY(0); }
+
+  #sheet-handle {
+    width: 36px; height: 4px; background: rgba(255,255,255,0.2);
+    border-radius: 2px; margin: 12px auto 0;
+  }
+
+  #sheet-addr {
+    font-size: 15px; font-weight: 600; padding: 16px 20px 4px;
+    line-height: 1.3;
+  }
+  #sheet-coords { font-size: 12px; color: var(--text2); padding: 0 20px 16px; }
+
+  .status-btn {
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 20px;
+    border: none; background: transparent; color: var(--text);
+    width: 100%; text-align: left; font-size: 15px; cursor: pointer;
+    border-top: 1px solid var(--border);
+    transition: background 0.12s;
+    -webkit-appearance: none;
+  }
+  .status-btn:active { background: var(--surface2); }
+  .status-btn .swatch { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; }
+  .status-btn .check { margin-left: auto; font-size: 18px; opacity: 0; }
+  .status-btn.active .check { opacity: 1; }
+  .status-btn.active { background: var(--surface2); }
+
+  #sheet-note-row {
+    padding: 8px 20px 4px;
+    border-top: 1px solid var(--border);
+  }
+  #sheet-note {
+    width: 100%; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 10px; color: var(--text); font-size: 14px;
+    padding: 10px 12px; resize: none; font-family: inherit;
+    outline: none;
+  }
+  #sheet-note::placeholder { color: var(--text2); }
+
+  #sheet-close {
+    display: block; margin: 12px 20px 0;
+    background: var(--accent); color: #fff;
+    border: none; border-radius: 12px; padding: 13px;
+    font-size: 15px; font-weight: 600; cursor: pointer; width: calc(100% - 40px);
+    -webkit-appearance: none;
+  }
+  #sheet-close:active { opacity: 0.85; }
+
+  /* Overlay to close sheet */
+  #overlay {
+    position: fixed; inset: 0; z-index: 1500;
+    background: rgba(0,0,0,0.5); opacity: 0; pointer-events: none;
+    transition: opacity 0.2s;
+  }
+  #overlay.visible { opacity: 1; pointer-events: all; }
+
+  /* Legend / filter panel */
+  #legend {
+    position: fixed; bottom: max(env(safe-area-inset-bottom), 20px); right: 12px;
+    z-index: 900; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 14px;
+    padding: 10px 12px; display: flex; flex-direction: column; gap: 6px;
+    min-width: 160px;
+  }
+  .legend-row {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12px; color: var(--text2); cursor: pointer;
+    padding: 2px 0;
+  }
+  .legend-row .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .legend-row.active { color: var(--text); }
+  .legend-row.active .label-count { color: var(--text2); }
+  .label-count { margin-left: auto; font-size: 11px; font-variant-numeric: tabular-nums; }
+
+  #header-inner { display: flex; flex-direction: column; gap: 6px; flex: 1; }
+
+  /* Search bar */
+  #search-wrap {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 1100;
+    pointer-events: none;
+  }
+  #search-bar {
+    margin: 0 12px;
+    margin-top: max(env(safe-area-inset-top), 16px);
+    margin-top: calc(max(env(safe-area-inset-top), 16px) + 56px);
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; display: flex; align-items: center;
+    padding: 0 12px; gap: 8px; pointer-events: all;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+  }
+  #search-bar svg { flex-shrink: 0; opacity: 0.5; }
+  #search-input {
+    flex: 1; background: transparent; border: none; outline: none;
+    color: var(--text); font-size: 14px; padding: 11px 0;
+    font-family: inherit;
+  }
+  #search-input::placeholder { color: var(--text2); }
+  #search-results {
+    position: fixed; left: 12px; right: 12px; z-index: 1200;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; overflow: hidden;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    display: none;
+  }
+  .search-result {
+    padding: 12px 16px; font-size: 14px; cursor: pointer;
+    border-top: 1px solid var(--border); color: var(--text2);
+  }
+  .search-result:first-child { border-top: none; }
+  .search-result:active { background: var(--surface2); }
+  .search-result strong { color: var(--text); }
+
+  #export-btn {
+    background: transparent; border: 1px solid var(--border);
+    border-radius: 10px; padding: 8px; color: var(--text2);
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  #export-btn:active { background: var(--surface2); }
+
+  #sheet-delete {
+    display: block; margin: 8px 20px 0;
+    background: transparent; color: #ef4444;
+    border: 1px solid rgba(239,68,68,0.3); border-radius: 12px; padding: 12px;
+    font-size: 14px; font-weight: 500; cursor: pointer; width: calc(100% - 40px);
+    -webkit-appearance: none;
+  }
+  #sheet-delete:active { background: rgba(239,68,68,0.1); }
+
+  /* Export panel */
+  #export-panel {
+    position: fixed; inset: 0; z-index: 3000;
+    background: var(--bg);
+    transform: translateX(100%);
+    transition: transform 0.32s cubic-bezier(0.32, 0.72, 0, 1);
+    overflow-y: auto;
+    padding-bottom: max(env(safe-area-inset-bottom), 24px);
+  }
+  #export-panel.open { transform: translateX(0); }
+
+  #export-header {
+    display: flex; align-items: center; gap: 12px;
+    padding: max(env(safe-area-inset-top), 16px) 16px 16px;
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; background: var(--bg); z-index: 10;
+  }
+  #export-back {
+    background: transparent; border: 1px solid var(--border);
+    border-radius: 10px; padding: 7px; color: var(--text2);
+    cursor: pointer; display: flex; align-items: center;
+  }
+  #export-back:active { background: var(--surface2); }
+  #export-header h2 { font-size: 17px; font-weight: 600; }
+
+  #export-summary {
+    display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;
+    padding: 16px;
+  }
+  .export-stat {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 12px 14px;
+  }
+  .export-stat .es-label { font-size: 11px; color: var(--text2); margin-bottom: 4px; }
+  .export-stat .es-val { font-size: 22px; font-weight: 600; }
+
+  #export-filters { padding: 0 16px 12px; }
+  .filter-label { font-size: 12px; color: var(--text2); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+  #export-status-toggles { display: flex; flex-wrap: wrap; gap: 8px; }
+  .etoggle {
+    display: flex; align-items: center; gap: 6px;
+    padding: 6px 12px; border-radius: 20px;
+    border: 1px solid var(--border); background: var(--surface);
+    font-size: 13px; color: var(--text2); cursor: pointer;
+    -webkit-appearance: none;
+  }
+  .etoggle .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .etoggle.on { color: var(--text); border-color: rgba(255,255,255,0.2); background: var(--surface2); }
+
+  #export-preview-wrap { padding: 0 16px 16px; }
+  #export-preview {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; overflow: hidden; max-height: 260px; overflow-y: auto;
+  }
+  .ep-row {
+    display: grid; grid-template-columns: 1fr auto;
+    padding: 10px 12px; border-top: 1px solid var(--border); gap: 8px;
+    align-items: start;
+  }
+  .ep-row:first-child { border-top: none; }
+  .ep-addr { font-size: 13px; color: var(--text); line-height: 1.3; }
+  .ep-date { font-size: 11px; color: var(--text2); white-space: nowrap; }
+  .ep-status { font-size: 11px; font-weight: 600; margin-top: 2px; }
+  .ep-empty { padding: 20px; text-align: center; font-size: 13px; color: var(--text2); }
+
+  #export-csv-btn {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    margin: 0 16px; background: var(--accent); color: #fff;
+    border: none; border-radius: 12px; padding: 14px;
+    font-size: 15px; font-weight: 600; cursor: pointer; width: calc(100% - 32px);
+    -webkit-appearance: none;
+  }
+  #export-csv-btn:active { opacity: 0.85; }
+  .leaflet-bottom.leaflet-right { bottom: 160px !important; }
+
+  /* pulse animation for new pin */
+  @keyframes pulse-ring {
+    0% { transform: scale(0.5); opacity: 0.8; }
+    100% { transform: scale(2.5); opacity: 0; }
+  }
+
+  #toast {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    background: rgba(0,0,0,0.75); color: #fff; font-size: 13px;
+    padding: 8px 16px; border-radius: 20px; z-index: 9999;
+    pointer-events: none; opacity: 0; transition: opacity 0.3s;
+    white-space: nowrap;
+  }
+  #toast.show { opacity: 1; }
+</style>
 </head>
-
 <body>
-  <header class="nav" role="banner">
-    <div class="nav-inner">
-      <a class="brand" href="#top" aria-label="Connor's Drone Pics home">
-        <span class="logo" aria-hidden="true"></span>
-        <span>Connor’s Drone Pics</span>
-      </a>
 
-      <nav class="nav-links" aria-label="Primary">
-        <a href="#services">Services</a>
-        <a href="#portfolio">Portfolio</a>
-        <a href="#pricing">Pricing</a>
-        <a href="#faq">FAQ</a>
-        <a href="#quote">Get a Quote</a>
-      </nav>
+<div id="map"></div>
 
-      <a class="btn primary small" href="#quote">Book / Quote</a>
-    </div>
-  </header>
+<div id="header">
+  <div id="header-inner">
+    <h1>Knox<span>Canvas</span></h1>
+    <div id="stats-row"></div>
+  </div>
+  <button id="export-btn" title="Export data">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+  </button>
+</div>
 
-  <main id="top">
-    <!-- HERO -->
-    <section class="hero">
-      <div class="wrap grid">
-        <div>
-          <div class="pill" title="Fast turnaround & business-friendly deliverables">
-            <span aria-hidden="true">🚁</span>
-            <span>Drone photos that sell listings & document roofs</span>
-          </div>
+<div id="search-wrap">
+  <div id="search-bar">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+    <input id="search-input" type="text" placeholder="Search Knoxville address…" autocomplete="off" autocorrect="off" spellcheck="false">
+  </div>
+  <div id="search-results"></div>
+</div>
 
-          <h1>Clean aerial shots for real estate teams and roofers—delivered fast.</h1>
+<div id="overlay"></div>
 
-          <p class="lead">
-            Stop wasting time with “a guy with a drone.” Get consistent, sharp imagery and practical deliverables
-            that your clients actually use: MLS-ready photos, site context, roof condition documentation, and progress shots.
-          </p>
+<div id="sheet">
+  <div id="sheet-handle"></div>
+  <div id="sheet-addr">Select a location</div>
+  <div id="sheet-coords"></div>
+  <button class="status-btn" data-status="none">
+    <span class="swatch" style="background:var(--c-none)"></span>
+    Not visited
+    <span class="check">✓</span>
+  </button>
+  <button class="status-btn" data-status="hanger">
+    <span class="swatch" style="background:var(--c-hanger)"></span>
+    Door hanger left
+    <span class="check">✓</span>
+  </button>
+  <button class="status-btn" data-status="interest">
+    <span class="swatch" style="background:var(--c-interest)"></span>
+    Spoke to someone — interested
+    <span class="check">✓</span>
+  </button>
+  <button class="status-btn" data-status="no">
+    <span class="swatch" style="background:var(--c-no)"></span>
+    Spoke to someone — not interested
+    <span class="check">✓</span>
+  </button>
+  <button class="status-btn" data-status="dnr">
+    <span class="swatch" style="background:var(--c-dnr)"></span>
+    Do not return / skip
+    <span class="check">✓</span>
+  </button>
+  <div id="sheet-note-row">
+    <textarea id="sheet-note" rows="2" placeholder="Add a note (optional)…"></textarea>
+  </div>
+  <button id="sheet-delete">Remove this pin</button>
+  <button id="sheet-close">Done</button>
+</div>
 
-          <div class="hero-cta">
-            <a class="btn primary" href="#quote">Request a quote</a>
-            <a class="btn" href="#portfolio">See work</a>
-            <a class="btn" href="tel:+15555555555" aria-label="Call Connor's Drone Pics">Call</a>
-          </div>
+<div id="legend">
+  <div class="legend-row active" data-filter="all">
+    <div class="dot" style="background:rgba(255,255,255,0.2)"></div>
+    <span>All pins</span>
+    <span class="label-count" id="cnt-all">0</span>
+  </div>
+  <div class="legend-row active" data-filter="none">
+    <div class="dot" style="background:var(--c-none)"></div>
+    <span>Not visited</span>
+    <span class="label-count" id="cnt-none">0</span>
+  </div>
+  <div class="legend-row active" data-filter="hanger">
+    <div class="dot" style="background:var(--c-hanger)"></div>
+    <span>Door hanger</span>
+    <span class="label-count" id="cnt-hanger">0</span>
+  </div>
+  <div class="legend-row active" data-filter="interest">
+    <div class="dot" style="background:var(--c-interest)"></div>
+    <span>Interested</span>
+    <span class="label-count" id="cnt-interest">0</span>
+  </div>
+  <div class="legend-row active" data-filter="no">
+    <div class="dot" style="background:var(--c-no)"></div>
+    <span>Not interested</span>
+    <span class="label-count" id="cnt-no">0</span>
+  </div>
+  <div class="legend-row active" data-filter="dnr">
+    <div class="dot" style="background:var(--c-dnr)"></div>
+    <span>Do not return</span>
+    <span class="label-count" id="cnt-dnr">0</span>
+  </div>
+</div>
 
-          <div class="hr"></div>
+<div id="export-panel">
+  <div id="export-header">
+    <button id="export-back">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>
+    </button>
+    <h2>Export data</h2>
+  </div>
 
-          <div class="two">
-            <div class="li">
-              <div class="dot" aria-hidden="true"></div>
-              <div>
-                <b>Real Estate</b>
-                <span>Exterior aerials, neighborhood context, lot lines (as-needed), community amenities.</span>
-              </div>
-            </div>
+  <div id="export-summary"></div>
 
-            <div class="li">
-              <div class="dot" aria-hidden="true"></div>
-              <div>
-                <b>Roofing</b>
-                <span>Before/after, storm documentation, progress updates, hard-to-reach angles—no ladder drama.</span>
-              </div>
-            </div>
-          </div>
-        </div>
+  <div id="export-filters">
+    <p class="filter-label">Include statuses</p>
+    <div id="export-status-toggles"></div>
+  </div>
 
-        <aside class="card hero-card" aria-label="Quick details">
-          <div class="kicker">What you get</div>
+  <div id="export-preview-wrap">
+    <p class="filter-label">Preview <span id="export-count"></span></p>
+    <div id="export-preview"></div>
+  </div>
 
-          <div class="stat-row">
-            <div class="stat">
-              <b>Next-day</b>
-              <span>Delivery options available</span>
-            </div>
-            <div class="stat">
-              <b>MLS-ready</b>
-              <span>Correct sizes / formats</span>
-            </div>
-            <div class="stat">
-              <b>Business-first</b>
-              <span>Simple ordering & reuse</span>
-            </div>
-          </div>
+  <button id="export-csv-btn">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    Download CSV
+  </button>
+</div>
 
-          <div class="mini">
-            <span>Typical turnaround</span>
-            <code>24–48 hours</code>
-          </div>
-          <div class="mini">
-            <span>Coverage area</span>
-            <code>Your City / Region</code>
-          </div>
-          <div class="mini">
-            <span>Email</span>
-            <code>hello@your-domain.com</code>
-          </div>
+<div id="toast"></div>
 
-          <div class="hr"></div>
+<script>
+const COLORS = {
+  none:    '#6b7280',
+  hanger:  '#f59e0b',
+  interest:'#10b981',
+  no:      '#ef4444',
+  dnr:     '#7c3aed'
+};
 
-          <div class="note">
-            Note: You’re selling to businesses. They care about reliability, speed, and “don’t make me babysit this.”
-            This page is built to reassure them and get them to request a quote.
-          </div>
-        </aside>
-      </div>
-    </section>
+const LABELS = {
+  none: 'Not visited',
+  hanger: 'Door hanger',
+  interest: 'Interested',
+  no: 'Not interested',
+  dnr: 'Do not return'
+};
 
-    <!-- SERVICES -->
-    <section id="services" class="section">
-      <div class="wrap">
-        <h2>Services that match how pros actually work</h2>
-        <p class="sub">
-          Pick a package or request a custom shoot. If you’re a roofer, you can repeat this monthly/weekly for progress shots.
-          If you’re real estate, you can standardize your listing media.
-        </p>
+// Load saved pins from localStorage
+let pins = JSON.parse(localStorage.getItem('knoxPins') || '{}');
+// pins[id] = { lat, lng, addr, status, note, ts }
 
-        <div class="two">
-          <div class="card list" aria-label="Real estate services">
-            <div class="kicker">Real Estate</div>
+let currentPinId = null;
+let markers = {};
+let hiddenStatuses = new Set();
 
-            <div class="li">
-              <div class="dot" aria-hidden="true"></div>
-              <div>
-                <b>Listing Aerials</b>
-                <span>Hero exterior shots, property context, approach angles, clean horizon.</span>
-              </div>
-            </div>
-            <div class="li">
-              <div class="dot" aria-hidden="true"></div>
-              <div>
-                <b>Neighborhood & Amenities</b>
-                <span>Parks, water, trails, schools (where appropriate), community features.</span>
-              </div>
-            </div>
-            <div class="li">
-              <div class="dot" aria-hidden="true"></div>
-              <div>
-                <b>Land / Lots</b>
-                <span>Wide context shots; optional lot overlays if you provide boundary data.</span>
-              </div>
-            </div>
-          </div>
+// Init map centered on Knoxville
+const map = L.map('map', {
+  center: [35.9606, -83.9207],
+  zoom: 17,
+  zoomControl: false,
+  attributionControl: false
+});
 
-          <div class="card list" aria-label="Roofing services">
-            <div class="kicker">Roofing</div>
+L.tileLayer('https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
+  maxZoom: 22,
+  subdomains: '0123',
+  attribution: '© Google Maps'
+}).addTo(map);
 
-            <div class="li">
-              <div class="dot" aria-hidden="true"></div>
-              <div>
-                <b>Condition Documentation</b>
-                <span>Clear angles for missing shingles, flashing, pooling, impact points.</span>
-              </div>
-            </div>
-            <div class="li">
-              <div class="dot" aria-hidden="true"></div>
-              <div>
-                <b>Before / After</b>
-                <span>Marketing shots that prove the transformation (and reduce disputes).</span>
-              </div>
-            </div>
-            <div class="li">
-              <div class="dot" aria-hidden="true"></div>
-              <div>
-                <b>Progress Updates</b>
-                <span>Repeatable shots from consistent angles for crews, PMs, and clients.</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
+L.control.attribution({ position: 'bottomleft', prefix: false }).addTo(map);
 
-    <!-- PORTFOLIO -->
-    <section id="portfolio" class="section">
-      <div class="wrap">
-        <h2>Portfolio</h2>
-        <p class="sub">
-          Replace these placeholders with your real shots. If your work looks average, you will lose to competitors immediately.
-          Your portfolio is the business.
-        </p>
+function makeIcon(status) {
+  const color = COLORS[status] || COLORS.none;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36">
+    <filter id="ds"><feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity="0.4"/></filter>
+    <path d="M14 2C8.48 2 4 6.48 4 12c0 7 10 22 10 22S24 19 24 12c0-5.52-4.48-10-10-10z" fill="${color}" filter="url(#ds)"/>
+    <circle cx="14" cy="12" r="5" fill="rgba(255,255,255,0.3)"/>
+  </svg>`;
+  return L.divIcon({
+    html: svg,
+    iconSize: [28, 36],
+    iconAnchor: [14, 36],
+    popupAnchor: [0, -36],
+    className: ''
+  });
+}
 
-        <div class="gallery" aria-label="Gallery">
-          <!-- Replace images in assets/ -->
-          <figure class="shot span-8">
-            <img src="assets/portfolio-1.jpg" alt="Aerial view of a house with landscaping" loading="lazy" />
-            <figcaption class="cap">Listing hero shot</figcaption>
-          </figure>
+function savePins() {
+  localStorage.setItem('knoxPins', JSON.stringify(pins));
+}
 
-          <figure class="shot span-4">
-            <img src="assets/portfolio-2.jpg" alt="Aerial of roof showing condition detail" loading="lazy" />
-            <figcaption class="cap">Roof detail angle</figcaption>
-          </figure>
+function addOrUpdateMarker(id) {
+  const p = pins[id];
+  if (!p) return;
+  if (markers[id]) {
+    map.removeLayer(markers[id]);
+  }
+  if (hiddenStatuses.has(p.status)) return;
+  const m = L.marker([p.lat, p.lng], { icon: makeIcon(p.status) });
+  m.on('click', () => openSheet(id));
+  m.addTo(map);
+  markers[id] = m;
+}
 
-          <figure class="shot span-4">
-            <img src="assets/portfolio-3.jpg" alt="Wide neighborhood context shot" loading="lazy" />
-            <figcaption class="cap">Neighborhood context</figcaption>
-          </figure>
+function renderAllMarkers() {
+  Object.keys(markers).forEach(id => map.removeLayer(markers[id]));
+  markers = {};
+  Object.keys(pins).forEach(id => addOrUpdateMarker(id));
+  updateStats();
+}
 
-          <figure class="shot span-4">
-            <img src="assets/portfolio-4.jpg" alt="Before and after roof replacement" loading="lazy" />
-            <figcaption class="cap">Before / after</figcaption>
-          </figure>
+function updateStats() {
+  const counts = { none: 0, hanger: 0, interest: 0, no: 0, dnr: 0 };
+  Object.values(pins).forEach(p => { if (counts[p.status] !== undefined) counts[p.status]++; });
+  const total = Object.values(counts).reduce((a, b) => a + b, 0);
+  document.getElementById('cnt-all').textContent = total;
+  Object.keys(counts).forEach(k => {
+    document.getElementById('cnt-' + k).textContent = counts[k];
+  });
 
-          <figure class="shot span-4">
-            <img src="assets/portfolio-5.jpg" alt="Construction progress aerial view" loading="lazy" />
-            <figcaption class="cap">Progress update</figcaption>
-          </figure>
-        </div>
-      </div>
-    </section>
-
-    <!-- PRICING -->
-    <section id="pricing" class="section">
-      <div class="wrap">
-        <h2>Pricing</h2>
-        <p class="sub">
-          Keep this simple. Business buyers hate fuzzy pricing, but they’ll accept “starting at” if you clearly define what’s included.
-          Change these numbers to match your market.
-        </p>
-
-        <div class="pricing" aria-label="Pricing tiers">
-          <div class="card price-card">
-            <div class="price-top">
-              <div>
-                <div class="kicker">Starter</div>
-                <div style="color:var(--muted); font-weight:800; font-size:14px;">Quick aerial set</div>
-              </div>
-              <span class="badge">Real estate</span>
-            </div>
-
-            <div class="price">$149 <small>/ property</small></div>
-            <ul class="feat">
-              <li><span class="tick">✓</span> 8–12 edited photos</li>
-              <li><span class="tick">✓</span> MLS-ready + high-res</li>
-              <li><span class="tick">✓</span> 48-hour delivery</li>
-              <li><span class="tick">✓</span> Simple license for marketing</li>
-            </ul>
-
-            <div class="hr"></div>
-            <a class="btn primary" href="#quote">Get this</a>
-          </div>
-
-          <div class="card price-card">
-            <div class="price-top">
-              <div>
-                <div class="kicker">Pro</div>
-                <div style="color:var(--muted); font-weight:800; font-size:14px;">Best seller</div>
-              </div>
-              <span class="badge">Most popular</span>
-            </div>
-
-            <div class="price">$249 <small>/ site</small></div>
-            <ul class="feat">
-              <li><span class="tick">✓</span> 15–25 edited photos</li>
-              <li><span class="tick">✓</span> Detail angles + wide context</li>
-              <li><span class="tick">✓</span> 24–48 hour delivery</li>
-              <li><span class="tick">✓</span> Priority scheduling</li>
-            </ul>
-
-            <div class="hr"></div>
-            <a class="btn primary" href="#quote">Get this</a>
-          </div>
-
-          <div class="card price-card">
-            <div class="price-top">
-              <div>
-                <div class="kicker">Roofing Bundle</div>
-                <div style="color:var(--muted); font-weight:800; font-size:14px;">Documentation + marketing</div>
-              </div>
-              <span class="badge">Roofing</span>
-            </div>
-
-            <div class="price">$199 <small>/ visit</small></div>
-            <ul class="feat">
-              <li><span class="tick">✓</span> Before/after or condition set</li>
-              <li><span class="tick">✓</span> Problem-area close angles</li>
-              <li><span class="tick">✓</span> Optional repeat schedule</li>
-              <li><span class="tick">✓</span> Delivery organized by roof side</li>
-            </ul>
-
-            <div class="hr"></div>
-            <a class="btn primary" href="#quote">Get this</a>
-          </div>
-        </div>
-
-        <p class="note" style="margin-top:14px">
-          Harsh truth: if you can’t clearly explain what the buyer gets, they assume you’re amateur.
-          Define deliverables like a contractor: counts, formats, turnaround, and usage rights.
-        </p>
-      </div>
-    </section>
-
-    <!-- FAQ -->
-    <section id="faq" class="section">
-      <div class="wrap">
-        <h2>FAQ</h2>
-        <p class="sub">Answer the objections that stop buyers from booking.</p>
-
-        <div class="two">
-          <div class="card list">
-            <div class="li">
-              <div class="dot" aria-hidden="true"></div>
-              <div>
-                <b>How fast is delivery?</b>
-                <span>Standard is 24–48 hours. Rush options available depending on schedule.</span>
-              </div>
-            </div>
-            <div class="li">
-              <div class="dot" aria-hidden="true"></div>
-              <div>
-                <b>What files do I get?</b>
-                <span>High-res JPGs + web/MLS-ready sizes. Organized folders so your team doesn’t waste time.</span>
-              </div>
-            </div>
-            <div class="li">
-              <div class="dot" aria-hidden="true"></div>
-              <div>
-                <b>Do you travel?</b>
-                <span>Yes—travel fee applies outside the core service area.</span>
-              </div>
-            </div>
-          </div>
-
-          <div class="card list">
-            <div class="li">
-              <div class="dot" aria-hidden="true"></div>
-              <div>
-                <b>Can you do recurring shoots?</b>
-                <span>Yes. Roofers and builders use weekly/monthly progress shots.</span>
-              </div>
-            </div>
-            <div class="li">
-              <div class="dot" aria-hidden="true"></div>
-              <div>
-                <b>Are you licensed/insured?</b>
-                <span>Put your actual details here. If you’re not, fix that—serious buyers will ask.</span>
-              </div>
-            </div>
-            <div class="li">
-              <div class="dot" aria-hidden="true"></div>
-              <div>
-                <b>How do I book?</b>
-                <span>Fill the quote form. You’ll get a response with next available times and total price.</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- QUOTE -->
-    <section id="quote" class="section">
-      <div class="wrap">
-        <h2>Request a quote</h2>
-        <p class="sub">
-          This form uses a mailto fallback (works anywhere). For real business, wire this to Formspree/Netlify Forms
-          or a backend endpoint so you don’t lose leads.
-        </p>
-
-        <div class="two">
-          <div class="card form">
-            <form id="quoteForm" novalidate action="https://formspree.io/f/maqdvgro" method="POST">
-              <div class="row">
-                <div>
-                  <label for="name">Name</label>
-                  <input id="name" name="name" autocomplete="name" required placeholder="Connor / Alex / Sam" />
-                </div>
-                <div>
-                  <label for="company">Company</label>
-                  <input id="company" name="company" autocomplete="organization" placeholder="ABC Realty / XYZ Roofing" />
-                </div>
-              </div>
-
-              <div class="row">
-                <div>
-                  <label for="email">Email</label>
-                  <input id="email" name="email" type="email" autocomplete="email" required placeholder="you@company.com" />
-                </div>
-                <div>
-                  <label for="phone">Phone</label>
-                  <input id="phone" name="phone" autocomplete="tel" placeholder="(555) 555-5555" />
-                </div>
-              </div>
-
-              <div class="row">
-                <div>
-                  <label for="type">Project type</label>
-                  <select id="type" name="type" required>
-                    <option value="" selected disabled>Select one</option>
-                    <option>Real estate listing</option>
-                    <option>Roof condition documentation</option>
-                    <option>Before / after marketing</option>
-                    <option>Construction progress</option>
-                    <option>Other</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label for="timing">When do you need it?</label>
-                  <select id="timing" name="timing" required>
-                    <option value="" selected disabled>Select one</option>
-                    <option>ASAP (rush)</option>
-                    <option>This week</option>
-                    <option>Next week</option>
-                    <option>Flexible</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label for="address">Site address / area</label>
-                <input id="address" name="address" placeholder="123 Main St, City, ST" />
-                <div class="hint">If you don’t want to share the full address yet, provide the neighborhood/city.</div>
-              </div>
-
-              <div>
-                <label for="details">Details</label>
-                <textarea id="details" name="details" placeholder="What deliverables do you need? Photo count, angles, deadlines, special notes..."></textarea>
-              </div>
-
-              <button class="btn primary" type="submit">Send request</button>
-              <div id="formMsg" class="hint" role="status" aria-live="polite"></div>
-            </form>
-          </div>
-
-          <div class="card list" aria-label="Contact details">
-            <div class="kicker">Direct contact</div>
-
-            <div class="li">
-              <div class="dot" aria-hidden="true"></div>
-              <div>
-                <b>Phone</b>
-                <span><a href="tel:+15555555555">+1 (555) 555-5555</a></span>
-              </div>
-            </div>
-
-            <div class="li">
-              <div class="dot" aria-hidden="true"></div>
-              <div>
-                <b>Email</b>
-                <span><a href="mailto:hello@your-domain.com">hello@your-domain.com</a></span>
-              </div>
-            </div>
-
-            <div class="li">
-              <div class="dot" aria-hidden="true"></div>
-              <div>
-                <b>Availability</b>
-                <span>Weekdays + select weekends. Weather-dependent for safe flights.</span>
-              </div>
-            </div>
-
-            <div class="li">
-              <div class="dot" aria-hidden="true"></div>
-              <div>
-                <b>Proof you’re legit</b>
-                <span>Add: insurance, licensing, and a short “process” to reduce buyer anxiety.</span>
-              </div>
-            </div>
-
-            <div class="hr"></div>
-            <p class="note">
-              Harsh truth: if you don’t show credibility (portfolio + reliability + clear deliverables),
-              roofers and agencies will assume you’re a hobbyist and squeeze you on price.
-            </p>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- FOOTER -->
-    <footer class="footer">
-      <div class="wrap">
-        <div class="cols">
-          <div>
-            <a class="brand" href="#top">
-              <span class="logo" aria-hidden="true"></span>
-              <span>Connor’s Drone Pics</span>
-            </a>
-            <p class="note" style="margin-top:10px; max-width: 65ch;">
-              Drone photos for real estate businesses and roofers. Fast turnaround. Clean deliverables.
-            </p>
-          </div>
-
-          <div>
-            <div class="kicker">Pages</div>
-            <div class="hr"></div>
-            <div style="display:grid; gap:10px; font-weight:800;">
-              <a href="#services">Services</a>
-              <a href="#portfolio">Portfolio</a>
-              <a href="#pricing">Pricing</a>
-              <a href="#quote">Get a Quote</a>
-            </div>
-          </div>
-
-          <div>
-            <div class="kicker">Service area</div>
-            <div class="hr"></div>
-            <div class="note">
-              Your City / Region<br />
-              Travel available (fee outside core radius)
-            </div>
-          </div>
-        </div>
-
-        <div class="hr"></div>
-        <div class="note">© <span id="year"></span> Connor’s Drone Pics. All rights reserved.</div>
-      </div>
-    </footer>
-  </main>
-
-  <script>
-    // Footer year
-    document.getElementById('year').textContent = new Date().getFullYear();
-
-    // Quote form: simple client-side validation + mailto fallback
-    const form = document.getElementById('quoteForm');
-    const msg = document.getElementById('formMsg');
-
-    function isEmail(v){
-      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v || '').trim());
+  // Header stats row
+  const row = document.getElementById('stats-row');
+  row.innerHTML = '';
+  const active = [
+    { k: 'interest', label: 'Interested' },
+    { k: 'hanger', label: 'Hangers' },
+    { k: 'no', label: 'No' },
+    { k: 'dnr', label: 'DNR' }
+  ];
+  active.forEach(({ k, label }) => {
+    if (counts[k] > 0) {
+      const el = document.createElement('div');
+      el.className = 'stat-pill';
+      el.style.background = COLORS[k] + '22';
+      el.style.color = COLORS[k];
+      el.innerHTML = `<span class="dot" style="background:${COLORS[k]}"></span>${counts[k]} ${label}`;
+      row.appendChild(el);
     }
+  });
+  if (total > 0) {
+    const el = document.createElement('div');
+    el.className = 'stat-pill';
+    el.style.background = 'rgba(255,255,255,0.05)';
+    el.style.color = '#8b90b0';
+    el.textContent = total + ' total';
+    row.appendChild(el);
+  }
+}
 
-    /*  form.addEventListener('submit', (e) => {
-      e.preventDefault();
-      msg.textContent = "";
+// Open sheet for existing or new pin
+function openSheet(id) {
+  currentPinId = id;
+  const p = pins[id];
+  document.getElementById('sheet-addr').textContent = p.addr || 'Unnamed location';
+  document.getElementById('sheet-coords').textContent = p.lat.toFixed(5) + ', ' + p.lng.toFixed(5);
+  document.getElementById('sheet-note').value = p.note || '';
 
-      const data = Object.fromEntries(new FormData(form).entries());
+  document.querySelectorAll('.status-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.status === p.status);
+  });
 
-      const missing = [];
-      if (!data.name?.trim()) missing.push("Name");
-      if (!isEmail(data.email)) missing.push("Valid email");
-      if (!data.type?.trim()) missing.push("Project type");
-      if (!data.timing?.trim()) missing.push("Timing");
+  document.getElementById('sheet').classList.add('open');
+  document.getElementById('overlay').classList.add('visible');
+}
 
-      if (missing.length) {
-        msg.textContent = "Please provide: " + missing.join(", ") + ".";
-        return;
+function closeSheet() {
+  document.getElementById('sheet').classList.remove('open');
+  document.getElementById('overlay').classList.remove('visible');
+  currentPinId = null;
+}
+
+document.getElementById('overlay').addEventListener('click', closeSheet);
+document.getElementById('sheet-close').addEventListener('click', closeSheet);
+
+document.querySelectorAll('.status-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    if (!currentPinId) return;
+    const status = btn.dataset.status;
+    pins[currentPinId].status = status;
+    pins[currentPinId].ts = Date.now();
+    savePins();
+    addOrUpdateMarker(currentPinId);
+    updateStats();
+    document.querySelectorAll('.status-btn').forEach(b => b.classList.toggle('active', b.dataset.status === status));
+    showToast('Saved: ' + LABELS[status]);
+  });
+});
+
+document.getElementById('sheet-note').addEventListener('input', () => {
+  if (!currentPinId) return;
+  pins[currentPinId].note = document.getElementById('sheet-note').value;
+  savePins();
+});
+
+// Delete pin
+document.getElementById('sheet-delete').addEventListener('click', () => {
+  if (!currentPinId) return;
+  if (markers[currentPinId]) map.removeLayer(markers[currentPinId]);
+  delete markers[currentPinId];
+  delete pins[currentPinId];
+  savePins();
+  updateStats();
+  closeSheet();
+  showToast('Pin removed');
+});
+
+// Export panel
+const exportPanel = document.getElementById('export-panel');
+let exportIncluded = new Set(['none','hanger','interest','no','dnr']);
+
+document.getElementById('export-btn').addEventListener('click', () => {
+  buildExportPanel();
+  exportPanel.classList.add('open');
+});
+document.getElementById('export-back').addEventListener('click', () => {
+  exportPanel.classList.remove('open');
+});
+
+function buildExportPanel() {
+  // Summary stats
+  const counts = { none:0, hanger:0, interest:0, no:0, dnr:0 };
+  Object.values(pins).forEach(p => { if (counts[p.status] !== undefined) counts[p.status]++; });
+  const total = Object.values(counts).reduce((a,b) => a+b, 0);
+  document.getElementById('export-summary').innerHTML = `
+    <div class="export-stat"><div class="es-label">Total pins</div><div class="es-val">${total}</div></div>
+    <div class="export-stat"><div class="es-label" style="color:var(--c-interest)">Interested</div><div class="es-val" style="color:var(--c-interest)">${counts.interest}</div></div>
+    <div class="export-stat"><div class="es-label" style="color:var(--c-hanger)">Door hangers</div><div class="es-val" style="color:var(--c-hanger)">${counts.hanger}</div></div>
+    <div class="export-stat"><div class="es-label" style="color:var(--c-dnr)">Do not return</div><div class="es-val" style="color:var(--c-dnr)">${counts.dnr}</div></div>
+  `;
+
+  // Status toggles
+  const toggleWrap = document.getElementById('export-status-toggles');
+  toggleWrap.innerHTML = '';
+  Object.entries(LABELS).forEach(([k, label]) => {
+    const btn = document.createElement('button');
+    btn.className = 'etoggle' + (exportIncluded.has(k) ? ' on' : '');
+    btn.innerHTML = `<span class="dot" style="background:${COLORS[k]}"></span>${label}`;
+    btn.addEventListener('click', () => {
+      if (exportIncluded.has(k)) exportIncluded.delete(k);
+      else exportIncluded.add(k);
+      btn.classList.toggle('on', exportIncluded.has(k));
+      buildPreview();
+    });
+    toggleWrap.appendChild(btn);
+  });
+
+  buildPreview();
+}
+
+function buildPreview() {
+  const rows = Object.values(pins).filter(p => exportIncluded.has(p.status));
+  rows.sort((a,b) => b.ts - a.ts);
+  document.getElementById('export-count').textContent = `(${rows.length} rows)`;
+  const wrap = document.getElementById('export-preview');
+  if (!rows.length) {
+    wrap.innerHTML = '<div class="ep-empty">No pins match selected filters</div>';
+    return;
+  }
+  wrap.innerHTML = rows.slice(0, 50).map(p => {
+    const date = new Date(p.ts).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
+    return `<div class="ep-row">
+      <div>
+        <div class="ep-addr">${p.addr || 'Unknown address'}</div>
+        <div class="ep-status" style="color:${COLORS[p.status]}">${LABELS[p.status]}</div>
+      </div>
+      <div class="ep-date">${date}</div>
+    </div>`;
+  }).join('') + (rows.length > 50 ? `<div class="ep-empty">+ ${rows.length - 50} more in CSV</div>` : '');
+}
+
+document.getElementById('export-csv-btn').addEventListener('click', () => {
+  const rows = Object.values(pins).filter(p => exportIncluded.has(p.status));
+  rows.sort((a,b) => b.ts - a.ts);
+  if (!rows.length) { showToast('No data to export'); return; }
+
+  const escape = v => `"${String(v).replace(/"/g,'""')}"`;
+  const lines = ['Address,Status,Date Added,Note,Latitude,Longitude'];
+  rows.forEach(p => {
+    const date = new Date(p.ts).toLocaleDateString('en-US', { month:'2-digit', day:'2-digit', year:'numeric' });
+    lines.push([
+      escape(p.addr || ''),
+      escape(LABELS[p.status] || p.status),
+      escape(date),
+      escape(p.note || ''),
+      escape(p.lat.toFixed(6)),
+      escape(p.lng.toFixed(6))
+    ].join(','));
+  });
+
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const today = new Date().toISOString().slice(0,10);
+  a.download = `knoxcanvas_${today}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('CSV downloaded');
+});
+map.on('click', async (e) => {
+  const { lat, lng } = e.latlng;
+  const id = lat.toFixed(6) + ',' + lng.toFixed(6);
+  if (!pins[id]) {
+    pins[id] = { lat, lng, addr: 'Loading address…', status: 'none', note: '', ts: Date.now() };
+    addOrUpdateMarker(id);
+    updateStats();
+    savePins();
+    reverseGeocode(lat, lng, id);
+  }
+  openSheet(id);
+});
+
+async function reverseGeocode(lat, lng, id) {
+  try {
+    const r = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`);
+    const d = await r.json();
+    const addr = d.display_name ? d.display_name.split(',').slice(0, 3).join(',') : `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+    if (pins[id]) {
+      pins[id].addr = addr;
+      savePins();
+      if (currentPinId === id) {
+        document.getElementById('sheet-addr').textContent = addr;
       }
+    }
+  } catch (e) {
+    if (pins[id]) pins[id].addr = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+  }
+}
 
-      // Build email
-      const subject = encodeURIComponent(`Quote request: ${data.type} (${data.timing})`);
-      const body = encodeURIComponent(
-`Name: ${data.name}
-Company: ${data.company || "-"}
-Email: ${data.email}
-Phone: ${data.phone || "-"}
-Project type: ${data.type}
-Timing: ${data.timing}
-Address/Area: ${data.address || "-"} 
+// Legend filter
+document.querySelectorAll('#legend .legend-row').forEach(row => {
+  row.addEventListener('click', () => {
+    const f = row.dataset.filter;
+    if (f === 'all') {
+      hiddenStatuses.clear();
+      document.querySelectorAll('#legend .legend-row').forEach(r => r.classList.add('active'));
+    } else {
+      if (hiddenStatuses.has(f)) {
+        hiddenStatuses.delete(f);
+        row.classList.add('active');
+      } else {
+        hiddenStatuses.add(f);
+        row.classList.remove('active');
+      }
+      const allActive = document.querySelectorAll('#legend .legend-row[data-filter]:not([data-filter="all"]).active').length === 5;
+      document.querySelector('#legend .legend-row[data-filter="all"]').classList.toggle('active', allActive);
+    }
+    renderAllMarkers();
+  });
+});
 
-Details:
-${data.details || "-"}`
-      );
+// Search
+const searchInput = document.getElementById('search-input');
+const searchResults = document.getElementById('search-results');
+let searchTimeout;
+let searchTop = 0;
 
-      // TODO: Replace with your real email
-      const to = "hello@your-domain.com";
-      const mailto = `mailto:${to}?subject=${subject}&body=${body}`;
+function positionSearchResults() {
+  const bar = document.getElementById('search-bar');
+  const rect = bar.getBoundingClientRect();
+  searchResults.style.top = (rect.bottom + 6) + 'px';
+}
 
-      // Open mail client
-      window.location.href = mailto;
+searchInput.addEventListener('input', () => {
+  clearTimeout(searchTimeout);
+  const q = searchInput.value.trim();
+  if (q.length < 3) { searchResults.style.display = 'none'; return; }
+  searchTimeout = setTimeout(() => doSearch(q), 400);
+});
 
-      msg.textContent = "Opening your email app… if nothing happens, email us directly at " + to + ".";
-      form.reset();
-    });   */
-  </script>
+async function doSearch(q) {
+  try {
+    const r = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q + ' Knoxville Tennessee')}&format=json&limit=5&addressdetails=1`);
+    const data = await r.json();
+    searchResults.innerHTML = '';
+    if (!data.length) {
+      searchResults.style.display = 'none';
+      return;
+    }
+    positionSearchResults();
+    data.forEach(item => {
+      const d = document.createElement('div');
+      d.className = 'search-result';
+      const parts = item.display_name.split(',');
+      d.innerHTML = `<strong>${parts[0]}</strong>, ${parts.slice(1, 3).join(',')}`;
+      d.addEventListener('click', () => {
+        const lat = parseFloat(item.lat), lng = parseFloat(item.lon);
+        map.setView([lat, lng], 17);
+        searchResults.style.display = 'none';
+        searchInput.value = '';
+        searchInput.blur();
+
+        // Add pin if not exists
+        const id = lat.toFixed(6) + ',' + lng.toFixed(6);
+        if (!pins[id]) {
+          pins[id] = { lat, lng, addr: item.display_name.split(',').slice(0, 3).join(','), status: 'none', note: '', ts: Date.now() };
+          addOrUpdateMarker(id);
+          updateStats();
+          savePins();
+        }
+        setTimeout(() => openSheet(id), 300);
+      });
+      searchResults.appendChild(d);
+    });
+    searchResults.style.display = 'block';
+  } catch (e) { searchResults.style.display = 'none'; }
+}
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('#search-bar') && !e.target.closest('#search-results')) {
+    searchResults.style.display = 'none';
+  }
+});
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1800);
+}
+
+// Initial render
+renderAllMarkers();
+
+// Adjust map padding for header
+map.whenReady(() => {
+  const headerH = document.getElementById('header').offsetHeight + 70;
+  map.invalidateSize();
+});
+
+window.addEventListener('resize', () => map.invalidateSize());
+</script>
 </body>
 </html>

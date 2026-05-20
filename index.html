@@ -276,6 +276,34 @@
     -webkit-appearance: none;
   }
   #export-csv-btn:active { opacity: 0.85; }
+
+  #backup-section { padding: 0 16px 8px; }
+  #backup-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px;
+  }
+  #backup-status-row { display: flex; align-items: center; gap: 8px; }
+  #backup-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--text2); flex-shrink: 0; }
+  #backup-dot.good { background: var(--c-interest); }
+  #backup-dot.warn { background: var(--c-hanger); }
+  #backup-status-text { font-size: 13px; font-weight: 600; color: var(--text); }
+  #backup-hint { font-size: 12px; color: var(--text2); line-height: 1.5; }
+  #backup-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  #backup-save-btn, #backup-restore-btn {
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    padding: 11px 8px; border-radius: 10px; font-size: 13px; font-weight: 600;
+    cursor: pointer; -webkit-appearance: none; border: none;
+  }
+  #backup-save-btn { background: var(--accent); color: #fff; }
+  #backup-save-btn:active { opacity: 0.85; }
+  #backup-restore-btn { background: var(--surface2); color: var(--text); border: 1px solid var(--border); cursor: pointer; }
+  #backup-restore-btn:active { opacity: 0.75; }
+  #backup-instructions {
+    font-size: 12px; color: var(--text2); line-height: 1.6;
+    background: var(--surface2); border-radius: 8px; padding: 10px 12px;
+  }
+  #backup-instructions strong { color: var(--text); }
+  #backup-instructions code { font-family: monospace; color: var(--accent); }
   .leaflet-bottom.leaflet-right { bottom: 160px !important; }
 
   /* pulse animation for new pin */
@@ -411,6 +439,34 @@
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
     Download CSV
   </button>
+
+  <div id="backup-section">
+    <p class="filter-label" style="padding: 20px 16px 8px;">Cloud backup</p>
+    <div id="backup-card">
+      <div id="backup-status-row">
+        <div id="backup-dot"></div>
+        <span id="backup-status-text">Never backed up</span>
+      </div>
+      <p id="backup-hint">Save a backup file to Google Drive, iCloud, or anywhere. Restore it anytime to recover your data.</p>
+      <div id="backup-btns">
+        <button id="backup-save-btn">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Save backup
+        </button>
+        <label id="backup-restore-btn">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Restore backup
+          <input type="file" id="backup-file-input" accept=".json" style="display:none">
+        </label>
+      </div>
+      <p id="backup-instructions">
+        <strong>How to back up to Google Drive:</strong><br>
+        1. Tap "Save backup" — your browser downloads a <code>.json</code> file<br>
+        2. Open the Files app → find the download → tap Share → Save to Drive<br>
+        3. To restore: download the file from Drive, then tap "Restore backup" here
+      </p>
+    </div>
+  </div>
 </div>
 
 <div id="toast"></div>
@@ -814,6 +870,106 @@ map.whenReady(() => {
   const headerH = document.getElementById('header').offsetHeight + 70;
   map.invalidateSize();
 });
+
+// ── Backup / Restore ──────────────────────────────────────
+function updateBackupStatus() {
+  const lastBackup = localStorage.getItem('knoxLastBackup');
+  const dot = document.getElementById('backup-dot');
+  const txt = document.getElementById('backup-status-text');
+  if (!dot || !txt) return;
+  if (!lastBackup) {
+    dot.className = '';
+    txt.textContent = 'Never backed up';
+    return;
+  }
+  const ms = Date.now() - parseInt(lastBackup);
+  const days = Math.floor(ms / 86400000);
+  if (days === 0) {
+    dot.className = 'good';
+    txt.textContent = 'Backed up today';
+  } else if (days === 1) {
+    dot.className = 'warn';
+    txt.textContent = 'Backed up yesterday';
+  } else if (days < 7) {
+    dot.className = 'warn';
+    txt.textContent = `Backed up ${days} days ago`;
+  } else {
+    dot.className = '';
+    txt.textContent = `Last backup ${days} days ago — overdue!`;
+  }
+}
+
+document.getElementById('backup-save-btn').addEventListener('click', () => {
+  const data = {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    pins: pins
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const today = new Date().toISOString().slice(0, 10);
+  a.download = `knoxcanvas_backup_${today}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  localStorage.setItem('knoxLastBackup', Date.now().toString());
+  updateBackupStatus();
+  showToast('Backup saved — move it to Google Drive or iCloud');
+});
+
+document.getElementById('backup-file-input').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    try {
+      const data = JSON.parse(ev.target.result);
+      const restored = data.pins || data;
+      const count = Object.keys(restored).length;
+      if (!count) { showToast('No pins found in backup file'); return; }
+      const existing = Object.keys(pins).length;
+      const msg = existing > 0
+        ? `Restore ${count} pins? This will merge with your ${existing} existing pins.`
+        : `Restore ${count} pins from backup?`;
+      if (confirm(msg)) {
+        pins = { ...pins, ...restored };
+        savePins();
+        renderAllMarkers();
+        localStorage.setItem('knoxLastBackup', Date.now().toString());
+        updateBackupStatus();
+        buildExportPanel();
+        showToast(`Restored ${count} pins`);
+      }
+    } catch (err) {
+      showToast('Could not read backup file');
+    }
+    e.target.value = '';
+  };
+  reader.readAsText(file);
+});
+
+// Nudge user to back up if they haven't in 3+ days
+(function checkBackupNudge() {
+  const last = localStorage.getItem('knoxLastBackup');
+  const dismissed = localStorage.getItem('knoxBackupNudgeDismissed');
+  if (!last) return;
+  const days = Math.floor((Date.now() - parseInt(last)) / 86400000);
+  if (days >= 3 && dismissed !== new Date().toDateString()) {
+    setTimeout(() => showToast('Tip: back up your data in the Export page'), 3000);
+    localStorage.setItem('knoxBackupNudgeDismissed', new Date().toDateString());
+  }
+})();
+
+// Update status whenever export panel opens
+const origBuildExport = buildExportPanel;
+// patch buildExportPanel to also refresh backup status
+const _origBuild = buildExportPanel;
+window.buildExportPanel = function() {
+  _origBuild();
+  updateBackupStatus();
+}
+document.getElementById('export-btn').addEventListener('click', updateBackupStatus);
 
 window.addEventListener('resize', () => map.invalidateSize());
 </script>

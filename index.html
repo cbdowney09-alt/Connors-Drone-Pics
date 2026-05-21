@@ -75,7 +75,9 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--bg);font-famil
 #sheet.open{transform:translateY(0)}
 #sheet-handle{width:36px;height:4px;background:rgba(255,255,255,0.2);border-radius:2px;margin:12px auto 0}
 #sheet-addr{font-size:15px;font-weight:600;padding:16px 20px 4px;line-height:1.3}
-#sheet-coords{font-size:12px;color:var(--text2);padding:0 20px 16px}
+#sheet-coords{font-size:12px;color:var(--text2);padding:0 20px 8px}
+#zillow-btn{display:flex;align-items:center;gap:8px;margin:0 20px 12px;background:transparent;color:#006aff;border:1px solid rgba(0,106,255,0.3);border-radius:10px;padding:10px 14px;font-size:13px;font-weight:600;text-decoration:none;width:calc(100% - 40px)}
+#zillow-btn:active{background:rgba(0,106,255,0.08)}
 .status-btn{display:flex;align-items:center;gap:14px;padding:14px 20px;border:none;background:transparent;color:var(--text);width:100%;text-align:left;font-size:15px;cursor:pointer;border-top:1px solid var(--border);-webkit-appearance:none}
 .status-btn:active{background:var(--surface2)}
 .status-btn .swatch{width:14px;height:14px;border-radius:50%;flex-shrink:0}
@@ -189,6 +191,10 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--bg);font-famil
   <div id="sheet-handle"></div>
   <div id="sheet-addr">Select a location</div>
   <div id="sheet-coords"></div>
+  <a id="zillow-btn" href="#" target="_blank" rel="noopener">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+    View on Zillow
+  </a>
   <button class="status-btn" data-status="none"><span class="swatch" style="background:var(--c-none)"></span>Not visited<span class="check">✓</span></button>
   <button class="status-btn" data-status="hanger"><span class="swatch" style="background:var(--c-hanger)"></span>Door hanger left<span class="check">✓</span></button>
   <button class="status-btn" data-status="interest"><span class="swatch" style="background:var(--c-interest)"></span>Spoke to someone — interested<span class="check">✓</span></button>
@@ -396,6 +402,9 @@ function openSheet(id){
   currentPinId=id;const p=pins[id];
   document.getElementById('sheet-addr').textContent=p.addr||'Unnamed location';
   document.getElementById('sheet-coords').textContent=p.lat.toFixed(5)+', '+p.lng.toFixed(5);
+  const rawAddr = (p.addr||'').trim();
+  const zillowQuery = encodeURIComponent(rawAddr);
+  document.getElementById('zillow-btn').href=`https://www.zillow.com/homes/${zillowQuery}_rb/`;
   document.getElementById('sheet-note').value=p.note||'';
   document.querySelectorAll('.status-btn').forEach(btn=>btn.classList.toggle('active',btn.dataset.status===p.status));
   document.getElementById('sheet').classList.add('open');
@@ -453,10 +462,28 @@ map.on('click',async(e)=>{
 
 async function reverseGeocode(lat,lng,id){
   try{
-    const r=await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`);
+    const r=await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&addressdetails=1`);
     const d=await r.json();
-    const addr=d.display_name?d.display_name.split(',').slice(0,3).join(','):`${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-    if(pins[id]){pins[id].addr=addr;schedulePush();if(currentPinId===id)document.getElementById('sheet-addr').textContent=addr;}
+    // Build a clean address Zillow can understand
+    let addr = '';
+    if(d.address){
+      const a = d.address;
+      const street = a.house_number ? `${a.house_number} ${a.road||''}` : (a.road||'');
+      const city = a.city||a.town||a.village||a.county||'Knoxville';
+      const state = a.state_code||a.state||'TN';
+      const zip = a.postcode||'';
+      addr = [street, city, state, zip].filter(Boolean).join(', ').trim();
+    }
+    if(!addr) addr = d.display_name ? d.display_name.split(',').slice(0,3).join(',') : `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+    if(pins[id]){
+      pins[id].addr=addr;
+      schedulePush();
+      if(currentPinId===id){
+        document.getElementById('sheet-addr').textContent=addr;
+        const zillowQuery=encodeURIComponent(addr);
+        document.getElementById('zillow-btn').href=`https://www.zillow.com/homes/${zillowQuery}_rb/`;
+      }
+    }
   }catch(e){if(pins[id])pins[id].addr=`${lat.toFixed(4)}, ${lng.toFixed(4)}`;}
 }
 

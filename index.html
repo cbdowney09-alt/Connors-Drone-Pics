@@ -243,6 +243,7 @@ const PASSWORD     = 'Connor';
 const BIN_ID       = '6a0e72bd6610dd3ae87ce698';
 const ACCESS_KEY   = '$2a$10$KLNJA3b6TXj1typeNBbMZ.9yAbwJgVSw22eETJba1qFG1582s4jV6';
 const BIN_URL      = `https://api.jsonbin.io/v3/b/${BIN_ID}`;
+const SHEETS_URL   = 'https://script.google.com/macros/s/AKfycbxkvAP9aCMsCfX7zQb2iRIrNXyHiDMOx9L6POxPm1Zgq1RkGuT94rdPRG-RTHynSqTJ/exec';
 
 const COLORS={none:'#6b7280',hanger:'#f59e0b',interest:'#10b981',no:'#ef4444',dnr:'#7c3aed'};
 const LABELS={none:'Not visited',hanger:'Door hanger',interest:'Interested',no:'Not interested',dnr:'Do not return'};
@@ -291,12 +292,27 @@ function setSyncStatus(state,msg){
   if(state==='ok')setTimeout(()=>{dot.className='';txt.textContent='Synced';},2500);
 }
 
+async function syncToSheets(action, pin, id){
+  // Only track door hangers
+  if(action==='upsert' && pin.status!=='hanger') return;
+  try{
+    await fetch(SHEETS_URL,{
+      method:'POST',
+      mode:'no-cors',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(action==='upsert'
+        ? {action:'upsert', pin:{...pin, id: id||pin.id}}
+        : {action:'delete', id})
+    });
+  }catch(e){ console.warn('Sheets sync error:',e); }
+}
+
 async function pushToCloud(){
   setSyncStatus('syncing');
   try{
     const res=await fetch(BIN_URL,{
       method:'PUT',
-      headers:{'Content-Type':'application/json','X-Access-Key':ACCESS_KEY,'X-Bin-Versioning':'false'},
+      headers:{'Content-Type':'application/json','X-Master-Key':ACCESS_KEY,'X-Access-Key':ACCESS_KEY,'X-Bin-Versioning':'false'},
       body:JSON.stringify({pins})
     });
     if(!res.ok)throw new Error(await res.text());
@@ -311,7 +327,7 @@ async function pushToCloud(){
 async function pullFromCloud(){
   try{
     const res=await fetch(BIN_URL+'/latest',{
-      headers:{'X-Access-Key':ACCESS_KEY}
+      headers:{'X-Master-Key':ACCESS_KEY,'X-Access-Key':ACCESS_KEY}
     });
     if(!res.ok)throw new Error(await res.text());
     const data=await res.json();
@@ -402,6 +418,7 @@ document.querySelectorAll('.status-btn').forEach(btn=>{
     document.querySelectorAll('.status-btn').forEach(b=>b.classList.toggle('active',b.dataset.status===btn.dataset.status));
     showToast('Saved: '+LABELS[btn.dataset.status]);
     schedulePush();
+    syncToSheets('upsert', pins[currentPinId], currentPinId);
   });
 });
 
@@ -418,6 +435,7 @@ document.getElementById('sheet-delete').addEventListener('click',()=>{
   delete markers[id];delete pins[id];
   updateStats();closeSheet();showToast('Pin removed');
   schedulePush();
+  syncToSheets('delete', null, id);
 });
 
 // ── Map tap ──────────────────────────────────────────────

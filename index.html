@@ -250,6 +250,7 @@ const BIN_ID       = '6a0e72bd6610dd3ae87ce698';
 const ACCESS_KEY   = '$2a$10$KLNJA3b6TXj1typeNBbMZ.9yAbwJgVSw22eETJba1qFG1582s4jV6';
 const BIN_URL      = `https://api.jsonbin.io/v3/b/${BIN_ID}`;
 const SHEETS_URL   = 'https://script.google.com/macros/s/AKfycbxkvAP9aCMsCfX7zQb2iRIrNXyHiDMOx9L6POxPm1Zgq1RkGuT94rdPRG-RTHynSqTJ/exec';
+const GOOGLE_GEO_KEY = 'AIzaSyBV_KqFY3hgfHHGGF4TAXd4bItSyjGYKho';
 
 const COLORS={none:'#6b7280',hanger:'#f59e0b',interest:'#10b981',no:'#ef4444',dnr:'#7c3aed'};
 const LABELS={none:'Not visited',hanger:'Door hanger',interest:'Interested',no:'Not interested',dnr:'Do not return'};
@@ -454,37 +455,59 @@ map.on('click',async(e)=>{
   if(!pins[id]){
     pins[id]={lat,lng,addr:'Loading address…',status:'none',note:'',ts:Date.now()};
     addOrUpdateMarker(id);updateStats();
-    schedulePush();
+    // Don't push until address is resolved
     reverseGeocode(lat,lng,id);
   }
   openSheet(id);
 });
 
 async function reverseGeocode(lat,lng,id){
+  let addr = '';
+
+  // 1. Try Google Geocoding API first
   try{
-    const r=await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&addressdetails=1`);
-    const d=await r.json();
-    // Build a clean address Zillow can understand
-    let addr = '';
-    if(d.address){
-      const a = d.address;
-      const street = a.house_number ? `${a.house_number} ${a.road||''}` : (a.road||'');
-      const city = a.city||a.town||a.village||a.county||'Knoxville';
-      const state = a.state_code||a.state||'TN';
-      const zip = a.postcode||'';
-      addr = [street, city, state, zip].filter(Boolean).join(', ').trim();
+    const r = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${GOOGLE_GEO_KEY}`);
+    const d = await r.json();
+    console.log('Google geocode status:', d.status, d.error_message||'');
+    if(d.status==='OK' && d.results && d.results.length > 0){
+      const best = d.results.find(r=>r.geometry.location_type==='ROOFTOP'||r.geometry.location_type==='RANGE_INTERPOLATED') || d.results[0];
+      addr = best.formatted_address || '';
     }
-    if(!addr) addr = d.display_name ? d.display_name.split(',').slice(0,3).join(',') : `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-    if(pins[id]){
-      pins[id].addr=addr;
-      schedulePush();
-      if(currentPinId===id){
-        document.getElementById('sheet-addr').textContent=addr;
-        const zillowQuery=encodeURIComponent(addr);
-        document.getElementById('zillow-btn').href=`https://www.zillow.com/homes/${zillowQuery}_rb/`;
+  }catch(e){
+    console.warn('Google geocode failed:', e);
+  }
+
+  // 2. Fallback to Nominatim if Google failed
+  if(!addr){
+    try{
+      const r = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&addressdetails=1&zoom=18`);
+      const d = await r.json();
+      if(d.address){
+        const a = d.address;
+        const num = a.house_number||'';
+        const road = a.road||a.pedestrian||a.path||'';
+        const city = a.city||a.town||a.village||'Knoxville';
+        const state = a.state_code||'TN';
+        const zip = a.postcode||'';
+        if(num && road) addr = `${num} ${road}, ${city}, ${state} ${zip}`.trim();
+        else if(road) addr = `${road}, ${city}, ${state} ${zip}`.trim();
       }
+    }catch(e){
+      console.warn('Nominatim fallback failed:', e);
     }
-  }catch(e){if(pins[id])pins[id].addr=`${lat.toFixed(4)}, ${lng.toFixed(4)}`;}
+  }
+
+  if(!addr) addr = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+
+  if(pins[id]){
+    pins[id].addr = addr;
+    schedulePush();
+    if(currentPinId===id){
+      document.getElementById('sheet-addr').textContent = addr;
+      const zillowQuery = encodeURIComponent(addr);
+      document.getElementById('zillow-btn').href = `https://www.zillow.com/homes/${zillowQuery}_rb/`;
+    }
+  }
 }
 
 // ── Legend ───────────────────────────────────────────────

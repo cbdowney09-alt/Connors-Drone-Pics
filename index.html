@@ -8,6 +8,949 @@
 <title>KnoxCanvas</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<!-- Firebase -->
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import { getFirestore, doc, setDoc, getDoc, collection, addDoc, query, where, getDocs, onSnapshot, deleteDoc, updateDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCicUN1axUGBgFuznmQjX-9D6yf3R2HU88",
+  authDomain: "knoxcanvas-a7bfe.firebaseapp.com",
+  projectId: "knoxcanvas-a7bfe",
+  storageBucket: "knoxcanvas-a7bfe.firebasestorage.app",
+  messagingSenderId: "526600169975",
+  appId: "1:526600169975:web:5d8d4896717377029026f2"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const googleProvider = new GoogleAuthProvider();
+
+// ── State ─────────────────────────────────────────────────
+let currentUser = null;
+let currentUserProfile = null; // {role: 'owner'|'employee', companyId, name, email}
+let companyId = null;
+let pins = {};
+let neighborhoodYears = [];
+let shifts = [];
+let markers = {};
+let hiddenStatuses = new Set();
+let currentPinId = null;
+let noteDebounce = null;
+let roofingMode = false;
+let zonePolygonLayers = [];
+let drawingMode = false;
+let drawingForRoute = false;
+let drawnPoints = [], drawnPolyline = null, drawnPolygon = null, drawnMarkers = [];
+let routeStart = null, routeZonePolygon = null, routeZoneLayer = null;
+let routeMarkers = [], routePolylines = [];
+let clockedIn = false, clockInTime = null, clockTimerInterval = null, shiftHangersAtClockIn = 0;
+let pinsListener = null;
+
+const COLORS = {none:'#6b7280',hanger:'#f59e0b',interest:'#10b981',no:'#ef4444',dnr:'#7c3aed'};
+const LABELS = {none:'Not visited',hanger:'Door hanger',interest:'Interested',no:'Not interested',dnr:'Do not return'};
+const ROOF_CUTOFF = 2012;
+const GEO_PROXY = 'https://broken-tree-befb.connorbdowney48.workers.dev';
+const SHEETS_URL = 'https://script.google.com/macros/s/AKfycbxeNoWtEdYnmXDfGq9aBjRpspGS6nucshZaxWj2OYY63zVtOb7XtZuYoDRsgCV0aVFs/exec';
+
+// ── Auth State ────────────────────────────────────────────
+onAuthStateChanged(auth, async (user) => {
+  if (user) {
+    currentUser = user;
+    await loadUserProfile(user);
+    showApp();
+  } else {
+    currentUser = null;
+    currentUserProfile = null;
+    companyId = null;
+    showAuth();
+  }
+});
+
+async function loadUserProfile(user) {
+  const userDoc = await getDoc(doc(db, 'users', user.uid));
+  if (userDoc.exists()) {
+    currentUserProfile = userDoc.data();
+    companyId = currentUserProfile.companyId;
+  }
+}
+
+function showAuth() {
+  document.getElementById('auth-screen').style.display = 'flex';
+  document.getElementById('app-root').style.display = 'none';
+  document.getElementById('admin-panel').style.display = 'none';
+}
+
+function showApp() {
+  document.getElementById('auth-screen').style.display = 'none';
+  if (!currentUserProfile || !companyId) {
+    // New user — show setup
+    showSetup();
+    return;
+  }
+  document.getElementById('app-root').style.display = 'block';
+  initApp();
+  // Show admin button only for owners
+  document.getElementById('admin-btn').style.display = currentUserProfile.role === 'owner' ? 'flex' : 'none';
+}
+
+function showSetup() {
+  document.getElementById('setup-screen').style.display = 'flex';
+  document.getElementById('app-root').style.display = 'none';
+}
+
+// ── Login / Register ──────────────────────────────────────
+document.getElementById('show-register').addEventListener('click', () => {
+  document.getElementById('login-form').style.display = 'none';
+  document.getElementById('register-form').style.display = 'block';
+});
+document.getElementById('show-login').addEventListener('click', () => {
+  document.getElementById('register-form').style.display = 'none';
+  document.getElementById('login-form').style.display = 'block';
+});
+
+document.getElementById('login-btn').addEventListener('click', async () => {
+  const email = document.getElementById('login-email').value.trim();
+  const pass = document.getElementById('login-pass').value;
+  setAuthErr('');
+  try {
+    await signInWithEmailAndPassword(auth, email, pass);
+  } catch(e) {
+    setAuthErr(friendlyAuthError(e.code));
+  }
+});
+
+document.getElementById('register-btn').addEventListener('click', async () => {
+  const name = document.getElementById('reg-name').value.trim();
+  const email = document.getElementById('reg-email').value.trim();
+  const pass = document.getElementById('reg-pass').value;
+  const companyName = document.getElementById('reg-company').value.trim();
+  setAuthErr('');
+  if (!name || !email || !pass || !companyName) { setAuthErr('All fields required'); return; }
+  if (pass.length < 6) { setAuthErr('Password must be at least 6 characters'); return; }
+  try {
+    const cred = await createUserWithEmailAndPassword(auth, email, pass);
+    // Create company
+    const companyRef = await addDoc(collection(db, 'companies'), {
+      name: companyName,
+      ownerId: cred.user.uid,
+      createdAt: serverTimestamp()
+    });
+    // Create user profile
+    await setDoc(doc(db, 'users', cred.user.uid), {
+      name, email, role: 'owner',
+      companyId: companyRef.id,
+      companyName,
+      createdAt: serverTimestamp()
+    });
+  } catch(e) {
+    setAuthErr(friendlyAuthError(e.code));
+  }
+});
+
+document.getElementById('google-login-btn').addEventListener('click', async () => {
+  setAuthErr('');
+  try {
+    await signInWithPopup(auth, googleProvider);
+    // If new Google user, setup screen will show
+  } catch(e) {
+    setAuthErr(friendlyAuthError(e.code));
+  }
+});
+
+function setAuthErr(msg) {
+  document.getElementById('auth-err').textContent = msg;
+}
+
+function friendlyAuthError(code) {
+  if (code === 'auth/user-not-found' || code === 'auth/wrong-password' || code === 'auth/invalid-credential') return 'Incorrect email or password.';
+  if (code === 'auth/email-already-in-use') return 'Email already in use.';
+  if (code === 'auth/invalid-email') return 'Invalid email address.';
+  if (code === 'auth/weak-password') return 'Password too weak.';
+  if (code === 'auth/popup-closed-by-user') return '';
+  return 'Something went wrong. Try again.';
+}
+
+// ── Setup screen (new Google users or users without company) ──
+document.getElementById('setup-create-btn').addEventListener('click', async () => {
+  const name = document.getElementById('setup-name').value.trim();
+  const companyName = document.getElementById('setup-company').value.trim();
+  if (!name || !companyName) { document.getElementById('setup-err').textContent = 'Fill in all fields'; return; }
+  try {
+    const companyRef = await addDoc(collection(db, 'companies'), {
+      name: companyName, ownerId: currentUser.uid, createdAt: serverTimestamp()
+    });
+    await setDoc(doc(db, 'users', currentUser.uid), {
+      name, email: currentUser.email, role: 'owner',
+      companyId: companyRef.id, companyName, createdAt: serverTimestamp()
+    });
+    await loadUserProfile(currentUser);
+    document.getElementById('setup-screen').style.display = 'none';
+    showApp();
+  } catch(e) {
+    document.getElementById('setup-err').textContent = e.message;
+  }
+});
+
+document.getElementById('setup-join-btn').addEventListener('click', async () => {
+  const name = document.getElementById('setup-name').value.trim();
+  const code = document.getElementById('setup-invite-code').value.trim();
+  if (!name || !code) { document.getElementById('setup-err').textContent = 'Fill in all fields'; return; }
+  try {
+    // Look up invite code
+    const inviteDoc = await getDoc(doc(db, 'invites', code));
+    if (!inviteDoc.exists()) { document.getElementById('setup-err').textContent = 'Invalid invite code'; return; }
+    const invite = inviteDoc.data();
+    await setDoc(doc(db, 'users', currentUser.uid), {
+      name, email: currentUser.email, role: 'employee',
+      companyId: invite.companyId, companyName: invite.companyName,
+      createdAt: serverTimestamp()
+    });
+    // Mark invite used
+    await deleteDoc(doc(db, 'invites', code));
+    await loadUserProfile(currentUser);
+    document.getElementById('setup-screen').style.display = 'none';
+    showApp();
+  } catch(e) {
+    document.getElementById('setup-err').textContent = e.message;
+  }
+});
+
+// ── Admin Panel ───────────────────────────────────────────
+document.getElementById('admin-btn').addEventListener('click', () => {
+  document.getElementById('admin-panel').style.display = 'flex';
+  loadAdminPanel();
+});
+document.getElementById('admin-close').addEventListener('click', () => {
+  document.getElementById('admin-panel').style.display = 'none';
+});
+
+async function loadAdminPanel() {
+  if (currentUserProfile.role !== 'owner') return;
+  const companyDoc = await getDoc(doc(db, 'companies', companyId));
+  document.getElementById('admin-company-name').textContent = companyDoc.data()?.name || 'Your Company';
+
+  // Load employees
+  const empQuery = query(collection(db, 'users'), where('companyId', '==', companyId));
+  const empSnap = await getDocs(empQuery);
+  const empList = document.getElementById('admin-emp-list');
+  empList.innerHTML = '';
+  empSnap.forEach(d => {
+    const u = d.data();
+    const row = document.createElement('div');
+    row.className = 'admin-emp-row';
+    row.innerHTML = `<div><div class="emp-name">${u.name}</div><div class="emp-email">${u.email} · <span style="color:var(--c-hanger)">${u.role}</span></div></div>`;
+    empList.appendChild(row);
+  });
+}
+
+document.getElementById('gen-invite-btn').addEventListener('click', async () => {
+  if (currentUserProfile.role !== 'owner') return;
+  const code = Math.random().toString(36).substring(2, 10).toUpperCase();
+  await setDoc(doc(db, 'invites', code), {
+    companyId, companyName: currentUserProfile.companyName,
+    createdBy: currentUser.uid, createdAt: serverTimestamp()
+  });
+  document.getElementById('invite-code-display').textContent = code;
+  document.getElementById('invite-code-box').style.display = 'block';
+  showToast('Invite code generated — share it with your employee');
+});
+
+document.getElementById('copy-invite-btn').addEventListener('click', () => {
+  const code = document.getElementById('invite-code-display').textContent;
+  navigator.clipboard.writeText(code).then(() => showToast('Copied!'));
+});
+
+// ── Logout ────────────────────────────────────────────────
+document.getElementById('logout-btn').addEventListener('click', async () => {
+  if (pinsListener) pinsListener();
+  await signOut(auth);
+});
+
+// ── JSONBin migration ─────────────────────────────────────
+const LEGACY_BIN_URL = 'https://api.jsonbin.io/v3/b/6a0e72bd6610dd3ae87ce698/latest';
+const LEGACY_ACCESS_KEY = '$2a$10$KLNJA3b6TXj1typeNBbMZ.9yAbwJgVSw22eETJba1qFG1582s4jV6';
+
+async function migrateFromJSONBin() {
+  // Only run for the original owner account
+  if (currentUser.uid !== '9vYmWuYgjwQYHrO1yd3msBo48xi2') return;
+  if (currentUserProfile.migrated) return;
+
+  try {
+    // Check if company already has pins
+    const pinsSnap = await getDocs(collection(db, 'companies', companyId, 'pins'));
+    if (!pinsSnap.empty) {
+      // Already has data, mark migrated and skip
+      await updateDoc(doc(db, 'users', currentUser.uid), { migrated: true });
+      return;
+    }
+
+    // Fetch from JSONBin
+    const res = await fetch(LEGACY_BIN_URL, {
+      headers: { 'X-Master-Key': LEGACY_ACCESS_KEY, 'X-Access-Key': LEGACY_ACCESS_KEY }
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!data.record || !data.record.pins) return;
+
+    const legacyPins = data.record.pins;
+    const pinIds = Object.keys(legacyPins);
+    if (!pinIds.length) return;
+
+    // Write all pins to Firestore
+    const batch = [];
+    pinIds.forEach(id => {
+      const p = legacyPins[id];
+      batch.push(setDoc(doc(db, 'companies', companyId, 'pins', id), {
+        ...p, id,
+        migratedFrom: 'jsonbin',
+        updatedBy: currentUser.uid,
+        updatedAt: serverTimestamp()
+      }));
+    });
+
+    // Migrate neighborhood years too
+    if (data.record.neighborhoodYears && data.record.neighborhoodYears.length) {
+      batch.push(setDoc(doc(db, 'companies', companyId, 'settings', 'neighborhoodYears'), {
+        zones: data.record.neighborhoodYears
+      }));
+    }
+
+    await Promise.all(batch);
+    await updateDoc(doc(db, 'users', currentUser.uid), { migrated: true });
+    showToast(`Migrated ${pinIds.length} pins from your previous data`);
+  } catch(e) {
+    console.warn('Migration failed:', e);
+  }
+}
+
+// ── Firestore pins ────────────────────────────────────────
+function initApp() {
+  map.invalidateSize();
+  // Run migration for original owner on first load
+  migrateFromJSONBin();
+  // Listen to company pins in real time
+  if (pinsListener) pinsListener();
+  const pinsRef = collection(db, 'companies', companyId, 'pins');
+  pinsListener = onSnapshot(pinsRef, (snap) => {
+    pins = {};
+    snap.forEach(d => { pins[d.id] = { ...d.data(), id: d.id }; });
+    renderAllMarkers();
+  });
+  // Load neighborhood years
+  loadNeighborhoodYears();
+  // Load shifts
+  loadShifts();
+  // Update user name display
+  document.getElementById('user-name-display').textContent = currentUserProfile.name || currentUser.email;
+}
+
+async function savePin(id, pinData) {
+  await setDoc(doc(db, 'companies', companyId, 'pins', id), {
+    ...pinData,
+    updatedBy: currentUser.uid,
+    updatedAt: serverTimestamp()
+  }, { merge: true });
+}
+
+async function deletePinFromDb(id) {
+  await deleteDoc(doc(db, 'companies', companyId, 'pins', id));
+}
+
+async function loadNeighborhoodYears() {
+  const d = await getDoc(doc(db, 'companies', companyId, 'settings', 'neighborhoodYears'));
+  if (d.exists()) neighborhoodYears = d.data().zones || [];
+}
+
+async function saveNeighborhoodYears() {
+  await setDoc(doc(db, 'companies', companyId, 'settings', 'neighborhoodYears'), { zones: neighborhoodYears });
+}
+
+async function loadShifts() {
+  const q = query(collection(db, 'companies', companyId, 'shifts'), where('userId', '==', currentUser.uid));
+  const snap = await getDocs(q);
+  shifts = [];
+  snap.forEach(d => shifts.push({ ...d.data(), id: d.id }));
+  shifts.sort((a, b) => b.clockIn - a.clockIn);
+}
+
+async function saveShift(shift) {
+  const ref = await addDoc(collection(db, 'companies', companyId, 'shifts'), {
+    ...shift, userId: currentUser.uid, userName: currentUserProfile.name
+  });
+  return ref.id;
+}
+
+// ── Map ───────────────────────────────────────────────────
+const map = L.map('map', { center: [35.9606, -83.9207], zoom: 17, zoomControl: false, attributionControl: false });
+L.tileLayer('https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', { maxZoom: 22, subdomains: '0123', attribution: '© Google Maps' }).addTo(map);
+L.control.attribution({ position: 'bottomleft', prefix: false }).addTo(map);
+
+function makeIcon(status) {
+  const c = COLORS[status] || COLORS.none;
+  return L.divIcon({ html: `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36"><path d="M14 2C8.48 2 4 6.48 4 12c0 7 10 22 10 22S24 19 24 12c0-5.52-4.48-10-10-10z" fill="${c}"/><circle cx="14" cy="12" r="5" fill="rgba(255,255,255,0.35)"/></svg>`, iconSize: [28,36], iconAnchor: [14,36], className: '' });
+}
+
+function addOrUpdateMarker(id) {
+  const p = pins[id]; if (!p) return;
+  if (markers[id]) map.removeLayer(markers[id]);
+  if (hiddenStatuses.has(p.status)) return;
+  const m = L.marker([p.lat, p.lng], { icon: makeIcon(p.status) });
+  m.on('click', () => openSheet(id));
+  m.addTo(map); markers[id] = m;
+}
+
+function renderAllMarkers() {
+  Object.keys(markers).forEach(id => map.removeLayer(markers[id])); markers = {};
+  Object.keys(pins).forEach(id => addOrUpdateMarker(id)); updateStats();
+}
+
+function updateStats() {
+  const counts = { none:0, hanger:0, interest:0, no:0, dnr:0 };
+  Object.values(pins).forEach(p => { if (counts[p.status] !== undefined) counts[p.status]++; });
+  const total = Object.values(counts).reduce((a,b) => a+b, 0);
+  document.getElementById('cnt-all').textContent = total;
+  Object.keys(counts).forEach(k => { const el = document.getElementById('cnt-'+k); if(el) el.textContent = counts[k]; });
+  const row = document.getElementById('stats-row'); row.innerHTML = '';
+  [{k:'interest',label:'Interested'},{k:'hanger',label:'Hangers'},{k:'no',label:'No'},{k:'dnr',label:'DNR'}].forEach(({k,label}) => {
+    if (counts[k] > 0) {
+      const el = document.createElement('div'); el.className = 'stat-pill';
+      el.style.background = COLORS[k]+'22'; el.style.color = COLORS[k];
+      el.innerHTML = `<span class="dot" style="background:${COLORS[k]}"></span>${counts[k]} ${label}`;
+      row.appendChild(el);
+    }
+  });
+  if (total > 0) { const el = document.createElement('div'); el.className = 'stat-pill'; el.style.background = 'rgba(255,255,255,0.05)'; el.style.color = '#8b90b0'; el.textContent = total+' total'; row.appendChild(el); }
+}
+
+// ── Sheet ─────────────────────────────────────────────────
+function openSheet(id) {
+  currentPinId = id; const p = pins[id];
+  document.getElementById('sheet-addr').textContent = p.addr || 'Unnamed location';
+  const yearLabel = p.yearBuilt ? ` · Built ${p.yearBuilt}` : '';
+  document.getElementById('sheet-coords').textContent = p.lat.toFixed(5)+', '+p.lng.toFixed(5)+yearLabel;
+  document.getElementById('sheet-note').value = p.note || '';
+  document.getElementById('sheet-year').value = p.yearBuilt || '';
+  document.getElementById('zillow-btn').href = `https://www.zillow.com/homes/${encodeURIComponent((p.addr||'').trim())}_rb/`;
+  document.querySelectorAll('.status-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.status === p.status));
+  document.getElementById('sheet').classList.add('open');
+  document.getElementById('overlay').classList.add('visible');
+}
+function closeSheet() {
+  document.getElementById('sheet').classList.remove('open');
+  document.getElementById('overlay').classList.remove('visible');
+  currentPinId = null;
+}
+document.getElementById('overlay').addEventListener('click', closeSheet);
+document.getElementById('sheet-close').addEventListener('click', closeSheet);
+
+document.querySelectorAll('.status-btn').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    if (!currentPinId || !companyId) return;
+    const id = currentPinId;
+    pins[id] = { ...pins[id], status: btn.dataset.status, ts: Date.now() };
+    addOrUpdateMarker(id); updateStats();
+    document.querySelectorAll('.status-btn').forEach(b => b.classList.toggle('active', b.dataset.status === btn.dataset.status));
+    showToast('Saved: '+LABELS[btn.dataset.status]);
+    await savePin(id, pins[id]);
+    syncToSheets('upsert', pins[id], id);
+    if (clockedIn) document.getElementById('live-hanger-count').textContent = Math.max(0, hangerCount() - shiftHangersAtClockIn);
+  });
+});
+
+document.getElementById('sheet-note').addEventListener('input', () => {
+  if (!currentPinId) return;
+  pins[currentPinId].note = document.getElementById('sheet-note').value;
+  clearTimeout(noteDebounce);
+  noteDebounce = setTimeout(() => savePin(currentPinId, pins[currentPinId]), 800);
+});
+
+document.getElementById('sheet-year').addEventListener('input', () => {
+  if (!currentPinId) return;
+  pins[currentPinId].yearBuilt = document.getElementById('sheet-year').value;
+  const p = pins[currentPinId];
+  document.getElementById('sheet-coords').textContent = p.lat.toFixed(5)+', '+p.lng.toFixed(5)+(p.yearBuilt ? ` · Built ${p.yearBuilt}` : '');
+  clearTimeout(noteDebounce);
+  noteDebounce = setTimeout(() => savePin(currentPinId, pins[currentPinId]), 800);
+});
+
+document.getElementById('neighborhood-year-btn').addEventListener('click', async () => {
+  if (!currentPinId) return;
+  const year = document.getElementById('sheet-year').value;
+  if (!year) { showToast('Enter a year first'); return; }
+  const p = pins[currentPinId]; const radius = 400; let count = 0;
+  const updates = [];
+  Object.keys(pins).forEach(id => {
+    const other = pins[id];
+    const dist = Math.sqrt(Math.pow((other.lat-p.lat)*111000,2)+Math.pow((other.lng-p.lng)*111000*Math.cos(p.lat*Math.PI/180),2));
+    if (dist <= radius) { pins[id].yearBuilt = year; count++; updates.push(savePin(id, pins[id])); }
+  });
+  neighborhoodYears = neighborhoodYears.filter(z => {
+    const d = Math.sqrt(Math.pow((z.lat-p.lat)*111000,2)+Math.pow((z.lng-p.lng)*111000*Math.cos(p.lat*Math.PI/180),2));
+    return d > 200;
+  });
+  neighborhoodYears.push({ lat:p.lat, lng:p.lng, year, radius });
+  await Promise.all([...updates, saveNeighborhoodYears()]);
+  showToast(`Applied ${year} to ${count} pins`);
+});
+
+document.getElementById('sheet-set-start').addEventListener('click', () => {
+  if (!currentPinId) return;
+  const p = pins[currentPinId];
+  routeStart = { lat:p.lat, lng:p.lng, addr:p.addr||'Selected pin' };
+  document.getElementById('route-start-text').textContent = '📍 Start: '+routeStart.addr;
+  document.getElementById('route-start-label').classList.add('ready');
+  closeSheet(); showToast('Route start set');
+});
+
+document.getElementById('sheet-delete').addEventListener('click', async () => {
+  if (!currentPinId) return;
+  const id = currentPinId;
+  if (markers[id]) map.removeLayer(markers[id]);
+  delete markers[id]; delete pins[id];
+  updateStats(); closeSheet(); showToast('Pin removed');
+  await deletePinFromDb(id);
+  syncToSheets('delete', null, id);
+});
+
+// ── Map tap ───────────────────────────────────────────────
+function getNeighborhoodYearForPoint(lat, lng) {
+  for (const zone of neighborhoodYears) {
+    if (zone.polygon && zone.polygon.length >= 3 && pointInPolygon(lat, lng, zone.polygon)) return zone.year;
+    if (zone.radius) {
+      const dist = Math.sqrt(Math.pow((lat-zone.lat)*111000,2)+Math.pow((lng-zone.lng)*111000*Math.cos(zone.lat*Math.PI/180),2));
+      if (dist <= zone.radius) return zone.year;
+    }
+  }
+  return '';
+}
+
+map.on('click', async (e) => {
+  const { lat, lng } = e.latlng;
+  if (drawingMode) {
+    drawnPoints.push([lat, lng]);
+    const dot = L.circleMarker([lat,lng], { radius:5, color:'#4f6ef7', fillColor:'#4f6ef7', fillOpacity:1, weight:2 });
+    dot.addTo(map); drawnMarkers.push(dot); updateDrawingLayers(); return;
+  }
+  if (!companyId) return;
+  const id = lat.toFixed(6)+','+lng.toFixed(6);
+  if (!pins[id]) {
+    const autoYear = getNeighborhoodYearForPoint(lat, lng);
+    const newPin = { lat, lng, addr:'Loading address…', status:'none', note:'', yearBuilt:autoYear, ts:Date.now() };
+    pins[id] = newPin;
+    addOrUpdateMarker(id); updateStats();
+    await savePin(id, newPin);
+    reverseGeocode(lat, lng, id);
+  }
+  openSheet(id);
+});
+
+async function reverseGeocode(lat, lng, id) {
+  let addr = '';
+  try {
+    const r = await fetch(`${GEO_PROXY}?lat=${lat}&lng=${lng}`);
+    const d = await r.json();
+    if (d.status === 'OK' && d.results && d.results.length > 0) {
+      const best = d.results.find(r => r.geometry.location_type==='ROOFTOP'||r.geometry.location_type==='RANGE_INTERPOLATED') || d.results[0];
+      addr = best.formatted_address || '';
+    }
+  } catch(e) {}
+  if (!addr) {
+    try {
+      const r = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&addressdetails=1&zoom=18`);
+      const d = await r.json();
+      if (d.address) {
+        const a = d.address; const num = a.house_number||'', road = a.road||'';
+        const city = a.city||a.town||a.village||'Knoxville'; const state = a.state_code||'TN', zip = a.postcode||'';
+        if (num && road) addr = `${num} ${road}, ${city}, ${state} ${zip}`.trim();
+      }
+    } catch(e) {}
+  }
+  if (!addr) addr = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+  if (pins[id]) {
+    pins[id].addr = addr;
+    await savePin(id, { addr });
+    if (currentPinId === id) {
+      document.getElementById('sheet-addr').textContent = addr;
+      document.getElementById('zillow-btn').href = `https://www.zillow.com/homes/${encodeURIComponent(addr)}_rb/`;
+    }
+  }
+}
+
+// ── Sheets sync ───────────────────────────────────────────
+async function syncToSheets(action, pin, id) {
+  if (action === 'upsert' && pin.status !== 'hanger') return;
+  try {
+    await fetch(SHEETS_URL, { method:'POST', mode:'no-cors', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(action === 'upsert'
+        ? { action:'upsert', pin:{...pin, id:id||pin.id, yearBuilt:pin.yearBuilt||''} }
+        : { action:'delete', id })
+    });
+  } catch(e) {}
+}
+
+// ── Legend ────────────────────────────────────────────────
+document.querySelectorAll('#legend .legend-row').forEach(row => {
+  row.addEventListener('click', () => {
+    const f = row.dataset.filter;
+    if (f === 'all') { hiddenStatuses.clear(); document.querySelectorAll('#legend .legend-row').forEach(r => r.classList.add('active')); }
+    else {
+      hiddenStatuses.has(f) ? hiddenStatuses.delete(f) : hiddenStatuses.add(f);
+      row.classList.toggle('active', !hiddenStatuses.has(f));
+      document.querySelector('#legend .legend-row[data-filter="all"]').classList.toggle('active',
+        document.querySelectorAll('#legend .legend-row[data-filter]:not([data-filter="all"]).active').length === 5);
+    }
+    renderAllMarkers();
+  });
+});
+
+// ── Search ────────────────────────────────────────────────
+const searchInput = document.getElementById('search-input');
+const searchResults = document.getElementById('search-results');
+let searchTimeout;
+searchInput.addEventListener('input', () => {
+  clearTimeout(searchTimeout); const q = searchInput.value.trim();
+  if (q.length < 3) { searchResults.style.display = 'none'; return; }
+  searchTimeout = setTimeout(() => doSearch(q), 400);
+});
+async function doSearch(q) {
+  try {
+    const r = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q+' Knoxville Tennessee')}&format=json&limit=5`);
+    const data = await r.json(); searchResults.innerHTML = '';
+    if (!data.length) { searchResults.style.display = 'none'; return; }
+    const rect = document.getElementById('search-bar').getBoundingClientRect();
+    searchResults.style.top = (rect.bottom+6)+'px';
+    data.forEach(item => {
+      const d = document.createElement('div'); d.className = 'search-result';
+      const parts = item.display_name.split(',');
+      d.innerHTML = `<strong>${parts[0]}</strong>, ${parts.slice(1,3).join(',')}`;
+      d.addEventListener('click', async () => {
+        const lat = parseFloat(item.lat), lng = parseFloat(item.lon);
+        map.setView([lat,lng], 17); searchResults.style.display = 'none'; searchInput.value = ''; searchInput.blur();
+        const id = lat.toFixed(6)+','+lng.toFixed(6);
+        if (!pins[id]) {
+          const autoYear = getNeighborhoodYearForPoint(lat, lng);
+          const newPin = { lat, lng, addr:item.display_name.split(',').slice(0,3).join(','), status:'none', note:'', yearBuilt:autoYear, ts:Date.now() };
+          pins[id] = newPin; addOrUpdateMarker(id); updateStats();
+          await savePin(id, newPin);
+        }
+        setTimeout(() => openSheet(id), 300);
+      });
+      searchResults.appendChild(d);
+    });
+    searchResults.style.display = 'block';
+  } catch(e) { searchResults.style.display = 'none'; }
+}
+document.addEventListener('click', e => { if (!e.target.closest('#search-bar') && !e.target.closest('#search-results')) searchResults.style.display = 'none'; });
+
+// ── Roofing mode ──────────────────────────────────────────
+function renderZonePolygons() {
+  zonePolygonLayers.forEach(l => map.removeLayer(l)); zonePolygonLayers = [];
+  if (!roofingMode) return;
+  neighborhoodYears.forEach(zone => {
+    if (!zone.polygon || zone.polygon.length < 3) return;
+    const isTarget = parseInt(zone.year) <= ROOF_CUTOFF;
+    const color = isTarget ? '#10b981' : '#6b7280';
+    const layer = L.polygon(zone.polygon, { color, weight:2.5, fillColor:color, fillOpacity:isTarget?0.18:0.06, dashArray:isTarget?null:'6,4' }).addTo(map);
+    const label = L.divIcon({ html:`<div style="background:${color};color:#fff;padding:3px 8px;border-radius:10px;font-size:11px;font-weight:700;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.3)">${zone.name||'Zone'} · ${zone.year}</div>`, className:'', iconAnchor:[0,0] });
+    zonePolygonLayers.push(layer); zonePolygonLayers.push(L.marker(layer.getBounds().getCenter(), { icon:label, interactive:false }).addTo(map));
+  });
+}
+function toggleRoofingMode() {
+  roofingMode = !roofingMode;
+  document.getElementById('roof-mode-btn').classList.toggle('active', roofingMode);
+  document.getElementById('roof-mode-banner').classList.toggle('show', roofingMode);
+  renderZonePolygons();
+}
+document.getElementById('roof-mode-btn').addEventListener('click', toggleRoofingMode);
+
+// ── Zone drawing ──────────────────────────────────────────
+function pointInPolygon(lat, lng, polygon) {
+  let inside = false;
+  for (let i=0, j=polygon.length-1; i<polygon.length; j=i++) {
+    const xi=polygon[i][0],yi=polygon[i][1],xj=polygon[j][0],yj=polygon[j][1];
+    if (((yi>lng)!==(yj>lng))&&(lat<(xj-xi)*(lng-yi)/(yj-yi)+xi)) inside=!inside;
+  }
+  return inside;
+}
+function updateDrawingLayers() {
+  if (drawnPolyline) map.removeLayer(drawnPolyline);
+  if (drawnPolygon) map.removeLayer(drawnPolygon);
+  if (drawnPoints.length>=2) drawnPolyline = L.polyline(drawnPoints, {color:'#4f6ef7',weight:2,dashArray:'6,4'}).addTo(map);
+  if (drawnPoints.length>=3) drawnPolygon = L.polygon(drawnPoints, {color:'#4f6ef7',weight:2,fillColor:'#4f6ef7',fillOpacity:0.1}).addTo(map);
+  document.getElementById('zone-point-count').textContent =
+    drawnPoints.length===0?'0 points — tap the map to start':
+    drawnPoints.length<3?`${drawnPoints.length} point(s) — need at least 3`:
+    `${drawnPoints.length} points — ready to save`;
+}
+function startDrawing(forRoute) {
+  drawingMode=true; drawingForRoute=!!forRoute; drawnPoints=[]; drawnMarkers=[];
+  if(drawnPolyline){map.removeLayer(drawnPolyline);drawnPolyline=null;}
+  if(drawnPolygon){map.removeLayer(drawnPolygon);drawnPolygon=null;}
+  document.getElementById('zone-toolbar').classList.add('active');
+  if (drawingForRoute) {
+    document.getElementById('zone-toolbar-title').textContent='🗺 Draw ROUTE zone — tap edges';
+    document.getElementById('zone-year-input').style.display='none';
+    document.getElementById('zone-name-input').style.display='none';
+    document.getElementById('zone-finish-btn').textContent='✓ Set Route Zone';
+  } else {
+    document.getElementById('zone-toolbar-title').textContent='📍 Tap map edges to draw zone';
+    document.getElementById('zone-year-input').style.display='';
+    document.getElementById('zone-name-input').style.display='';
+    document.getElementById('zone-finish-btn').textContent='✓ Save Zone';
+  }
+  document.getElementById('zone-point-count').textContent='0 points — tap the map to start';
+  map.getContainer().style.cursor='crosshair';
+}
+function stopDrawing() {
+  drawingMode=false; drawnPoints=[];
+  drawnMarkers.forEach(m=>map.removeLayer(m)); drawnMarkers=[];
+  if(drawnPolyline){map.removeLayer(drawnPolyline);drawnPolyline=null;}
+  if(drawnPolygon){map.removeLayer(drawnPolygon);drawnPolygon=null;}
+  document.getElementById('zone-toolbar').classList.remove('active');
+  document.getElementById('zone-year-input').value='';
+  document.getElementById('zone-name-input').value='';
+  map.getContainer().style.cursor='';
+}
+document.getElementById('draw-zone-btn').addEventListener('click',()=>{if(drawingMode)stopDrawing();else startDrawing(false);});
+document.getElementById('zone-cancel-btn').addEventListener('click',stopDrawing);
+document.getElementById('zone-undo-btn').addEventListener('click',()=>{if(!drawnPoints.length)return;drawnPoints.pop();const m=drawnMarkers.pop();if(m)map.removeLayer(m);updateDrawingLayers();});
+document.getElementById('zone-finish-btn').addEventListener('click', async () => {
+  if(drawnPoints.length<3){showToast('Need at least 3 points');return;}
+  if(drawingForRoute){
+    if(routeZoneLayer)map.removeLayer(routeZoneLayer);
+    routeZonePolygon=drawnPoints.map(p=>[p[0],p[1]]);
+    routeZoneLayer=L.polygon(routeZonePolygon,{color:'#f59e0b',weight:2,fillColor:'#f59e0b',fillOpacity:0.1,dashArray:'6,4'}).addTo(map);
+    const lats=routeZonePolygon.map(p=>p[0]),lngs=routeZonePolygon.map(p=>p[1]);
+    if(!routeStart)routeStart={lat:(Math.min(...lats)+Math.max(...lats))/2,lng:(Math.min(...lngs)+Math.max(...lngs))/2,addr:'Zone center'};
+    document.getElementById('route-zone-status').classList.add('ready');
+    document.getElementById('route-zone-text').textContent=`Zone drawn · ${routeZonePolygon.length} points`;
+    stopDrawing();document.getElementById('route-panel').classList.add('open');showToast('Route zone set');return;
+  }
+  const year=document.getElementById('zone-year-input').value;
+  const name=document.getElementById('zone-name-input').value||'Zone '+(neighborhoodYears.length+1);
+  if(!year){showToast('Enter a year built first');return;}
+  const updates=[];
+  Object.keys(pins).forEach(id=>{
+    const p=pins[id];if(pointInPolygon(p.lat,p.lng,drawnPoints)){pins[id].yearBuilt=year;updates.push(savePin(id,pins[id]));}
+  });
+  neighborhoodYears.push({name,year,polygon:drawnPoints.map(p=>[p[0],p[1]])});
+  await Promise.all([...updates,saveNeighborhoodYears()]);
+  stopDrawing();renderAllMarkers();renderZonePolygons();
+  showToast(`"${name}" zone saved`);
+});
+
+// ── Route ─────────────────────────────────────────────────
+function distBetween(a,b){return Math.sqrt(Math.pow((b.lat-a.lat)*111000,2)+Math.pow((b.lng-a.lng)*111000*Math.cos(a.lat*Math.PI/180),2));}
+function optimizeRoute(start,stops){
+  const remaining=[...stops],route=[];let current=start;
+  while(remaining.length>0){
+    let nearestIdx=0,nearestDist=Infinity;
+    remaining.forEach((s,i)=>{const d=distBetween(current,s);if(d<nearestDist){nearestDist=d;nearestIdx=i;}});
+    route.push(remaining[nearestIdx]);current=remaining[nearestIdx];remaining.splice(nearestIdx,1);
+  }
+  return route;
+}
+function drawRoute(route){
+  routeMarkers.forEach(m=>map.removeLayer(m));routePolylines.forEach(l=>map.removeLayer(l));
+  routeMarkers=[];routePolylines=[];
+  routeMarkers.push(L.marker([routeStart.lat,routeStart.lng],{icon:L.divIcon({html:`<div style="background:#fff;border:3px solid #4f6ef7;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#4f6ef7;box-shadow:0 2px 8px rgba(0,0,0,0.3)">S</div>`,iconSize:[24,24],iconAnchor:[12,12],className:''})}).addTo(map));
+  let prev=routeStart;
+  route.forEach((stop,i)=>{
+    routeMarkers.push(L.marker([stop.lat,stop.lng],{icon:L.divIcon({html:`<div style="background:#f59e0b;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;box-shadow:0 2px 8px rgba(0,0,0,0.3)">${i+1}</div>`,iconSize:[26,26],iconAnchor:[13,13],className:''})}).addTo(map));
+    routePolylines.push(L.polyline([[prev.lat,prev.lng],[stop.lat,stop.lng]],{color:'#f59e0b',weight:2,opacity:0.7,dashArray:'6,4'}).addTo(map));
+    prev=stop;
+  });
+}
+const routePanel=document.getElementById('route-panel');
+document.getElementById('route-btn').addEventListener('click',()=>{routePanel.classList.add('open');document.getElementById('route-btn').classList.add('active');});
+document.getElementById('route-back').addEventListener('click',()=>{routePanel.classList.remove('open');document.getElementById('route-btn').classList.remove('active');});
+document.getElementById('route-draw-zone-btn').addEventListener('click',()=>{routePanel.classList.remove('open');startDrawing(true);});
+
+async function fetchHousesFromOSM(lat,lng,polygon){
+  const bbox=polygon&&polygon.length>=3?(()=>{const lats=polygon.map(p=>p[0]),lngs=polygon.map(p=>p[1]);return `(${Math.min(...lats)},${Math.min(...lngs)},${Math.max(...lats)},${Math.max(...lngs)})`;})():`(around:800,${lat},${lng})`;
+  const query=`[out:json][timeout:25];(node["addr:housenumber"]${bbox};way["addr:housenumber"]${bbox};);out center;`;
+  const endpoints=['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter','https://maps.mail.ru/osm/tools/overpass/api/interpreter','https://overpass.openstreetmap.ru/api/interpreter'];
+  for(const ep of endpoints){
+    for(const method of ['GET','POST']){
+      try{
+        const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),25000);
+        const url=method==='GET'?`${ep}?data=${encodeURIComponent(query)}`:ep;
+        const opts=method==='GET'?{signal:controller.signal}:{method:'POST',body:'data='+encodeURIComponent(query),signal:controller.signal};
+        const r=await fetch(url,opts);clearTimeout(timer);
+        if(!r.ok)continue;const d=await r.json();if(!d.elements)continue;
+        return d.elements.map(el=>{
+          const elLat=el.lat||el.center?.lat,elLng=el.lon||el.center?.lon;
+          if(!elLat||!elLng)return null;
+          if(polygon&&polygon.length>=3&&!pointInPolygon(elLat,elLng,polygon))return null;
+          const num=el.tags?.['addr:housenumber']||'',street=el.tags?.['addr:street']||'';
+          return{lat:elLat,lng:elLng,addr:num&&street?`${num} ${street}`:`${elLat.toFixed(4)},${elLng.toFixed(4)}`};
+        }).filter(Boolean);
+      }catch(e){continue;}
+    }
+  }
+  throw new Error('All Overpass endpoints failed');
+}
+
+document.getElementById('route-go-btn').addEventListener('click',async()=>{
+  if(!routeStart&&routeZonePolygon&&routeZonePolygon.length>=3){const lats=routeZonePolygon.map(p=>p[0]),lngs=routeZonePolygon.map(p=>p[1]);routeStart={lat:(Math.min(...lats)+Math.max(...lats))/2,lng:(Math.min(...lngs)+Math.max(...lngs))/2,addr:'Zone center'};}
+  if(!routeStart){showToast('Draw a zone or tap a pin to set start');return;}
+  const skipVisited=document.getElementById('route-unvisited').checked;
+  const skipDnr=document.getElementById('route-skip-dnr').checked;
+  document.getElementById('route-loading').style.display='block';
+  document.getElementById('route-go-btn').style.display='none';
+  document.getElementById('route-result').innerHTML='';
+  try{
+    const houses=await fetchHousesFromOSM(routeStart.lat,routeStart.lng,routeZonePolygon);
+    const stops=houses.filter(h=>{const id=h.lat.toFixed(6)+','+h.lng.toFixed(6);const ex=pins[id];if(ex){if(skipVisited&&ex.status!=='none')return false;if(skipDnr&&ex.status==='dnr')return false;}return true;});
+    if(stops.length===0){showToast('No houses found in zone');return;}
+    const route=optimizeRoute(routeStart,stops);drawRoute(route);
+    if(routeMarkers.length>0){const group=L.featureGroup(routeMarkers);map.fitBounds(group.getBounds().pad(0.15));}
+    const totalDist=route.reduce((acc,stop,i)=>acc+(i===0?distBetween(routeStart,stop):distBetween(route[i-1],stop)),0);
+    const resultEl=document.getElementById('route-result');
+    resultEl.innerHTML=`<button id="route-view-map-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/></svg>View Route on Map</button><div class="route-stop"><div class="route-num" style="background:#fff;color:#4f6ef7;border:2px solid #4f6ef7">S</div><div class="route-addr">${routeStart.addr} <span style="color:var(--text2);font-size:11px">(Start)</span></div></div>${route.map((stop,i)=>{const dist=i===0?distBetween(routeStart,stop):distBetween(route[i-1],stop);return`<div class="route-stop"><div class="route-num">${i+1}</div><div class="route-addr">${stop.addr}</div><div class="route-dist">${dist<100?Math.round(dist)+'m':(dist/1000).toFixed(2)+'km'}</div></div>`;}).join('')}<div id="route-total">${route.length} stops · ${totalDist<1000?Math.round(totalDist)+'m':(totalDist/1000).toFixed(1)+'km'} total</div>`;
+    document.getElementById('route-view-map-btn').addEventListener('click',()=>{routePanel.classList.remove('open');document.getElementById('route-btn').classList.remove('active');if(routeMarkers.length>0){const group=L.featureGroup(routeMarkers);map.fitBounds(group.getBounds().pad(0.15));}});
+    setTimeout(()=>{const panel=document.getElementById('route-panel');const result=document.getElementById('route-result');if(panel&&result)panel.scrollTo({top:result.offsetTop-20,behavior:'smooth'});},100);
+    showToast(`Route: ${route.length} houses`);
+  }catch(e){showToast('Could not fetch houses — check connection');}
+  finally{document.getElementById('route-loading').style.display='none';document.getElementById('route-go-btn').style.display='flex';}
+});
+
+document.getElementById('route-clear-btn').addEventListener('click',()=>{
+  routeMarkers.forEach(m=>map.removeLayer(m));routePolylines.forEach(l=>map.removeLayer(l));
+  routeMarkers=[];routePolylines=[];routeStart=null;routeZonePolygon=null;
+  if(routeZoneLayer){map.removeLayer(routeZoneLayer);routeZoneLayer=null;}
+  document.getElementById('route-start-text').textContent='Tap a pin on the map → "Set as route start"';
+  document.getElementById('route-start-label').classList.remove('ready');
+  document.getElementById('route-zone-status').classList.remove('ready');
+  document.getElementById('route-zone-text').textContent='No zone drawn';
+  document.getElementById('route-result').innerHTML='';
+  showToast('Route cleared');
+});
+
+// ── Shifts / Clock ────────────────────────────────────────
+function hangerCount(){return Object.values(pins).filter(p=>p.status==='hanger').length;}
+function formatDuration(ms){const s=Math.floor(ms/1000),m=Math.floor(s/60),h=Math.floor(m/60);return `${String(h).padStart(2,'0')}:${String(m%60).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;}
+function formatTime(ts){return new Date(ts).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true});}
+function formatDate(ts){return new Date(ts).toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});}
+
+function startClockTimer(){
+  clockTimerInterval=setInterval(()=>{
+    const elapsed=Date.now()-clockInTime;
+    document.getElementById('clock-timer').textContent=formatDuration(elapsed);
+    document.getElementById('live-hanger-count').textContent=Math.max(0,hangerCount()-shiftHangersAtClockIn);
+  },1000);
+}
+
+function clockIn(){
+  clockedIn=true;clockInTime=Date.now();shiftHangersAtClockIn=hangerCount();
+  localStorage.setItem('knoxClockIn',JSON.stringify({time:clockInTime,hangersAtStart:shiftHangersAtClockIn}));
+  document.getElementById('clock-btn').textContent='Clock Out';document.getElementById('clock-btn').className='clocked-in';
+  document.getElementById('clock-status').textContent='Clocked In';document.getElementById('clock-timer').classList.add('running');
+  document.getElementById('clock-date').textContent=formatDate(clockInTime);
+  document.getElementById('clock-hangers-live').style.display='block';
+  document.getElementById('shifts-btn').classList.add('active');
+  startClockTimer();showToast('Clocked in!');
+}
+
+async function clockOut(){
+  if(!clockedIn||!clockInTime)return;
+  clearInterval(clockTimerInterval);
+  const clockOutTime=Date.now();const durationMs=clockOutTime-clockInTime;
+  const hangersThisShift=Math.max(0,hangerCount()-shiftHangersAtClockIn);
+  const hoursWorked=durationMs/3600000;
+  const hangersPerHour=hoursWorked>0?parseFloat((hangersThisShift/hoursWorked).toFixed(1)):0;
+  const shift={clockIn:clockInTime,clockOut:clockOutTime,durationMs,hangers:hangersThisShift,hangersPerHour};
+  shifts.unshift(shift);
+  localStorage.removeItem('knoxClockIn');
+  clockedIn=false;clockInTime=null;shiftHangersAtClockIn=0;
+  document.getElementById('clock-btn').textContent='Clock In';document.getElementById('clock-btn').className='clocked-out';
+  document.getElementById('clock-status').textContent='Clocked Out';document.getElementById('clock-timer').textContent='00:00:00';
+  document.getElementById('clock-timer').classList.remove('running');document.getElementById('clock-date').textContent='';
+  document.getElementById('clock-hangers-live').style.display='none';document.getElementById('shifts-btn').classList.remove('active');
+  renderShifts();
+  showToast(`Shift: ${hangersThisShift} hangers · ${hangersPerHour}/hr`);
+  await saveShift(shift);
+  syncShiftToSheets(shift);
+}
+
+async function syncShiftToSheets(shift){
+  try{
+    await fetch(SHEETS_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'shift',shift:{date:formatDate(shift.clockIn),clockIn:formatTime(shift.clockIn),clockOut:formatTime(shift.clockOut),duration:formatDuration(shift.durationMs),hangers:shift.hangers,hangersPerHour:shift.hangersPerHour}})});
+  }catch(e){}
+}
+
+document.getElementById('clock-btn').addEventListener('click',()=>{if(clockedIn)clockOut();else clockIn();});
+
+function renderShifts(){
+  const container=document.getElementById('shifts-history');
+  if(!shifts.length){container.innerHTML='<div style="text-align:center;padding:24px;font-size:13px;color:var(--text2)">No shifts yet</div>';return;}
+  container.innerHTML=shifts.map(s=>`<div class="shift-card">
+    <div class="shift-card-header"><div class="shift-date">${formatDate(s.clockIn)}</div><div class="shift-duration">${formatDuration(s.durationMs)}</div></div>
+    <div class="shift-times">${formatTime(s.clockIn)} → ${formatTime(s.clockOut)}</div>
+    <div class="shift-stats">
+      <div class="shift-stat highlight"><div class="ss-val">${s.hangers}</div><div class="ss-label">Hangers</div></div>
+      <div class="shift-stat"><div class="ss-val">${s.hangersPerHour}</div><div class="ss-label">Per Hour</div></div>
+      <div class="shift-stat"><div class="ss-val">${(s.durationMs/3600000).toFixed(2)}h</div><div class="ss-label">Hours</div></div>
+    </div>
+  </div>`).join('');
+}
+
+document.getElementById('shifts-btn').addEventListener('click',()=>{renderShifts();document.getElementById('shifts-panel').classList.add('open');});
+document.getElementById('shifts-back').addEventListener('click',()=>{document.getElementById('shifts-panel').classList.remove('open');});
+document.getElementById('shifts-export-btn').addEventListener('click',()=>{
+  if(!shifts.length){showToast('No shifts to export');return;}
+  const esc=v=>`"${String(v).replace(/"/g,'""')}"`;
+  const lines=['Date,Clock In,Clock Out,Duration,Hangers,Hangers Per Hour'];
+  shifts.forEach(s=>lines.push([esc(formatDate(s.clockIn)),esc(formatTime(s.clockIn)),esc(formatTime(s.clockOut)),esc(formatDuration(s.durationMs)),esc(s.hangers),esc(s.hangersPerHour)].join(',')));
+  const blob=new Blob([lines.join('\n')],{type:'text/csv'});const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download=`shifts_${new Date().toISOString().slice(0,10)}.csv`;a.click();
+  URL.revokeObjectURL(url);showToast('Shifts CSV downloaded');
+});
+
+// ── Export ────────────────────────────────────────────────
+const exportPanel=document.getElementById('export-panel');
+let exportIncluded=new Set(['none','hanger','interest','no','dnr']);
+document.getElementById('export-btn').addEventListener('click',()=>{buildExportPanel();exportPanel.classList.add('open');});
+document.getElementById('export-back').addEventListener('click',()=>exportPanel.classList.remove('open'));
+function buildExportPanel(){
+  const counts={none:0,hanger:0,interest:0,no:0,dnr:0};
+  Object.values(pins).forEach(p=>{if(counts[p.status]!==undefined)counts[p.status]++;});
+  const total=Object.values(counts).reduce((a,b)=>a+b,0);
+  document.getElementById('export-summary').innerHTML=`<div class="export-stat"><div class="es-label">Total pins</div><div class="es-val">${total}</div></div><div class="export-stat"><div class="es-label" style="color:var(--c-interest)">Interested</div><div class="es-val" style="color:var(--c-interest)">${counts.interest}</div></div><div class="export-stat"><div class="es-label" style="color:var(--c-hanger)">Door hangers</div><div class="es-val" style="color:var(--c-hanger)">${counts.hanger}</div></div><div class="export-stat"><div class="es-label" style="color:var(--c-dnr)">Do not return</div><div class="es-val" style="color:var(--c-dnr)">${counts.dnr}</div></div>`;
+  const tw=document.getElementById('export-status-toggles');tw.innerHTML='';
+  Object.entries(LABELS).forEach(([k,label])=>{
+    const btn=document.createElement('button');btn.className='etoggle'+(exportIncluded.has(k)?' on':'');
+    btn.innerHTML=`<span class="dot" style="background:${COLORS[k]}"></span>${label}`;
+    btn.addEventListener('click',()=>{exportIncluded.has(k)?exportIncluded.delete(k):exportIncluded.add(k);btn.classList.toggle('on',exportIncluded.has(k));buildPreview();});
+    tw.appendChild(btn);
+  });buildPreview();
+}
+function buildPreview(){
+  const rows=Object.values(pins).filter(p=>exportIncluded.has(p.status)).sort((a,b)=>b.ts-a.ts);
+  document.getElementById('export-count').textContent=`(${rows.length} rows)`;
+  const wrap=document.getElementById('export-preview');
+  if(!rows.length){wrap.innerHTML='<div class="ep-empty">No pins match selected filters</div>';return;}
+  wrap.innerHTML=rows.slice(0,50).map(p=>{const date=new Date(p.ts).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});return`<div class="ep-row"><div><div class="ep-addr">${p.addr||'Unknown'}</div><div class="ep-status" style="color:${COLORS[p.status]}">${LABELS[p.status]}</div></div><div class="ep-date">${date}</div></div>`;}).join('')+(rows.length>50?`<div class="ep-empty">+ ${rows.length-50} more in CSV</div>`:'');
+}
+document.getElementById('export-csv-btn').addEventListener('click',()=>{
+  const rows=Object.values(pins).filter(p=>exportIncluded.has(p.status)).sort((a,b)=>b.ts-a.ts);
+  if(!rows.length){showToast('No data to export');return;}
+  const esc=v=>`"${String(v).replace(/"/g,'""')}"`;
+  const lines=['Address,Status,Date Added,Note,Year Built,Latitude,Longitude'];
+  rows.forEach(p=>{const date=new Date(p.ts).toLocaleDateString('en-US',{month:'2-digit',day:'2-digit',year:'numeric'});lines.push([esc(p.addr||''),esc(LABELS[p.status]||p.status),esc(date),esc(p.note||''),esc(p.yearBuilt||''),esc(p.lat.toFixed(6)),esc(p.lng.toFixed(6))].join(','));});
+  const blob=new Blob([lines.join('\n')],{type:'text/csv'});const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download=`knoxcanvas_${new Date().toISOString().slice(0,10)}.csv`;a.click();
+  URL.revokeObjectURL(url);showToast('CSV downloaded');
+});
+
+// ── Toast ─────────────────────────────────────────────────
+function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2000);}
+
+</script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
@@ -17,24 +960,46 @@
 }
 html,body{height:100%;width:100%;overflow:hidden;background:var(--bg);font-family:'SF Pro Display',-apple-system,BlinkMacSystemFont,sans-serif;color:var(--text)}
 
-/* Login */
-#login-screen{position:fixed;inset:0;z-index:9000;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px}
-#login-screen.hidden{display:none}
-#login-logo{font-size:28px;font-weight:800;letter-spacing:-0.5px;margin-bottom:8px}
-#login-logo span{color:var(--accent)}
-#login-sub{font-size:13px;color:var(--text2);margin-bottom:40px}
-#login-box{width:100%;max-width:340px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:24px}
-#login-box label{font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:6px}
-#login-pass{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:16px;padding:12px 14px;outline:none;font-family:inherit;margin-bottom:16px}
-#login-pass:focus{border-color:var(--accent)}
-#login-btn{width:100%;background:var(--accent);color:#fff;border:none;border-radius:12px;padding:14px;font-size:15px;font-weight:600;cursor:pointer}
-#login-err{font-size:13px;color:var(--c-no);text-align:center;margin-top:12px;min-height:18px}
+/* Auth */
+#auth-screen{position:fixed;inset:0;z-index:9000;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px;overflow-y:auto}
+#auth-screen.hidden{display:none}
+#auth-logo{font-size:28px;font-weight:800;letter-spacing:-0.5px;margin-bottom:4px}
+#auth-logo span{color:var(--accent)}
+#auth-tagline{font-size:13px;color:var(--text2);margin-bottom:32px}
+#auth-box{width:100%;max-width:360px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:24px;display:flex;flex-direction:column;gap:12px}
+#auth-box h2{font-size:16px;font-weight:700}
+.auth-input{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:15px;padding:12px 14px;outline:none;font-family:inherit}
+.auth-input:focus{border-color:var(--accent)}
+.auth-btn{width:100%;border:none;border-radius:12px;padding:13px;font-size:15px;font-weight:600;cursor:pointer;-webkit-appearance:none}
+.auth-btn.primary{background:var(--accent);color:#fff}
+.auth-btn.google{background:var(--surface2);color:var(--text);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;gap:8px}
+.auth-btn:active{opacity:0.85}
+.auth-divider{text-align:center;font-size:12px;color:var(--text2)}
+.auth-switch{text-align:center;font-size:13px;color:var(--text2)}
+.auth-switch span{color:var(--accent);cursor:pointer;text-decoration:underline}
+#auth-err{font-size:13px;color:var(--c-no);text-align:center;min-height:16px}
+#register-form{display:none}
+
+/* Setup */
+#setup-screen{position:fixed;inset:0;z-index:9000;background:var(--bg);display:none;flex-direction:column;align-items:center;justify-content:center;padding:32px;overflow-y:auto}
+#setup-box{width:100%;max-width:360px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:24px;display:flex;flex-direction:column;gap:12px}
+#setup-box h2{font-size:16px;font-weight:700}
+#setup-tabs{display:flex;gap:8px}
+.setup-tab{flex:1;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text2);font-size:13px;font-weight:600;cursor:pointer;text-align:center}
+.setup-tab.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+#setup-create-section,#setup-join-section{display:flex;flex-direction:column;gap:10px}
+#setup-join-section{display:none}
+#setup-err{font-size:13px;color:var(--c-no);text-align:center;min-height:16px}
+
+/* App root */
+#app-root{display:none;height:100%}
 
 /* Header */
 #header{position:fixed;top:0;left:0;right:0;z-index:1000;background:var(--bg);padding:max(env(safe-area-inset-top),16px) 16px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
 #header-inner{display:flex;flex-direction:column;gap:4px;flex:1;min-width:0}
 #header h1{font-size:18px;font-weight:700;letter-spacing:-0.3px}
 #header h1 span{color:var(--accent)}
+#user-name-display{font-size:11px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #stats-row{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .stat-pill{font-size:11px;font-weight:600;padding:3px 8px;border-radius:20px;display:flex;align-items:center;gap:4px}
 .stat-pill .dot{width:7px;height:7px;border-radius:50%}
@@ -42,14 +1007,6 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--bg);font-famil
 .hbtn{background:transparent;border:1px solid var(--border);border-radius:10px;padding:8px;color:var(--text2);cursor:pointer;display:flex;align-items:center}
 .hbtn:active{background:var(--surface2)}
 .hbtn.active{background:var(--accent);border-color:var(--accent);color:#fff}
-
-/* Sync */
-#sync-wrap{display:flex;align-items:center;gap:5px;flex-shrink:0}
-#sync-dot{width:7px;height:7px;border-radius:50%;background:var(--text2);transition:background 0.3s}
-#sync-dot.syncing{background:var(--c-hanger)}
-#sync-dot.ok{background:var(--c-interest)}
-#sync-dot.err{background:var(--c-no)}
-#sync-text{font-size:11px;color:var(--text2);white-space:nowrap}
 
 /* Map */
 #map{position:fixed;top:0;left:0;right:0;bottom:0;z-index:1}
@@ -75,7 +1032,6 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--bg);font-famil
 #sheet-addr{font-size:15px;font-weight:600;padding:16px 20px 4px;line-height:1.3}
 #sheet-coords{font-size:12px;color:var(--text2);padding:0 20px 8px}
 #zillow-btn{display:flex;align-items:center;gap:8px;margin:0 20px 12px;background:transparent;color:#006aff;border:1px solid rgba(0,106,255,0.3);border-radius:10px;padding:10px 14px;font-size:13px;font-weight:600;text-decoration:none;width:calc(100% - 40px)}
-#zillow-btn:active{background:rgba(0,106,255,0.08)}
 .status-btn{display:flex;align-items:center;gap:14px;padding:14px 20px;border:none;background:transparent;color:var(--text);width:100%;text-align:left;font-size:15px;cursor:pointer;border-top:1px solid var(--border);-webkit-appearance:none}
 .status-btn:active{background:var(--surface2)}
 .status-btn .swatch{width:14px;height:14px;border-radius:50%;flex-shrink:0}
@@ -91,23 +1047,20 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--bg);font-famil
 #neighborhood-year-row{padding:6px 20px 4px}
 #neighborhood-year-btn{display:flex;align-items:center;gap:8px;width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--text2);font-size:13px;padding:10px 12px;cursor:pointer;-webkit-appearance:none}
 #sheet-set-start{display:block;margin:8px 20px 0;background:transparent;color:var(--accent);border:1px solid rgba(79,110,247,0.3);border-radius:12px;padding:12px;font-size:14px;font-weight:500;cursor:pointer;width:calc(100% - 40px);-webkit-appearance:none}
-#sheet-set-start:active{background:rgba(79,110,247,0.1)}
 #sheet-delete{display:block;margin:8px 20px 0;background:transparent;color:#ef4444;border:1px solid rgba(239,68,68,0.3);border-radius:12px;padding:12px;font-size:14px;font-weight:500;cursor:pointer;width:calc(100% - 40px);-webkit-appearance:none}
-#sheet-delete:active{background:rgba(239,68,68,0.1)}
 #sheet-close{display:block;margin:8px 20px 0;background:var(--accent);color:#fff;border:none;border-radius:12px;padding:13px;font-size:15px;font-weight:600;cursor:pointer;width:calc(100% - 40px);-webkit-appearance:none}
-#sheet-close:active{opacity:0.85}
 
 /* Legend */
 #legend{position:fixed;bottom:max(env(safe-area-inset-bottom),20px);right:12px;z-index:900;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:10px 12px;display:flex;flex-direction:column;gap:6px;min-width:160px}
 .legend-row{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2);cursor:pointer;padding:2px 0}
 .legend-row .dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
 .legend-row.active{color:var(--text)}
-.label-count{margin-left:auto;font-size:11px;font-variant-numeric:tabular-nums}
+.label-count{margin-left:auto;font-size:11px}
 .leaflet-control-zoom{display:none}
 .leaflet-bottom.leaflet-right{bottom:160px!important}
 
-/* Roofing mode */
-#roof-mode-banner{position:fixed;bottom:max(env(safe-area-inset-bottom),20px);left:12px;z-index:900;background:#10b981;color:#fff;border-radius:12px;padding:8px 14px;font-size:12px;font-weight:600;display:none;align-items:center;gap:6px;box-shadow:0 4px 16px rgba(16,185,129,0.4)}
+/* Roofing */
+#roof-mode-banner{position:fixed;bottom:max(env(safe-area-inset-bottom),20px);left:12px;z-index:900;background:#10b981;color:#fff;border-radius:12px;padding:8px 14px;font-size:12px;font-weight:600;display:none;align-items:center;gap:6px}
 #roof-mode-banner.show{display:flex}
 
 /* Zone toolbar */
@@ -117,7 +1070,6 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--bg);font-famil
 #zone-toolbar-title{font-size:13px;font-weight:600;color:var(--accent);margin-bottom:10px}
 #zone-toolbar-fields{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
 #zone-year-input,#zone-name-input{background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:8px 10px;outline:none;font-family:inherit;width:100%}
-#zone-year-input::placeholder,#zone-name-input::placeholder{color:var(--text2)}
 #zone-toolbar-btns{display:flex;gap:8px}
 #zone-undo-btn,#zone-finish-btn,#zone-cancel-btn{flex:1;padding:9px 6px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:none;-webkit-appearance:none}
 #zone-undo-btn{background:var(--surface2);color:var(--text2);border:1px solid var(--border)}
@@ -125,27 +1077,25 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--bg);font-famil
 #zone-cancel-btn{background:transparent;color:var(--c-no);border:1px solid rgba(239,68,68,0.3)}
 #zone-point-count{font-size:11px;color:var(--text2);margin-top:8px;text-align:center}
 
-/* Route panel */
-#route-panel{position:fixed;inset:0;z-index:3000;background:var(--bg);transform:translateX(100%);transition:transform 0.32s cubic-bezier(0.32,0.72,0,1);overflow-y:auto;padding-bottom:max(env(safe-area-inset-bottom),24px)}
-#route-panel.open{transform:translateX(0)}
-#route-header{display:flex;align-items:center;gap:12px;padding:max(env(safe-area-inset-top),16px) 16px 16px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg);z-index:10}
-#route-back{background:transparent;border:1px solid var(--border);border-radius:10px;padding:7px;color:var(--text2);cursor:pointer;display:flex;align-items:center}
-#route-header h2{font-size:17px;font-weight:600;flex:1}
-#route-clear-btn{background:transparent;border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:12px;color:var(--text2);cursor:pointer}
+/* Panels */
+.panel{position:fixed;inset:0;z-index:3000;background:var(--bg);transform:translateX(100%);transition:transform 0.32s cubic-bezier(0.32,0.72,0,1);overflow-y:auto;padding-bottom:max(env(safe-area-inset-bottom),24px)}
+.panel.open{transform:translateX(0)}
+.panel-header{display:flex;align-items:center;gap:12px;padding:max(env(safe-area-inset-top),16px) 16px 16px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg);z-index:10}
+.panel-back{background:transparent;border:1px solid var(--border);border-radius:10px;padding:7px;color:var(--text2);cursor:pointer;display:flex;align-items:center}
+.panel-header h2{font-size:17px;font-weight:600;flex:1}
+.panel-action-btn{background:transparent;border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:12px;color:var(--text2);cursor:pointer}
+
+/* Route */
 #route-body{padding:16px}
-#route-start-label{font-size:12px;color:var(--text2);background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:12px;display:flex;align-items:center;gap:6px}
-#route-start-label.ready{color:var(--c-interest);border-color:rgba(16,185,129,0.3)}
-#route-zone-status{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:8px}
-#route-zone-status.ready{color:var(--c-interest);border-color:rgba(16,185,129,0.3)}
+#route-start-label,#route-zone-status{font-size:12px;color:var(--text2);background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:8px;display:flex;align-items:center;gap:6px}
+#route-start-label.ready,#route-zone-status.ready{color:var(--c-interest);border-color:rgba(16,185,129,0.3)}
 #route-draw-zone-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:11px;font-size:13px;font-weight:600;cursor:pointer;-webkit-appearance:none;margin-bottom:12px}
-#route-draw-zone-btn:active{background:var(--accent);color:#fff;border-color:var(--accent)}
 #route-options{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:16px}
-.route-option-row{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-top:1px solid var(--border);font-size:13px;color:var(--text)}
+.route-option-row{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-top:1px solid var(--border);font-size:13px}
 .route-option-row:first-child{border-top:none}
 .route-option-row label{color:var(--text2)}
 #route-unvisited,#route-skip-dnr{width:18px;height:18px;accent-color:var(--accent)}
 #route-go-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;background:var(--accent);color:#fff;border:none;border-radius:12px;padding:14px;font-size:15px;font-weight:600;cursor:pointer;-webkit-appearance:none;margin-bottom:16px}
-#route-go-btn:active{opacity:0.85}
 #route-loading{display:none;text-align:center;padding:16px;color:var(--text2);font-size:13px}
 #route-result{display:flex;flex-direction:column;gap:8px}
 #route-view-map-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;background:var(--c-interest);color:#fff;border:none;border-radius:12px;padding:12px;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:8px;-webkit-appearance:none}
@@ -155,23 +1105,17 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--bg);font-famil
 .route-dist{font-size:11px;color:var(--text2);white-space:nowrap}
 #route-total{font-size:12px;color:var(--text2);text-align:center;padding:8px}
 
-/* Export panel */
-#export-panel{position:fixed;inset:0;z-index:3000;background:var(--bg);transform:translateX(100%);transition:transform 0.32s cubic-bezier(0.32,0.72,0,1);overflow-y:auto;padding-bottom:max(env(safe-area-inset-bottom),24px)}
-#export-panel.open{transform:translateX(0)}
-#export-header{display:flex;align-items:center;gap:12px;padding:max(env(safe-area-inset-top),16px) 16px 16px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg);z-index:10}
-#export-back{background:transparent;border:1px solid var(--border);border-radius:10px;padding:7px;color:var(--text2);cursor:pointer;display:flex;align-items:center}
-#export-header h2{font-size:17px;font-weight:600}
+/* Export */
 #export-summary{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;padding:16px}
 .export-stat{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px}
 .export-stat .es-label{font-size:11px;color:var(--text2);margin-bottom:4px}
 .export-stat .es-val{font-size:22px;font-weight:600}
-#export-filters{padding:0 16px 12px}
+#export-filters,#export-preview-wrap{padding:0 16px 12px}
 .filter-label{font-size:12px;color:var(--text2);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px}
 #export-status-toggles{display:flex;flex-wrap:wrap;gap:8px}
 .etoggle{display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:20px;border:1px solid var(--border);background:var(--surface);font-size:13px;color:var(--text2);cursor:pointer;-webkit-appearance:none}
 .etoggle .dot{width:8px;height:8px;border-radius:50%}
 .etoggle.on{color:var(--text);border-color:rgba(255,255,255,0.2);background:var(--surface2)}
-#export-preview-wrap{padding:0 16px 16px}
 #export-preview{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;max-height:260px;overflow-y:auto}
 .ep-row{display:grid;grid-template-columns:1fr auto;padding:10px 12px;border-top:1px solid var(--border);gap:8px;align-items:start}
 .ep-row:first-child{border-top:none}
@@ -180,46 +1124,47 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--bg);font-famil
 .ep-status{font-size:11px;font-weight:600;margin-top:2px}
 .ep-empty{padding:20px;text-align:center;font-size:13px;color:var(--text2)}
 #export-csv-btn{display:flex;align-items:center;justify-content:center;gap:8px;margin:0 16px 16px;background:var(--accent);color:#fff;border:none;border-radius:12px;padding:14px;font-size:15px;font-weight:600;cursor:pointer;width:calc(100% - 32px);-webkit-appearance:none}
-#export-csv-btn:active{opacity:0.85}
-#sync-status-card{margin:0 16px 16px;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:6px}
-#sync-status-card .sc-row{display:flex;align-items:center;gap:8px}
-#sync-status-card .sc-dot{width:9px;height:9px;border-radius:50%;background:var(--c-interest);flex-shrink:0}
-#sync-status-card .sc-label{font-size:13px;font-weight:600}
-#sync-status-card .sc-desc{font-size:12px;color:var(--text2);line-height:1.5}
-#force-sync-btn{background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:10px;font-size:13px;font-weight:600;cursor:pointer;-webkit-appearance:none}
 
-/* ── Shifts panel ── */
-#shifts-panel{position:fixed;inset:0;z-index:3000;background:var(--bg);transform:translateX(100%);transition:transform 0.32s cubic-bezier(0.32,0.72,0,1);overflow-y:auto;padding-bottom:max(env(safe-area-inset-bottom),24px)}
-#shifts-panel.open{transform:translateX(0)}
-#shifts-header{display:flex;align-items:center;gap:12px;padding:max(env(safe-area-inset-top),16px) 16px 16px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg);z-index:10}
-#shifts-back{background:transparent;border:1px solid var(--border);border-radius:10px;padding:7px;color:var(--text2);cursor:pointer;display:flex;align-items:center}
-#shifts-header h2{font-size:17px;font-weight:600;flex:1}
-#shifts-export-btn{background:transparent;border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:12px;color:var(--text2);cursor:pointer}
-
+/* Shifts */
 #clock-card{margin:16px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:20px;display:flex;flex-direction:column;align-items:center;gap:12px}
 #clock-status{font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:0.8px}
-#clock-timer{font-size:42px;font-weight:700;letter-spacing:-1px;font-variant-numeric:tabular-nums;color:var(--text)}
+#clock-timer{font-size:42px;font-weight:700;letter-spacing:-1px;font-variant-numeric:tabular-nums}
 #clock-timer.running{color:var(--c-interest)}
 #clock-date{font-size:12px;color:var(--text2)}
-#clock-btn{width:100%;padding:15px;border:none;border-radius:14px;font-size:16px;font-weight:700;cursor:pointer;-webkit-appearance:none;transition:background 0.2s}
+#clock-btn{width:100%;padding:15px;border:none;border-radius:14px;font-size:16px;font-weight:700;cursor:pointer;-webkit-appearance:none}
 #clock-btn.clocked-out{background:var(--c-interest);color:#fff}
 #clock-btn.clocked-in{background:var(--c-no);color:#fff}
-#clock-btn:active{opacity:0.85}
 #clock-hangers-live{font-size:13px;color:var(--text2);display:none}
 #clock-hangers-live span{color:var(--c-hanger);font-weight:700}
-
 #shifts-list{padding:0 16px 8px}
 .shifts-section-title{font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;margin:16px 0 8px}
 .shift-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:10px}
-.shift-card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
-.shift-date{font-size:13px;font-weight:600;color:var(--text)}
+.shift-card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
+.shift-date{font-size:13px;font-weight:600}
 .shift-duration{font-size:12px;color:var(--text2)}
-.shift-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}
+.shift-times{font-size:11px;color:var(--text2);margin-bottom:8px}
+.shift-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .shift-stat{background:var(--surface2);border-radius:10px;padding:8px 10px;text-align:center}
-.shift-stat .ss-val{font-size:18px;font-weight:700;color:var(--text)}
+.shift-stat .ss-val{font-size:18px;font-weight:700}
 .shift-stat .ss-label{font-size:10px;color:var(--text2);margin-top:2px}
 .shift-stat.highlight .ss-val{color:var(--c-hanger)}
-.shift-times{font-size:11px;color:var(--text2);margin-top:6px}
+
+/* Admin */
+#admin-panel{position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,0.7);display:none;align-items:center;justify-content:center;padding:24px}
+#admin-box{width:100%;max-width:400px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:24px;display:flex;flex-direction:column;gap:14px;max-height:85vh;overflow-y:auto}
+#admin-box h2{font-size:17px;font-weight:700;flex:1}
+#admin-header{display:flex;align-items:center;justify-content:space-between}
+#admin-close{background:transparent;border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:12px;color:var(--text2);cursor:pointer}
+#admin-company-name{font-size:13px;color:var(--text2)}
+.admin-section-title{font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px}
+#gen-invite-btn{background:var(--accent);color:#fff;border:none;border-radius:10px;padding:11px;font-size:14px;font-weight:600;cursor:pointer;width:100%;-webkit-appearance:none}
+#invite-code-box{display:none;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px;text-align:center}
+#invite-code-display{font-size:28px;font-weight:800;letter-spacing:4px;color:var(--accent)}
+#copy-invite-btn{background:transparent;border:1px solid var(--border);border-radius:8px;padding:6px 14px;font-size:12px;color:var(--text2);cursor:pointer;margin-top:8px}
+#admin-emp-list{display:flex;flex-direction:column;gap:8px}
+.admin-emp-row{background:var(--surface2);border-radius:10px;padding:10px 12px}
+.emp-name{font-size:14px;font-weight:600}
+.emp-email{font-size:12px;color:var(--text2);margin-top:2px}
 
 /* Spinner */
 .spinner{width:28px;height:28px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.7s linear infinite}
@@ -232,980 +1177,255 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--bg);font-famil
 </head>
 <body>
 
-<!-- Login -->
-<div id="login-screen">
-  <div id="login-logo">Knox<span>Canvas</span></div>
-  <div id="login-sub">Knoxville Door-to-Door Tracker</div>
-  <div id="login-box">
-    <label for="login-pass">Password</label>
-    <input id="login-pass" type="password" placeholder="Enter password…" autocomplete="current-password">
-    <button id="login-btn">Sign In</button>
-    <div id="login-err"></div>
-  </div>
-</div>
-
-<div id="map"></div>
-
-<div id="header">
-  <div id="header-inner">
-    <h1>Knox<span>Canvas</span></h1>
-    <div id="stats-row"></div>
-  </div>
-  <div id="sync-wrap">
-    <div id="sync-dot"></div>
-    <span id="sync-text">Synced</span>
-  </div>
-  <div id="header-btns">
-    <button class="hbtn" id="shifts-btn" title="Shifts / Clock in">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-    </button>
-    <button class="hbtn" id="route-btn" title="Route optimizer">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-    </button>
-    <button class="hbtn" id="roof-mode-btn" title="Roofing target mode">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-    </button>
-    <button class="hbtn" id="draw-zone-btn" title="Draw neighborhood zone">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5"/></svg>
-    </button>
-    <button class="hbtn" id="export-btn" title="Export">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-    </button>
-    <button class="hbtn" id="logout-btn" title="Log out">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-    </button>
-  </div>
-</div>
-
-<div id="search-wrap">
-  <div id="search-bar">
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-    <input id="search-input" type="text" placeholder="Search Knoxville address…" autocomplete="off" autocorrect="off" spellcheck="false">
-  </div>
-  <div id="search-results"></div>
-</div>
-
-<div id="overlay"></div>
-
-<div id="sheet">
-  <div id="sheet-handle"></div>
-  <div id="sheet-addr">Select a location</div>
-  <div id="sheet-coords"></div>
-  <a id="zillow-btn" href="#" target="_blank" rel="noopener">
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-    View on Zillow
-  </a>
-  <button class="status-btn" data-status="none"><span class="swatch" style="background:var(--c-none)"></span>Not visited<span class="check">✓</span></button>
-  <button class="status-btn" data-status="hanger"><span class="swatch" style="background:var(--c-hanger)"></span>Door hanger left<span class="check">✓</span></button>
-  <button class="status-btn" data-status="interest"><span class="swatch" style="background:var(--c-interest)"></span>Spoke to someone — interested<span class="check">✓</span></button>
-  <button class="status-btn" data-status="no"><span class="swatch" style="background:var(--c-no)"></span>Spoke to someone — not interested<span class="check">✓</span></button>
-  <button class="status-btn" data-status="dnr"><span class="swatch" style="background:var(--c-dnr)"></span>Do not return / skip<span class="check">✓</span></button>
-  <div id="sheet-note-row">
-    <textarea id="sheet-note" rows="2" placeholder="Add a note (optional)…"></textarea>
-  </div>
-  <div id="sheet-year-row">
-    <input id="sheet-year" type="number" placeholder="Year built (e.g. 1998)" min="1800" max="2025">
-  </div>
-  <div id="neighborhood-year-row">
-    <button id="neighborhood-year-btn">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
-      Apply year to whole neighborhood
-    </button>
-  </div>
-  <button id="sheet-set-start">📍 Set as route start</button>
-  <button id="sheet-delete">Remove this pin</button>
-  <button id="sheet-close">Done</button>
-</div>
-
-<div id="legend">
-  <div class="legend-row active" data-filter="all"><div class="dot" style="background:rgba(255,255,255,0.2)"></div><span>All pins</span><span class="label-count" id="cnt-all">0</span></div>
-  <div class="legend-row active" data-filter="none"><div class="dot" style="background:var(--c-none)"></div><span>Not visited</span><span class="label-count" id="cnt-none">0</span></div>
-  <div class="legend-row active" data-filter="hanger"><div class="dot" style="background:var(--c-hanger)"></div><span>Door hanger</span><span class="label-count" id="cnt-hanger">0</span></div>
-  <div class="legend-row active" data-filter="interest"><div class="dot" style="background:var(--c-interest)"></div><span>Interested</span><span class="label-count" id="cnt-interest">0</span></div>
-  <div class="legend-row active" data-filter="no"><div class="dot" style="background:var(--c-no)"></div><span>Not interested</span><span class="label-count" id="cnt-no">0</span></div>
-  <div class="legend-row active" data-filter="dnr"><div class="dot" style="background:var(--c-dnr)"></div><span>Do not return</span><span class="label-count" id="cnt-dnr">0</span></div>
-</div>
-
-<div id="roof-mode-banner">
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
-  Roofing Target Mode — zones built before 2012
-</div>
-
-<!-- Zone toolbar -->
-<div id="zone-toolbar">
-  <div id="zone-toolbar-inner">
-    <div id="zone-toolbar-title">📍 Tap map edges to draw zone</div>
-    <div id="zone-toolbar-fields">
-      <input id="zone-year-input" type="number" placeholder="Year built">
-      <input id="zone-name-input" type="text" placeholder="Zone name">
+<!-- Auth Screen -->
+<div id="auth-screen">
+  <div id="auth-logo">Knox<span>Canvas</span></div>
+  <div id="auth-tagline">Door-to-door sales tracking</div>
+  <div id="auth-box">
+    <!-- Login -->
+    <div id="login-form">
+      <h2>Sign in</h2>
+      <input class="auth-input" id="login-email" type="email" placeholder="Email" autocomplete="email">
+      <input class="auth-input" id="login-pass" type="password" placeholder="Password" autocomplete="current-password">
+      <button class="auth-btn primary" id="login-btn">Sign In</button>
+      <div class="auth-divider">or</div>
+      <button class="auth-btn google" id="google-login-btn">
+        <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+        Continue with Google
+      </button>
+      <div id="auth-err"></div>
+      <div class="auth-switch">Don't have an account? <span id="show-register">Create one</span></div>
     </div>
-    <div id="zone-toolbar-btns">
-      <button id="zone-undo-btn">↩ Undo</button>
-      <button id="zone-finish-btn">✓ Save Zone</button>
-      <button id="zone-cancel-btn">✕ Cancel</button>
+    <!-- Register -->
+    <div id="register-form">
+      <h2>Create account</h2>
+      <input class="auth-input" id="reg-name" type="text" placeholder="Your name" autocomplete="name">
+      <input class="auth-input" id="reg-email" type="email" placeholder="Email" autocomplete="email">
+      <input class="auth-input" id="reg-pass" type="password" placeholder="Password (min 6 chars)" autocomplete="new-password">
+      <input class="auth-input" id="reg-company" type="text" placeholder="Company name">
+      <button class="auth-btn primary" id="register-btn">Create Account</button>
+      <div id="auth-err"></div>
+      <div class="auth-switch">Already have an account? <span id="show-login">Sign in</span></div>
     </div>
-    <div id="zone-point-count">0 points</div>
   </div>
 </div>
 
-<!-- Shifts Panel -->
-<div id="shifts-panel">
-  <div id="shifts-header">
-    <button id="shifts-back"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg></button>
-    <h2>Shifts</h2>
-    <button id="shifts-export-btn">Export CSV</button>
-  </div>
-
-  <div id="clock-card">
-    <div id="clock-status">Clocked Out</div>
-    <div id="clock-timer">00:00:00</div>
-    <div id="clock-date"></div>
-    <div id="clock-hangers-live">This shift: <span id="live-hanger-count">0</span> hangers</div>
-    <button id="clock-btn" class="clocked-out">Clock In</button>
-  </div>
-
-  <div id="shifts-list">
-    <div class="shifts-section-title">Shift History</div>
-    <div id="shifts-history"></div>
+<!-- Setup Screen (join or create company) -->
+<div id="setup-screen">
+  <div id="auth-logo" style="margin-bottom:4px">Knox<span style="color:var(--accent)">Canvas</span></div>
+  <div style="font-size:13px;color:var(--text2);margin-bottom:24px">One more step</div>
+  <div id="setup-box">
+    <h2>Set up your account</h2>
+    <input class="auth-input" id="setup-name" type="text" placeholder="Your name">
+    <div id="setup-tabs">
+      <div class="setup-tab active" id="tab-create">Create Company</div>
+      <div class="setup-tab" id="tab-join">Join with Code</div>
+    </div>
+    <div id="setup-create-section">
+      <input class="auth-input" id="setup-company" type="text" placeholder="Company name">
+      <button class="auth-btn primary" id="setup-create-btn">Create Company</button>
+    </div>
+    <div id="setup-join-section">
+      <input class="auth-input" id="setup-invite-code" type="text" placeholder="Invite code (e.g. AB12CD34)" style="text-transform:uppercase;letter-spacing:2px">
+      <button class="auth-btn primary" id="setup-join-btn">Join Company</button>
+    </div>
+    <div id="setup-err"></div>
   </div>
 </div>
 
-<!-- Route Panel -->
-<div id="route-panel">
-  <div id="route-header">
-    <button id="route-back"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg></button>
-    <h2>Route Optimizer</h2>
-    <button id="route-clear-btn">Clear</button>
+<!-- Main App -->
+<div id="app-root">
+  <div id="map"></div>
+
+  <div id="header">
+    <div id="header-inner">
+      <h1>Knox<span>Canvas</span></h1>
+      <div id="user-name-display"></div>
+      <div id="stats-row"></div>
+    </div>
+    <div id="header-btns">
+      <button class="hbtn" id="shifts-btn" title="Shifts">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      </button>
+      <button class="hbtn" id="route-btn" title="Route">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      </button>
+      <button class="hbtn" id="roof-mode-btn" title="Roofing mode">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      </button>
+      <button class="hbtn" id="draw-zone-btn" title="Draw zone">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5"/></svg>
+      </button>
+      <button class="hbtn" id="export-btn" title="Export">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      </button>
+      <button class="hbtn" id="admin-btn" title="Team admin" style="display:none">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      </button>
+      <button class="hbtn" id="logout-btn" title="Log out">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      </button>
+    </div>
   </div>
-  <div id="route-body">
-    <div id="route-start-label">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-      <span id="route-start-text">Tap a pin on the map → "Set as route start"</span>
+
+  <div id="search-wrap">
+    <div id="search-bar">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+      <input id="search-input" type="text" placeholder="Search Knoxville address…" autocomplete="off" autocorrect="off" spellcheck="false">
     </div>
-    <div id="route-zone-status">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5"/></svg>
-      <span id="route-zone-text">No zone drawn</span>
+    <div id="search-results"></div>
+  </div>
+
+  <div id="overlay"></div>
+
+  <div id="sheet">
+    <div id="sheet-handle"></div>
+    <div id="sheet-addr">Select a location</div>
+    <div id="sheet-coords"></div>
+    <a id="zillow-btn" href="#" target="_blank" rel="noopener">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+      View on Zillow
+    </a>
+    <button class="status-btn" data-status="none"><span class="swatch" style="background:var(--c-none)"></span>Not visited<span class="check">✓</span></button>
+    <button class="status-btn" data-status="hanger"><span class="swatch" style="background:var(--c-hanger)"></span>Door hanger left<span class="check">✓</span></button>
+    <button class="status-btn" data-status="interest"><span class="swatch" style="background:var(--c-interest)"></span>Spoke to someone — interested<span class="check">✓</span></button>
+    <button class="status-btn" data-status="no"><span class="swatch" style="background:var(--c-no)"></span>Spoke to someone — not interested<span class="check">✓</span></button>
+    <button class="status-btn" data-status="dnr"><span class="swatch" style="background:var(--c-dnr)"></span>Do not return / skip<span class="check">✓</span></button>
+    <div id="sheet-note-row"><textarea id="sheet-note" rows="2" placeholder="Add a note (optional)…"></textarea></div>
+    <div id="sheet-year-row"><input id="sheet-year" type="number" placeholder="Year built (e.g. 1998)" min="1800" max="2025"></div>
+    <div id="neighborhood-year-row">
+      <button id="neighborhood-year-btn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+        Apply year to whole neighborhood
+      </button>
     </div>
-    <button id="route-draw-zone-btn">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5"/></svg>
-      Draw Route Zone on Map
-    </button>
-    <p class="filter-label">Options</p>
-    <div id="route-options">
-      <div class="route-option-row"><label>Skip already visited</label><input type="checkbox" id="route-unvisited" checked></div>
-      <div class="route-option-row"><label>Skip Do Not Return</label><input type="checkbox" id="route-skip-dnr" checked></div>
+    <button id="sheet-set-start">📍 Set as route start</button>
+    <button id="sheet-delete">Remove this pin</button>
+    <button id="sheet-close">Done</button>
+  </div>
+
+  <div id="legend">
+    <div class="legend-row active" data-filter="all"><div class="dot" style="background:rgba(255,255,255,0.2)"></div><span>All pins</span><span class="label-count" id="cnt-all">0</span></div>
+    <div class="legend-row active" data-filter="none"><div class="dot" style="background:var(--c-none)"></div><span>Not visited</span><span class="label-count" id="cnt-none">0</span></div>
+    <div class="legend-row active" data-filter="hanger"><div class="dot" style="background:var(--c-hanger)"></div><span>Door hanger</span><span class="label-count" id="cnt-hanger">0</span></div>
+    <div class="legend-row active" data-filter="interest"><div class="dot" style="background:var(--c-interest)"></div><span>Interested</span><span class="label-count" id="cnt-interest">0</span></div>
+    <div class="legend-row active" data-filter="no"><div class="dot" style="background:var(--c-no)"></div><span>Not interested</span><span class="label-count" id="cnt-no">0</span></div>
+    <div class="legend-row active" data-filter="dnr"><div class="dot" style="background:var(--c-dnr)"></div><span>Do not return</span><span class="label-count" id="cnt-dnr">0</span></div>
+  </div>
+
+  <div id="roof-mode-banner">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+    Roofing Target Mode — zones built before 2012
+  </div>
+
+  <div id="zone-toolbar">
+    <div id="zone-toolbar-inner">
+      <div id="zone-toolbar-title">📍 Tap map edges to draw zone</div>
+      <div id="zone-toolbar-fields">
+        <input id="zone-year-input" type="number" placeholder="Year built">
+        <input id="zone-name-input" type="text" placeholder="Zone name">
+      </div>
+      <div id="zone-toolbar-btns">
+        <button id="zone-undo-btn">↩ Undo</button>
+        <button id="zone-finish-btn">✓ Save Zone</button>
+        <button id="zone-cancel-btn">✕ Cancel</button>
+      </div>
+      <div id="zone-point-count">0 points</div>
     </div>
-    <button id="route-go-btn">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-      Generate Route
-    </button>
-    <div id="route-loading"><div class="spinner" style="margin:0 auto 8px"></div>Fetching houses…</div>
-    <div id="route-result"></div>
+  </div>
+
+  <!-- Shifts Panel -->
+  <div id="shifts-panel" class="panel">
+    <div class="panel-header">
+      <button class="panel-back" id="shifts-back"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg></button>
+      <h2>Shifts</h2>
+      <button class="panel-action-btn" id="shifts-export-btn">Export CSV</button>
+    </div>
+    <div id="clock-card">
+      <div id="clock-status">Clocked Out</div>
+      <div id="clock-timer">00:00:00</div>
+      <div id="clock-date"></div>
+      <div id="clock-hangers-live">This shift: <span id="live-hanger-count">0</span> hangers</div>
+      <button id="clock-btn" class="clocked-out">Clock In</button>
+    </div>
+    <div id="shifts-list">
+      <div class="shifts-section-title">Shift History</div>
+      <div id="shifts-history"></div>
+    </div>
+  </div>
+
+  <!-- Route Panel -->
+  <div id="route-panel" class="panel">
+    <div class="panel-header">
+      <button class="panel-back" id="route-back"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg></button>
+      <h2>Route Optimizer</h2>
+      <button class="panel-action-btn" id="route-clear-btn">Clear</button>
+    </div>
+    <div id="route-body">
+      <div id="route-start-label"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg><span id="route-start-text">Tap a pin → "Set as route start"</span></div>
+      <div id="route-zone-status"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5"/></svg><span id="route-zone-text">No zone drawn</span></div>
+      <button id="route-draw-zone-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5"/></svg>Draw Route Zone on Map</button>
+      <p class="filter-label">Options</p>
+      <div id="route-options">
+        <div class="route-option-row"><label>Skip already visited</label><input type="checkbox" id="route-unvisited" checked></div>
+        <div class="route-option-row"><label>Skip Do Not Return</label><input type="checkbox" id="route-skip-dnr" checked></div>
+      </div>
+      <button id="route-go-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>Generate Route</button>
+      <div id="route-loading"><div class="spinner" style="margin:0 auto 8px"></div>Fetching houses…</div>
+      <div id="route-result"></div>
+    </div>
+  </div>
+
+  <!-- Export Panel -->
+  <div id="export-panel" class="panel">
+    <div class="panel-header">
+      <button class="panel-back" id="export-back"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg></button>
+      <h2>Export data</h2>
+    </div>
+    <div id="export-summary"></div>
+    <div id="export-filters"><p class="filter-label">Include statuses</p><div id="export-status-toggles"></div></div>
+    <div id="export-preview-wrap"><p class="filter-label">Preview <span id="export-count"></span></p><div id="export-preview"></div></div>
+    <button id="export-csv-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Download CSV</button>
   </div>
 </div>
 
-<!-- Export Panel -->
-<div id="export-panel">
-  <div id="export-header">
-    <button id="export-back"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg></button>
-    <h2>Export data</h2>
-  </div>
-  <div id="export-summary"></div>
-  <div id="export-filters">
-    <p class="filter-label">Include statuses</p>
-    <div id="export-status-toggles"></div>
-  </div>
-  <div id="export-preview-wrap">
-    <p class="filter-label">Preview <span id="export-count"></span></p>
-    <div id="export-preview"></div>
-  </div>
-  <button id="export-csv-btn">
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-    Download CSV
-  </button>
-  <div id="sync-status-card">
-    <div class="sc-row"><div class="sc-dot"></div><span class="sc-label">Cloud sync via JSONBin</span></div>
-    <div class="sc-desc">Pins save automatically to the cloud.</div>
-    <button id="force-sync-btn">↻ Force sync now</button>
+<!-- Admin Panel -->
+<div id="admin-panel">
+  <div id="admin-box">
+    <div id="admin-header">
+      <h2>Team Admin</h2>
+      <button id="admin-close">Close</button>
+    </div>
+    <div id="admin-company-name"></div>
+    <div class="admin-section-title">Invite Employee</div>
+    <button id="gen-invite-btn">Generate Invite Code</button>
+    <div id="invite-code-box">
+      <div style="font-size:12px;color:var(--text2);margin-bottom:8px">Share this code with your employee</div>
+      <div id="invite-code-display">--------</div>
+      <button id="copy-invite-btn">Copy Code</button>
+    </div>
+    <div class="admin-section-title">Team Members</div>
+    <div id="admin-emp-list"></div>
   </div>
 </div>
 
 <div id="toast"></div>
 
 <script>
-const PASSWORD   = 'Connor';
-const BIN_ID     = '6a0e72bd6610dd3ae87ce698';
-const ACCESS_KEY = '$2a$10$KLNJA3b6TXj1typeNBbMZ.9yAbwJgVSw22eETJba1qFG1582s4jV6';
-const BIN_URL    = `https://api.jsonbin.io/v3/b/${BIN_ID}`;
-const SHEETS_URL = 'https://script.google.com/macros/s/AKfycbxeNoWtEdYnmXDfGq9aBjRpspGS6nucshZaxWj2OYY63zVtOb7XtZuYoDRsgCV0aVFs/exec';
-const GEO_PROXY  = 'https://broken-tree-befb.connorbdowney48.workers.dev';
-const ROOF_CUTOFF = 2012;
-
-const COLORS={none:'#6b7280',hanger:'#f59e0b',interest:'#10b981',no:'#ef4444',dnr:'#7c3aed'};
-const LABELS={none:'Not visited',hanger:'Door hanger',interest:'Interested',no:'Not interested',dnr:'Do not return'};
-
-let pins={}, neighborhoodYears=[], shifts=[];
-let currentPinId=null, markers={}, hiddenStatuses=new Set();
-let noteDebounce=null, syncDebounce=null;
-let roofingMode=false, zonePolygonLayers=[];
-let drawingMode=false, drawingForRoute=false;
-let drawnPoints=[], drawnPolyline=null, drawnPolygon=null, drawnMarkers=[];
-let routeStart=null, routeZonePolygon=null, routeZoneLayer=null;
-let routeMarkers=[], routePolylines=[];
-
-// ── Clock state ───────────────────────────────────────────
-let clockedIn=false, clockInTime=null, clockTimerInterval=null;
-let shiftHangersAtClockIn=0; // hanger count when shift started
-
-function hangerCount(){
-  return Object.values(pins).filter(p=>p.status==='hanger').length;
-}
-
-function formatDuration(ms){
-  const s=Math.floor(ms/1000),m=Math.floor(s/60),h=Math.floor(m/60);
-  return `${String(h).padStart(2,'0')}:${String(m%60).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
-}
-
-function formatTime(ts){
-  return new Date(ts).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true});
-}
-
-function formatDate(ts){
-  return new Date(ts).toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});
-}
-
-function startClockTimer(){
-  clockTimerInterval=setInterval(()=>{
-    const elapsed=Date.now()-clockInTime;
-    document.getElementById('clock-timer').textContent=formatDuration(elapsed);
-    const hangersThisShift=hangerCount()-shiftHangersAtClockIn;
-    document.getElementById('live-hanger-count').textContent=Math.max(0,hangersThisShift);
-  },1000);
-}
-
-function clockIn(){
-  clockedIn=true;
-  clockInTime=Date.now();
-  shiftHangersAtClockIn=hangerCount();
-  localStorage.setItem('knoxClockIn',JSON.stringify({time:clockInTime,hangersAtStart:shiftHangersAtClockIn}));
-  document.getElementById('clock-btn').textContent='Clock Out';
-  document.getElementById('clock-btn').className='clocked-in';
-  document.getElementById('clock-status').textContent='Clocked In';
-  document.getElementById('clock-timer').classList.add('running');
-  document.getElementById('clock-date').textContent=formatDate(clockInTime);
-  document.getElementById('clock-hangers-live').style.display='block';
-  document.getElementById('shifts-btn').classList.add('active');
-  startClockTimer();
-  showToast('Clocked in — good luck out there!');
-}
-
-function clockOut(){
-  if(!clockedIn||!clockInTime)return;
-  clearInterval(clockTimerInterval);
-
-  const clockOutTime=Date.now();
-  const durationMs=clockOutTime-clockInTime;
-  const hangersThisShift=Math.max(0,hangerCount()-shiftHangersAtClockIn);
-  const hoursWorked=durationMs/3600000;
-  const hangersPerHour=hoursWorked>0?(hangersThisShift/hoursWorked).toFixed(1):0;
-
-  const shift={
-    id: clockInTime,
-    clockIn: clockInTime,
-    clockOut: clockOutTime,
-    durationMs,
-    hangers: hangersThisShift,
-    hangersPerHour: parseFloat(hangersPerHour)
-  };
-  shifts.unshift(shift);
-  localStorage.setItem('knoxShifts',JSON.stringify(shifts));
-  pushShiftToSheets(shift);
-
-  // Reset UI
-  clockedIn=false;clockInTime=null;shiftHangersAtClockIn=0;
-  localStorage.removeItem('knoxClockIn');
-  document.getElementById('clock-btn').textContent='Clock In';
-  document.getElementById('clock-btn').className='clocked-out';
-  document.getElementById('clock-status').textContent='Clocked Out';
-  document.getElementById('clock-timer').textContent='00:00:00';
-  document.getElementById('clock-timer').classList.remove('running');
-  document.getElementById('clock-date').textContent='';
-  document.getElementById('clock-hangers-live').style.display='none';
-  document.getElementById('shifts-btn').classList.remove('active');
-  renderShifts();
-  showToast(`Shift complete · ${hangersThisShift} hangers · ${hangersPerHour}/hr`);
-}
-
-document.getElementById('clock-btn').addEventListener('click',()=>{
-  if(clockedIn)clockOut();else clockIn();
+// Setup tab switching
+document.getElementById('tab-create').addEventListener('click',()=>{
+  document.getElementById('tab-create').classList.add('active');
+  document.getElementById('tab-join').classList.remove('active');
+  document.getElementById('setup-create-section').style.display='flex';
+  document.getElementById('setup-join-section').style.display='none';
 });
-
-async function pushShiftToSheets(shift){
-  try{
-    await fetch(SHEETS_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({
-        action:'shift',
-        shift:{
-          date: formatDate(shift.clockIn),
-          clockIn: formatTime(shift.clockIn),
-          clockOut: formatTime(shift.clockOut),
-          duration: formatDuration(shift.durationMs),
-          hangers: shift.hangers,
-          hangersPerHour: shift.hangersPerHour
-        }
-      })
-    });
-  }catch(e){}
-}
-
-function renderShifts(){
-  const container=document.getElementById('shifts-history');
-  if(!shifts.length){container.innerHTML='<div style="text-align:center;padding:24px;font-size:13px;color:var(--text2)">No shifts yet — clock in to start tracking</div>';return;}
-  container.innerHTML=shifts.map(s=>{
-    const hoursWorked=(s.durationMs/3600000).toFixed(2);
-    return `<div class="shift-card">
-      <div class="shift-card-header">
-        <div class="shift-date">${formatDate(s.clockIn)}</div>
-        <div class="shift-duration">${formatDuration(s.durationMs)}</div>
-      </div>
-      <div class="shift-times">${formatTime(s.clockIn)} → ${formatTime(s.clockOut)}</div>
-      <div class="shift-stats">
-        <div class="shift-stat highlight">
-          <div class="ss-val">${s.hangers}</div>
-          <div class="ss-label">Hangers</div>
-        </div>
-        <div class="shift-stat">
-          <div class="ss-val">${s.hangersPerHour}</div>
-          <div class="ss-label">Per Hour</div>
-        </div>
-        <div class="shift-stat">
-          <div class="ss-val">${hoursWorked}h</div>
-          <div class="ss-label">Hours</div>
-        </div>
-      </div>
-    </div>`;
-  }).join('');
-}
-
-// Shifts CSV export
-document.getElementById('shifts-export-btn').addEventListener('click',()=>{
-  if(!shifts.length){showToast('No shifts to export');return;}
-  const esc=v=>`"${String(v).replace(/"/g,'""')}"`;
-  const lines=['Date,Clock In,Clock Out,Duration,Hangers,Hangers Per Hour'];
-  shifts.forEach(s=>{
-    lines.push([
-      esc(formatDate(s.clockIn)),esc(formatTime(s.clockIn)),esc(formatTime(s.clockOut)),
-      esc(formatDuration(s.durationMs)),esc(s.hangers),esc(s.hangersPerHour)
-    ].join(','));
-  });
-  const blob=new Blob([lines.join('\n')],{type:'text/csv'});
-  const url=URL.createObjectURL(blob);const a=document.createElement('a');
-  a.href=url;a.download=`knoxcanvas_shifts_${new Date().toISOString().slice(0,10)}.csv`;a.click();
-  URL.revokeObjectURL(url);showToast('Shifts CSV downloaded');
+document.getElementById('tab-join').addEventListener('click',()=>{
+  document.getElementById('tab-join').classList.add('active');
+  document.getElementById('tab-create').classList.remove('active');
+  document.getElementById('setup-join-section').style.display='flex';
+  document.getElementById('setup-create-section').style.display='none';
 });
-
-// Shifts panel open/close
-document.getElementById('shifts-btn').addEventListener('click',()=>{
-  renderShifts();
-  document.getElementById('shifts-panel').classList.add('open');
-});
-document.getElementById('shifts-back').addEventListener('click',()=>{
-  document.getElementById('shifts-panel').classList.remove('open');
-});
-
-// ── Auth ─────────────────────────────────────────────────
-function checkSession(){return sessionStorage.getItem('knoxAuth')==='1';}
-function doLogin(){
-  const val=document.getElementById('login-pass').value;
-  if(val===PASSWORD){
-    sessionStorage.setItem('knoxAuth','1');
-    document.getElementById('login-screen').classList.add('hidden');
-    bootApp();
-  }else{
-    document.getElementById('login-err').textContent='Incorrect password.';
-    document.getElementById('login-pass').value='';
-    document.getElementById('login-pass').focus();
-  }
-}
-document.getElementById('login-btn').addEventListener('click',doLogin);
-document.getElementById('login-pass').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
-document.getElementById('logout-btn').addEventListener('click',()=>{sessionStorage.removeItem('knoxAuth');location.reload();});
-
-// ── JSONBin ──────────────────────────────────────────────
-function setSyncStatus(state,msg){
-  const dot=document.getElementById('sync-dot'),txt=document.getElementById('sync-text');
-  dot.className=state;
-  txt.textContent=msg||(state==='syncing'?'Saving…':state==='ok'?'Synced':'Offline');
-  if(state==='ok')setTimeout(()=>{dot.className='';txt.textContent='Synced';},2500);
-}
-async function pushToCloud(){
-  setSyncStatus('syncing');
-  try{
-    const res=await fetch(BIN_URL,{method:'PUT',headers:{'Content-Type':'application/json','X-Master-Key':ACCESS_KEY,'X-Access-Key':ACCESS_KEY,'X-Bin-Versioning':'false'},body:JSON.stringify({pins,neighborhoodYears})});
-    if(!res.ok)throw new Error();
-    setSyncStatus('ok');
-    localStorage.setItem('knoxPins',JSON.stringify(pins));
-    localStorage.setItem('knoxNeighborhoodYears',JSON.stringify(neighborhoodYears));
-  }catch(e){setSyncStatus('err','Sync failed');}
-}
-async function pullFromCloud(){
-  try{
-    const res=await fetch(BIN_URL+'/latest',{headers:{'X-Master-Key':ACCESS_KEY,'X-Access-Key':ACCESS_KEY}});
-    if(!res.ok)throw new Error();
-    const data=await res.json();
-    if(data.record&&data.record.pins){
-      pins=data.record.pins;
-      if(data.record.neighborhoodYears)neighborhoodYears=data.record.neighborhoodYears;
-      localStorage.setItem('knoxPins',JSON.stringify(pins));
-      localStorage.setItem('knoxNeighborhoodYears',JSON.stringify(neighborhoodYears));
-      return true;
-    }
-  }catch(e){}
-  return false;
-}
-function schedulePush(){clearTimeout(syncDebounce);syncDebounce=setTimeout(pushToCloud,1200);}
-
-// ── Sheets ───────────────────────────────────────────────
-async function syncToSheets(action,pin,id){
-  if(action==='upsert'&&pin.status!=='hanger')return;
-  try{
-    await fetch(SHEETS_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify(action==='upsert'?{action:'upsert',pin:{...pin,id:id||pin.id,yearBuilt:pin.yearBuilt||''}}:{action:'delete',id})});
-  }catch(e){}
-}
-
-// ── Map ──────────────────────────────────────────────────
-const map=L.map('map',{center:[35.9606,-83.9207],zoom:17,zoomControl:false,attributionControl:false});
-L.tileLayer('https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',{maxZoom:22,subdomains:'0123',attribution:'© Google Maps'}).addTo(map);
-L.control.attribution({position:'bottomleft',prefix:false}).addTo(map);
-
-function makeIcon(status){
-  const c=COLORS[status]||COLORS.none;
-  return L.divIcon({html:`<svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36"><path d="M14 2C8.48 2 4 6.48 4 12c0 7 10 22 10 22S24 19 24 12c0-5.52-4.48-10-10-10z" fill="${c}"/><circle cx="14" cy="12" r="5" fill="rgba(255,255,255,0.35)"/></svg>`,iconSize:[28,36],iconAnchor:[14,36],className:''});
-}
-function addOrUpdateMarker(id){
-  const p=pins[id];if(!p)return;
-  if(markers[id])map.removeLayer(markers[id]);
-  if(hiddenStatuses.has(p.status))return;
-  const m=L.marker([p.lat,p.lng],{icon:makeIcon(p.status)});
-  m.on('click',()=>openSheet(id));m.addTo(map);markers[id]=m;
-}
-function renderAllMarkers(){
-  Object.keys(markers).forEach(id=>map.removeLayer(markers[id]));markers={};
-  Object.keys(pins).forEach(id=>addOrUpdateMarker(id));updateStats();
-}
-function updateStats(){
-  const counts={none:0,hanger:0,interest:0,no:0,dnr:0};
-  Object.values(pins).forEach(p=>{if(counts[p.status]!==undefined)counts[p.status]++;});
-  const total=Object.values(counts).reduce((a,b)=>a+b,0);
-  document.getElementById('cnt-all').textContent=total;
-  Object.keys(counts).forEach(k=>{const el=document.getElementById('cnt-'+k);if(el)el.textContent=counts[k];});
-  const row=document.getElementById('stats-row');row.innerHTML='';
-  [{k:'interest',label:'Interested'},{k:'hanger',label:'Hangers'},{k:'no',label:'No'},{k:'dnr',label:'DNR'}].forEach(({k,label})=>{
-    if(counts[k]>0){const el=document.createElement('div');el.className='stat-pill';el.style.background=COLORS[k]+'22';el.style.color=COLORS[k];el.innerHTML=`<span class="dot" style="background:${COLORS[k]}"></span>${counts[k]} ${label}`;row.appendChild(el);}
-  });
-  if(total>0){const el=document.createElement('div');el.className='stat-pill';el.style.background='rgba(255,255,255,0.05)';el.style.color='#8b90b0';el.textContent=total+' total';row.appendChild(el);}
-}
-
-// ── Sheet ────────────────────────────────────────────────
-function openSheet(id){
-  currentPinId=id;const p=pins[id];
-  document.getElementById('sheet-addr').textContent=p.addr||'Unnamed location';
-  const yearLabel=p.yearBuilt?` · Built ${p.yearBuilt}`:'';
-  document.getElementById('sheet-coords').textContent=p.lat.toFixed(5)+', '+p.lng.toFixed(5)+yearLabel;
-  document.getElementById('sheet-note').value=p.note||'';
-  document.getElementById('sheet-year').value=p.yearBuilt||'';
-  const zq=encodeURIComponent((p.addr||'').trim());
-  document.getElementById('zillow-btn').href=`https://www.zillow.com/homes/${zq}_rb/`;
-  document.querySelectorAll('.status-btn').forEach(btn=>btn.classList.toggle('active',btn.dataset.status===p.status));
-  document.getElementById('sheet').classList.add('open');
-  document.getElementById('overlay').classList.add('visible');
-}
-function closeSheet(){
-  document.getElementById('sheet').classList.remove('open');
-  document.getElementById('overlay').classList.remove('visible');
-  currentPinId=null;
-}
-document.getElementById('overlay').addEventListener('click',closeSheet);
-document.getElementById('sheet-close').addEventListener('click',closeSheet);
-
-document.querySelectorAll('.status-btn').forEach(btn=>{
-  btn.addEventListener('click',()=>{
-    if(!currentPinId)return;
-    pins[currentPinId].status=btn.dataset.status;pins[currentPinId].ts=Date.now();
-    addOrUpdateMarker(currentPinId);updateStats();
-    document.querySelectorAll('.status-btn').forEach(b=>b.classList.toggle('active',b.dataset.status===btn.dataset.status));
-    showToast('Saved: '+LABELS[btn.dataset.status]);
-    schedulePush();syncToSheets('upsert',pins[currentPinId],currentPinId);
-    // Update live hanger count if clocked in
-    if(clockedIn){
-      const h=Math.max(0,hangerCount()-shiftHangersAtClockIn);
-      document.getElementById('live-hanger-count').textContent=h;
-    }
-  });
-});
-document.getElementById('sheet-note').addEventListener('input',()=>{
-  if(!currentPinId)return;
-  pins[currentPinId].note=document.getElementById('sheet-note').value;
-  clearTimeout(noteDebounce);noteDebounce=setTimeout(schedulePush,800);
-});
-document.getElementById('sheet-year').addEventListener('input',()=>{
-  if(!currentPinId)return;
-  pins[currentPinId].yearBuilt=document.getElementById('sheet-year').value;
-  const p=pins[currentPinId];
-  document.getElementById('sheet-coords').textContent=p.lat.toFixed(5)+', '+p.lng.toFixed(5)+(p.yearBuilt?` · Built ${p.yearBuilt}`:'');
-  clearTimeout(noteDebounce);noteDebounce=setTimeout(schedulePush,800);
-});
-document.getElementById('neighborhood-year-btn').addEventListener('click',()=>{
-  if(!currentPinId)return;
-  const year=document.getElementById('sheet-year').value;
-  if(!year){showToast('Enter a year first');return;}
-  const p=pins[currentPinId];const radius=400;let count=0;
-  Object.keys(pins).forEach(id=>{
-    const other=pins[id];
-    const dist=Math.sqrt(Math.pow((other.lat-p.lat)*111000,2)+Math.pow((other.lng-p.lng)*111000*Math.cos(p.lat*Math.PI/180),2));
-    if(dist<=radius){pins[id].yearBuilt=year;count++;}
-  });
-  neighborhoodYears=neighborhoodYears.filter(z=>{
-    const d=Math.sqrt(Math.pow((z.lat-p.lat)*111000,2)+Math.pow((z.lng-p.lng)*111000*Math.cos(p.lat*Math.PI/180),2));
-    return d>200;
-  });
-  neighborhoodYears.push({lat:p.lat,lng:p.lng,year,radius});
-  localStorage.setItem('knoxNeighborhoodYears',JSON.stringify(neighborhoodYears));
-  schedulePush();showToast(`Applied ${year} to ${count} pins · future pins auto-filled`);
-});
-document.getElementById('sheet-set-start').addEventListener('click',()=>{
-  if(!currentPinId)return;
-  const p=pins[currentPinId];
-  routeStart={lat:p.lat,lng:p.lng,addr:p.addr||'Selected pin'};
-  document.getElementById('route-start-text').textContent='📍 Start: '+routeStart.addr;
-  document.getElementById('route-start-label').classList.add('ready');
-  closeSheet();showToast('Route start set');
-});
-document.getElementById('sheet-delete').addEventListener('click',()=>{
-  if(!currentPinId)return;
-  const id=currentPinId;
-  if(markers[id])map.removeLayer(markers[id]);
-  delete markers[id];delete pins[id];
-  updateStats();closeSheet();showToast('Pin removed');
-  schedulePush();syncToSheets('delete',null,id);
-});
-
-// ── Map tap ──────────────────────────────────────────────
-function getNeighborhoodYearForPoint(lat,lng){
-  for(const zone of neighborhoodYears){
-    if(zone.polygon&&zone.polygon.length>=3&&pointInPolygon(lat,lng,zone.polygon))return zone.year;
-    if(zone.radius){
-      const dist=Math.sqrt(Math.pow((lat-zone.lat)*111000,2)+Math.pow((lng-zone.lng)*111000*Math.cos(zone.lat*Math.PI/180),2));
-      if(dist<=zone.radius)return zone.year;
-    }
-  }
-  return '';
-}
-map.on('click',async(e)=>{
-  const{lat,lng}=e.latlng;
-  if(drawingMode){
-    drawnPoints.push([lat,lng]);
-    const dot=L.circleMarker([lat,lng],{radius:5,color:'#4f6ef7',fillColor:'#4f6ef7',fillOpacity:1,weight:2});
-    dot.addTo(map);drawnMarkers.push(dot);updateDrawingLayers();return;
-  }
-  const id=lat.toFixed(6)+','+lng.toFixed(6);
-  if(!pins[id]){
-    const autoYear=getNeighborhoodYearForPoint(lat,lng);
-    pins[id]={lat,lng,addr:'Loading address…',status:'none',note:'',yearBuilt:autoYear,ts:Date.now()};
-    addOrUpdateMarker(id);updateStats();
-    reverseGeocode(lat,lng,id);
-  }
-  openSheet(id);
-});
-async function reverseGeocode(lat,lng,id){
-  let addr='';
-  try{
-    const r=await fetch(`${GEO_PROXY}?lat=${lat}&lng=${lng}`);
-    const d=await r.json();
-    if(d.status==='OK'&&d.results&&d.results.length>0){
-      const best=d.results.find(r=>r.geometry.location_type==='ROOFTOP'||r.geometry.location_type==='RANGE_INTERPOLATED')||d.results[0];
-      addr=best.formatted_address||'';
-    }
-  }catch(e){}
-  if(!addr){
-    try{
-      const r=await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&addressdetails=1&zoom=18`);
-      const d=await r.json();
-      if(d.address){
-        const a=d.address;const num=a.house_number||'',road=a.road||'';
-        const city=a.city||a.town||a.village||'Knoxville';const state=a.state_code||'TN',zip=a.postcode||'';
-        if(num&&road)addr=`${num} ${road}, ${city}, ${state} ${zip}`.trim();
-      }
-    }catch(e){}
-  }
-  if(!addr)addr=`${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-  if(pins[id]){
-    pins[id].addr=addr;schedulePush();
-    if(currentPinId===id){
-      document.getElementById('sheet-addr').textContent=addr;
-      document.getElementById('zillow-btn').href=`https://www.zillow.com/homes/${encodeURIComponent(addr)}_rb/`;
-    }
-  }
-}
-
-// ── Legend ───────────────────────────────────────────────
-document.querySelectorAll('#legend .legend-row').forEach(row=>{
-  row.addEventListener('click',()=>{
-    const f=row.dataset.filter;
-    if(f==='all'){hiddenStatuses.clear();document.querySelectorAll('#legend .legend-row').forEach(r=>r.classList.add('active'));}
-    else{
-      hiddenStatuses.has(f)?hiddenStatuses.delete(f):hiddenStatuses.add(f);
-      row.classList.toggle('active',!hiddenStatuses.has(f));
-      document.querySelector('#legend .legend-row[data-filter="all"]').classList.toggle('active',
-        document.querySelectorAll('#legend .legend-row[data-filter]:not([data-filter="all"]).active').length===5);
-    }
-    renderAllMarkers();
-  });
-});
-
-// ── Search ───────────────────────────────────────────────
-const searchInput=document.getElementById('search-input');
-const searchResults=document.getElementById('search-results');
-let searchTimeout;
-searchInput.addEventListener('input',()=>{
-  clearTimeout(searchTimeout);const q=searchInput.value.trim();
-  if(q.length<3){searchResults.style.display='none';return;}
-  searchTimeout=setTimeout(()=>doSearch(q),400);
-});
-async function doSearch(q){
-  try{
-    const r=await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q+' Knoxville Tennessee')}&format=json&limit=5`);
-    const data=await r.json();searchResults.innerHTML='';
-    if(!data.length){searchResults.style.display='none';return;}
-    const rect=document.getElementById('search-bar').getBoundingClientRect();
-    searchResults.style.top=(rect.bottom+6)+'px';
-    data.forEach(item=>{
-      const d=document.createElement('div');d.className='search-result';
-      const parts=item.display_name.split(',');
-      d.innerHTML=`<strong>${parts[0]}</strong>, ${parts.slice(1,3).join(',')}`;
-      d.addEventListener('click',()=>{
-        const lat=parseFloat(item.lat),lng=parseFloat(item.lon);
-        map.setView([lat,lng],17);searchResults.style.display='none';searchInput.value='';searchInput.blur();
-        const id=lat.toFixed(6)+','+lng.toFixed(6);
-        if(!pins[id]){
-          const autoYear=getNeighborhoodYearForPoint(lat,lng);
-          pins[id]={lat,lng,addr:item.display_name.split(',').slice(0,3).join(','),status:'none',note:'',yearBuilt:autoYear,ts:Date.now()};
-          addOrUpdateMarker(id);updateStats();schedulePush();
-        }
-        setTimeout(()=>openSheet(id),300);
-      });
-      searchResults.appendChild(d);
-    });
-    searchResults.style.display='block';
-  }catch(e){searchResults.style.display='none';}
-}
-document.addEventListener('click',e=>{if(!e.target.closest('#search-bar')&&!e.target.closest('#search-results'))searchResults.style.display='none';});
-
-// ── Roofing mode ─────────────────────────────────────────
-function renderZonePolygons(){
-  zonePolygonLayers.forEach(l=>map.removeLayer(l));zonePolygonLayers=[];
-  if(!roofingMode)return;
-  neighborhoodYears.forEach(zone=>{
-    if(!zone.polygon||zone.polygon.length<3)return;
-    const isTarget=parseInt(zone.year)<=ROOF_CUTOFF;
-    const color=isTarget?'#10b981':'#6b7280';
-    const layer=L.polygon(zone.polygon,{color,weight:2.5,fillColor:color,fillOpacity:isTarget?0.18:0.06,dashArray:isTarget?null:'6,4'}).addTo(map);
-    const bounds=layer.getBounds(),center=bounds.getCenter();
-    const label=L.divIcon({html:`<div style="background:${color};color:#fff;padding:3px 8px;border-radius:10px;font-size:11px;font-weight:700;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.3)">${zone.name||'Zone'} · ${zone.year}</div>`,className:'',iconAnchor:[0,0]});
-    zonePolygonLayers.push(layer);zonePolygonLayers.push(L.marker(center,{icon:label,interactive:false}).addTo(map));
-  });
-}
-function toggleRoofingMode(){
-  roofingMode=!roofingMode;
-  document.getElementById('roof-mode-btn').classList.toggle('active',roofingMode);
-  document.getElementById('roof-mode-banner').classList.toggle('show',roofingMode);
-  renderZonePolygons();
-}
-document.getElementById('roof-mode-btn').addEventListener('click',toggleRoofingMode);
-
-// ── Zone drawing ─────────────────────────────────────────
-function pointInPolygon(lat,lng,polygon){
-  let inside=false;
-  for(let i=0,j=polygon.length-1;i<polygon.length;j=i++){
-    const xi=polygon[i][0],yi=polygon[i][1],xj=polygon[j][0],yj=polygon[j][1];
-    if(((yi>lng)!==(yj>lng))&&(lat<(xj-xi)*(lng-yi)/(yj-yi)+xi))inside=!inside;
-  }
-  return inside;
-}
-function updateDrawingLayers(){
-  if(drawnPolyline)map.removeLayer(drawnPolyline);
-  if(drawnPolygon)map.removeLayer(drawnPolygon);
-  if(drawnPoints.length>=2)drawnPolyline=L.polyline(drawnPoints,{color:'#4f6ef7',weight:2,dashArray:'6,4'}).addTo(map);
-  if(drawnPoints.length>=3)drawnPolygon=L.polygon(drawnPoints,{color:'#4f6ef7',weight:2,fillColor:'#4f6ef7',fillOpacity:0.1}).addTo(map);
-  document.getElementById('zone-point-count').textContent=
-    drawnPoints.length===0?'0 points — tap the map to start':
-    drawnPoints.length<3?`${drawnPoints.length} point(s) — need at least 3`:
-    `${drawnPoints.length} points — ready to save`;
-}
-function startDrawing(forRoute){
-  drawingMode=true;drawingForRoute=!!forRoute;
-  drawnPoints=[];drawnMarkers=[];
-  if(drawnPolyline){map.removeLayer(drawnPolyline);drawnPolyline=null;}
-  if(drawnPolygon){map.removeLayer(drawnPolygon);drawnPolygon=null;}
-  document.getElementById('zone-toolbar').classList.add('active');
-  if(drawingForRoute){
-    document.getElementById('zone-toolbar-title').textContent='🗺 Draw ROUTE zone — tap edges';
-    document.getElementById('zone-year-input').style.display='none';
-    document.getElementById('zone-name-input').style.display='none';
-    document.getElementById('zone-finish-btn').textContent='✓ Set Route Zone';
-  }else{
-    document.getElementById('zone-toolbar-title').textContent='📍 Tap map edges to draw zone';
-    document.getElementById('zone-year-input').style.display='';
-    document.getElementById('zone-name-input').style.display='';
-    document.getElementById('zone-finish-btn').textContent='✓ Save Zone';
-  }
-  document.getElementById('zone-point-count').textContent='0 points — tap the map to start';
-  map.getContainer().style.cursor='crosshair';
-}
-function stopDrawing(){
-  drawingMode=false;drawnPoints=[];
-  drawnMarkers.forEach(m=>map.removeLayer(m));drawnMarkers=[];
-  if(drawnPolyline){map.removeLayer(drawnPolyline);drawnPolyline=null;}
-  if(drawnPolygon){map.removeLayer(drawnPolygon);drawnPolygon=null;}
-  document.getElementById('zone-toolbar').classList.remove('active');
-  document.getElementById('zone-year-input').value='';
-  document.getElementById('zone-name-input').value='';
-  map.getContainer().style.cursor='';
-}
-document.getElementById('draw-zone-btn').addEventListener('click',()=>{if(drawingMode)stopDrawing();else startDrawing(false);});
-document.getElementById('zone-cancel-btn').addEventListener('click',stopDrawing);
-document.getElementById('zone-undo-btn').addEventListener('click',()=>{
-  if(!drawnPoints.length)return;
-  drawnPoints.pop();const m=drawnMarkers.pop();if(m)map.removeLayer(m);updateDrawingLayers();
-});
-document.getElementById('zone-finish-btn').addEventListener('click',()=>{
-  if(drawnPoints.length<3){showToast('Need at least 3 points');return;}
-  if(drawingForRoute){
-    if(routeZoneLayer)map.removeLayer(routeZoneLayer);
-    routeZonePolygon=drawnPoints.map(p=>[p[0],p[1]]);
-    routeZoneLayer=L.polygon(routeZonePolygon,{color:'#f59e0b',weight:2,fillColor:'#f59e0b',fillOpacity:0.1,dashArray:'6,4'}).addTo(map);
-    const lats=routeZonePolygon.map(p=>p[0]),lngs=routeZonePolygon.map(p=>p[1]);
-    if(!routeStart)routeStart={lat:(Math.min(...lats)+Math.max(...lats))/2,lng:(Math.min(...lngs)+Math.max(...lngs))/2,addr:'Zone center'};
-    document.getElementById('route-zone-status').classList.add('ready');
-    document.getElementById('route-zone-text').textContent=`Zone drawn · ${routeZonePolygon.length} points`;
-    stopDrawing();routePanel.classList.add('open');showToast('Route zone set');return;
-  }
-  const year=document.getElementById('zone-year-input').value;
-  const name=document.getElementById('zone-name-input').value||'Zone '+(neighborhoodYears.length+1);
-  if(!year){showToast('Enter a year built first');return;}
-  let count=0;
-  Object.keys(pins).forEach(id=>{
-    const p=pins[id];if(pointInPolygon(p.lat,p.lng,drawnPoints)){pins[id].yearBuilt=year;count++;}
-  });
-  neighborhoodYears.push({name,year,polygon:drawnPoints.map(p=>[p[0],p[1]])});
-  localStorage.setItem('knoxNeighborhoodYears',JSON.stringify(neighborhoodYears));
-  stopDrawing();schedulePush();renderAllMarkers();renderZonePolygons();
-  showToast(`"${name}" zone saved · ${count} pins updated`);
-});
-
-// ── Route ─────────────────────────────────────────────────
-function distBetween(a,b){
-  return Math.sqrt(Math.pow((b.lat-a.lat)*111000,2)+Math.pow((b.lng-a.lng)*111000*Math.cos(a.lat*Math.PI/180),2));
-}
-function optimizeRoute(start,stops){
-  const remaining=[...stops],route=[];let current=start;
-  while(remaining.length>0){
-    let nearestIdx=0,nearestDist=Infinity;
-    remaining.forEach((s,i)=>{const d=distBetween(current,s);if(d<nearestDist){nearestDist=d;nearestIdx=i;}});
-    route.push(remaining[nearestIdx]);current=remaining[nearestIdx];remaining.splice(nearestIdx,1);
-  }
-  return route;
-}
-function drawRoute(route){
-  routeMarkers.forEach(m=>map.removeLayer(m));routePolylines.forEach(l=>map.removeLayer(l));
-  routeMarkers=[];routePolylines=[];
-  const startIcon=L.divIcon({html:`<div style="background:#fff;border:3px solid #4f6ef7;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#4f6ef7;box-shadow:0 2px 8px rgba(0,0,0,0.3)">S</div>`,iconSize:[24,24],iconAnchor:[12,12],className:''});
-  routeMarkers.push(L.marker([routeStart.lat,routeStart.lng],{icon:startIcon}).addTo(map));
-  let prev=routeStart;
-  route.forEach((stop,i)=>{
-    const icon=L.divIcon({html:`<div style="background:#f59e0b;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;box-shadow:0 2px 8px rgba(0,0,0,0.3)">${i+1}</div>`,iconSize:[26,26],iconAnchor:[13,13],className:''});
-    routeMarkers.push(L.marker([stop.lat,stop.lng],{icon}).addTo(map));
-    routePolylines.push(L.polyline([[prev.lat,prev.lng],[stop.lat,stop.lng]],{color:'#f59e0b',weight:2,opacity:0.7,dashArray:'6,4'}).addTo(map));
-    prev=stop;
-  });
-}
-const routePanel=document.getElementById('route-panel');
-document.getElementById('route-btn').addEventListener('click',()=>{routePanel.classList.add('open');document.getElementById('route-btn').classList.add('active');});
-document.getElementById('route-back').addEventListener('click',()=>{routePanel.classList.remove('open');document.getElementById('route-btn').classList.remove('active');});
-document.getElementById('route-draw-zone-btn').addEventListener('click',()=>{routePanel.classList.remove('open');startDrawing(true);});
-
-async function fetchHousesFromOSM(lat,lng,polygon){
-  const bbox=polygon&&polygon.length>=3?(()=>{
-    const lats=polygon.map(p=>p[0]),lngs=polygon.map(p=>p[1]);
-    return `(${Math.min(...lats)},${Math.min(...lngs)},${Math.max(...lats)},${Math.max(...lngs)})`;
-  })():`(around:800,${lat},${lng})`;
-  const query=`[out:json][timeout:25];(node["addr:housenumber"]${bbox};way["addr:housenumber"]${bbox};);out center;`;
-  const endpoints=['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter','https://maps.mail.ru/osm/tools/overpass/api/interpreter','https://overpass.openstreetmap.ru/api/interpreter'];
-  for(const ep of endpoints){
-    for(const method of ['GET','POST']){
-      try{
-        const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),25000);
-        const url=method==='GET'?`${ep}?data=${encodeURIComponent(query)}`:ep;
-        const opts=method==='GET'?{signal:controller.signal}:{method:'POST',body:'data='+encodeURIComponent(query),signal:controller.signal};
-        const r=await fetch(url,opts);clearTimeout(timer);
-        if(!r.ok)continue;
-        const d=await r.json();if(!d.elements)continue;
-        return d.elements.map(el=>{
-          const elLat=el.lat||el.center?.lat,elLng=el.lon||el.center?.lon;
-          if(!elLat||!elLng)return null;
-          if(polygon&&polygon.length>=3&&!pointInPolygon(elLat,elLng,polygon))return null;
-          const num=el.tags?.['addr:housenumber']||'',street=el.tags?.['addr:street']||'';
-          return{lat:elLat,lng:elLng,addr:num&&street?`${num} ${street}`:`${elLat.toFixed(4)},${elLng.toFixed(4)}`};
-        }).filter(Boolean);
-      }catch(e){continue;}
-    }
-  }
-  throw new Error('All Overpass endpoints failed');
-}
-
-document.getElementById('route-go-btn').addEventListener('click',async()=>{
-  if(!routeStart&&routeZonePolygon&&routeZonePolygon.length>=3){
-    const lats=routeZonePolygon.map(p=>p[0]),lngs=routeZonePolygon.map(p=>p[1]);
-    routeStart={lat:(Math.min(...lats)+Math.max(...lats))/2,lng:(Math.min(...lngs)+Math.max(...lngs))/2,addr:'Zone center'};
-  }
-  if(!routeStart){showToast('Draw a zone or tap a pin to set start');return;}
-  const skipVisited=document.getElementById('route-unvisited').checked;
-  const skipDnr=document.getElementById('route-skip-dnr').checked;
-  document.getElementById('route-loading').style.display='block';
-  document.getElementById('route-go-btn').style.display='none';
-  document.getElementById('route-result').innerHTML='';
-  try{
-    const houses=await fetchHousesFromOSM(routeStart.lat,routeStart.lng,routeZonePolygon);
-    const stops=houses.filter(h=>{
-      const id=h.lat.toFixed(6)+','+h.lng.toFixed(6);const existing=pins[id];
-      if(existing){if(skipVisited&&existing.status!=='none')return false;if(skipDnr&&existing.status==='dnr')return false;}
-      return true;
-    });
-    if(stops.length===0){showToast('No houses found in zone');return;}
-    const route=optimizeRoute(routeStart,stops);drawRoute(route);
-    if(routeMarkers.length>0){const group=L.featureGroup(routeMarkers);map.fitBounds(group.getBounds().pad(0.15));}
-    const totalDist=route.reduce((acc,stop,i)=>acc+(i===0?distBetween(routeStart,stop):distBetween(route[i-1],stop)),0);
-    const resultEl=document.getElementById('route-result');
-    resultEl.innerHTML=`
-      <button id="route-view-map-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/></svg>View Route on Map</button>
-      <div class="route-stop"><div class="route-num" style="background:#fff;color:#4f6ef7;border:2px solid #4f6ef7">S</div><div class="route-addr">${routeStart.addr} <span style="color:var(--text2);font-size:11px">(Start)</span></div></div>
-      ${route.map((stop,i)=>{
-        const dist=i===0?distBetween(routeStart,stop):distBetween(route[i-1],stop);
-        return `<div class="route-stop"><div class="route-num">${i+1}</div><div class="route-addr">${stop.addr}</div><div class="route-dist">${dist<100?Math.round(dist)+'m':(dist/1000).toFixed(2)+'km'}</div></div>`;
-      }).join('')}
-      <div id="route-total">${route.length} stops · ${totalDist<1000?Math.round(totalDist)+'m':(totalDist/1000).toFixed(1)+'km'} total</div>`;
-    document.getElementById('route-view-map-btn').addEventListener('click',()=>{
-      routePanel.classList.remove('open');document.getElementById('route-btn').classList.remove('active');
-      if(routeMarkers.length>0){const group=L.featureGroup(routeMarkers);map.fitBounds(group.getBounds().pad(0.15));}
-    });
-    setTimeout(()=>{const panel=document.getElementById('route-panel');const result=document.getElementById('route-result');if(panel&&result)panel.scrollTo({top:result.offsetTop-20,behavior:'smooth'});},100);
-    showToast(`Route: ${route.length} houses`);
-  }catch(e){showToast('Could not fetch houses — check connection');console.error(e);}
-  finally{document.getElementById('route-loading').style.display='none';document.getElementById('route-go-btn').style.display='flex';}
-});
-
-document.getElementById('route-clear-btn').addEventListener('click',()=>{
-  routeMarkers.forEach(m=>map.removeLayer(m));routePolylines.forEach(l=>map.removeLayer(l));
-  routeMarkers=[];routePolylines=[];routeStart=null;routeZonePolygon=null;
-  if(routeZoneLayer){map.removeLayer(routeZoneLayer);routeZoneLayer=null;}
-  document.getElementById('route-start-text').textContent='Tap a pin on the map → "Set as route start"';
-  document.getElementById('route-start-label').classList.remove('ready');
-  document.getElementById('route-zone-status').classList.remove('ready');
-  document.getElementById('route-zone-text').textContent='No zone drawn';
-  document.getElementById('route-result').innerHTML='';
-  showToast('Route cleared');
-});
-
-// ── Export ───────────────────────────────────────────────
-const exportPanel=document.getElementById('export-panel');
-let exportIncluded=new Set(['none','hanger','interest','no','dnr']);
-document.getElementById('export-btn').addEventListener('click',()=>{buildExportPanel();exportPanel.classList.add('open');});
-document.getElementById('export-back').addEventListener('click',()=>exportPanel.classList.remove('open'));
-document.getElementById('force-sync-btn').addEventListener('click',async()=>{
-  showToast('Syncing…');const ok=await pullFromCloud();
-  if(ok){renderAllMarkers();showToast('Sync complete');}else showToast('Could not reach cloud');
-});
-function buildExportPanel(){
-  const counts={none:0,hanger:0,interest:0,no:0,dnr:0};
-  Object.values(pins).forEach(p=>{if(counts[p.status]!==undefined)counts[p.status]++;});
-  const total=Object.values(counts).reduce((a,b)=>a+b,0);
-  document.getElementById('export-summary').innerHTML=`
-    <div class="export-stat"><div class="es-label">Total pins</div><div class="es-val">${total}</div></div>
-    <div class="export-stat"><div class="es-label" style="color:var(--c-interest)">Interested</div><div class="es-val" style="color:var(--c-interest)">${counts.interest}</div></div>
-    <div class="export-stat"><div class="es-label" style="color:var(--c-hanger)">Door hangers</div><div class="es-val" style="color:var(--c-hanger)">${counts.hanger}</div></div>
-    <div class="export-stat"><div class="es-label" style="color:var(--c-dnr)">Do not return</div><div class="es-val" style="color:var(--c-dnr)">${counts.dnr}</div></div>`;
-  const tw=document.getElementById('export-status-toggles');tw.innerHTML='';
-  Object.entries(LABELS).forEach(([k,label])=>{
-    const btn=document.createElement('button');btn.className='etoggle'+(exportIncluded.has(k)?' on':'');
-    btn.innerHTML=`<span class="dot" style="background:${COLORS[k]}"></span>${label}`;
-    btn.addEventListener('click',()=>{exportIncluded.has(k)?exportIncluded.delete(k):exportIncluded.add(k);btn.classList.toggle('on',exportIncluded.has(k));buildPreview();});
-    tw.appendChild(btn);
-  });buildPreview();
-}
-function buildPreview(){
-  const rows=Object.values(pins).filter(p=>exportIncluded.has(p.status)).sort((a,b)=>b.ts-a.ts);
-  document.getElementById('export-count').textContent=`(${rows.length} rows)`;
-  const wrap=document.getElementById('export-preview');
-  if(!rows.length){wrap.innerHTML='<div class="ep-empty">No pins match selected filters</div>';return;}
-  wrap.innerHTML=rows.slice(0,50).map(p=>{
-    const date=new Date(p.ts).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
-    return `<div class="ep-row"><div><div class="ep-addr">${p.addr||'Unknown'}</div><div class="ep-status" style="color:${COLORS[p.status]}">${LABELS[p.status]}</div></div><div class="ep-date">${date}</div></div>`;
-  }).join('')+(rows.length>50?`<div class="ep-empty">+ ${rows.length-50} more in CSV</div>`:'');
-}
-document.getElementById('export-csv-btn').addEventListener('click',()=>{
-  const rows=Object.values(pins).filter(p=>exportIncluded.has(p.status)).sort((a,b)=>b.ts-a.ts);
-  if(!rows.length){showToast('No data to export');return;}
-  const esc=v=>`"${String(v).replace(/"/g,'""')}"`;
-  const lines=['Address,Status,Date Added,Note,Year Built,Latitude,Longitude'];
-  rows.forEach(p=>{
-    const date=new Date(p.ts).toLocaleDateString('en-US',{month:'2-digit',day:'2-digit',year:'numeric'});
-    lines.push([esc(p.addr||''),esc(LABELS[p.status]||p.status),esc(date),esc(p.note||''),esc(p.yearBuilt||''),esc(p.lat.toFixed(6)),esc(p.lng.toFixed(6))].join(','));
-  });
-  const blob=new Blob([lines.join('\n')],{type:'text/csv'});
-  const url=URL.createObjectURL(blob);const a=document.createElement('a');
-  a.href=url;a.download=`knoxcanvas_${new Date().toISOString().slice(0,10)}.csv`;a.click();
-  URL.revokeObjectURL(url);showToast('CSV downloaded');
-});
-
-// ── Toast ────────────────────────────────────────────────
-function showToast(msg){
-  const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');
-  setTimeout(()=>t.classList.remove('show'),2000);
-}
-
-// ── Boot ─────────────────────────────────────────────────
-async function bootApp(){
-  try{const d=localStorage.getItem('knoxPins');if(d)pins=JSON.parse(d);}catch(e){}
-  try{const d=localStorage.getItem('knoxNeighborhoodYears');if(d)neighborhoodYears=JSON.parse(d);}catch(e){}
-  try{const d=localStorage.getItem('knoxShifts');if(d)shifts=JSON.parse(d);}catch(e){}
-
-  // Restore clock-in state if app was closed mid-shift
-  try{
-    const ci=localStorage.getItem('knoxClockIn');
-    if(ci){
-      const{time,hangersAtStart}=JSON.parse(ci);
-      clockInTime=time;shiftHangersAtClockIn=hangersAtStart;clockedIn=true;
-      document.getElementById('clock-btn').textContent='Clock Out';
-      document.getElementById('clock-btn').className='clocked-in';
-      document.getElementById('clock-status').textContent='Clocked In';
-      document.getElementById('clock-timer').classList.add('running');
-      document.getElementById('clock-date').textContent=formatDate(clockInTime);
-      document.getElementById('clock-hangers-live').style.display='block';
-      document.getElementById('shifts-btn').classList.add('active');
-      startClockTimer();
-    }
-  }catch(e){}
-
-  renderAllMarkers();map.invalidateSize();
-  setSyncStatus('syncing','Syncing…');
-  const ok=await pullFromCloud();
-  if(ok){renderAllMarkers();setSyncStatus('ok');}
-  else{setSyncStatus('err','Local only');showToast('Cloud unavailable — using local data');}
-}
-
-if(checkSession()){document.getElementById('login-screen').classList.add('hidden');bootApp();}
-window.addEventListener('resize',()=>map.invalidateSize());
+document.getElementById('setup-invite-code').addEventListener('input',e=>{e.target.value=e.target.value.toUpperCase();});
 </script>
 </body>
 </html>

@@ -11,7 +11,7 @@
 <!-- Firebase -->
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import { getFirestore, doc, setDoc, getDoc, collection, addDoc, query, where, getDocs, onSnapshot, deleteDoc, updateDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 const firebaseConfig = {
@@ -27,6 +27,7 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({ prompt: 'select_account' });
 
 // ── State ─────────────────────────────────────────────────
 let currentUser = null;
@@ -56,6 +57,14 @@ const GEO_PROXY = 'https://broken-tree-befb.connorbdowney48.workers.dev';
 const SHEETS_URL = 'https://script.google.com/macros/s/AKfycbxeNoWtEdYnmXDfGq9aBjRpspGS6nucshZaxWj2OYY63zVtOb7XtZuYoDRsgCV0aVFs/exec';
 
 // ── Auth State ────────────────────────────────────────────
+// Handle Google redirect result on page load
+getRedirectResult(auth).catch(e => {
+  if (e && e.code) {
+    const msg = e.code === 'auth/popup-closed-by-user' ? '' : 'Google sign-in failed. Try again.';
+    if (msg) setAuthErr(msg);
+  }
+});
+
 onAuthStateChanged(auth, async (user) => {
   if (user) {
     currentUser = user;
@@ -94,6 +103,7 @@ function showApp() {
   initApp();
   // Show admin button only for owners
   document.getElementById('admin-btn').style.display = currentUserProfile.role === 'owner' ? 'flex' : 'none';
+  document.getElementById('metrics-btn').style.display = currentUserProfile.role === 'owner' ? 'flex' : 'none';
 }
 
 function showSetup() {
@@ -153,10 +163,18 @@ document.getElementById('register-btn').addEventListener('click', async () => {
 document.getElementById('google-login-btn').addEventListener('click', async () => {
   setAuthErr('');
   try {
-    await signInWithPopup(auth, googleProvider);
-    // If new Google user, setup screen will show
+    // Try popup first, fall back to redirect if blocked
+    const result = await signInWithPopup(auth, googleProvider).catch(async (err) => {
+      if (err.code === 'auth/popup-blocked' || err.code === 'auth/cancelled-popup-request' || err.message?.includes('Cross-Origin')) {
+        await signInWithRedirect(auth, googleProvider);
+        return null;
+      }
+      throw err;
+    });
   } catch(e) {
-    setAuthErr(friendlyAuthError(e.code));
+    if (e && e.code !== 'auth/popup-closed-by-user') {
+      setAuthErr(friendlyAuthError(e.code));
+    }
   }
 });
 
@@ -947,6 +965,169 @@ document.getElementById('export-csv-btn').addEventListener('click',()=>{
   URL.revokeObjectURL(url);showToast('CSV downloaded');
 });
 
+// ── Metrics ───────────────────────────────────────────────
+let metricsRange = 'today';
+let metricsUid = 'all';
+let allEmployees = []; // [{uid, name}]
+let allShifts = []; // all company shifts
+
+function getRangeMs(range) {
+  const now = Date.now();
+  const d = new Date(); d.setHours(0,0,0,0);
+  if (range === 'today') return d.getTime();
+  if (range === 'week') { d.setDate(d.getDate() - d.getDay()); return d.getTime(); }
+  if (range === 'month') { d.setDate(1); return d.getTime(); }
+  return 0; // all time
+}
+
+document.getElementById('metrics-btn').addEventListener('click', async () => {
+  document.getElementById('metrics-panel').classList.add('open');
+  await loadMetrics();
+});
+document.getElementById('metrics-back').addEventListener('click', () => {
+  document.getElementById('metrics-panel').classList.remove('open');
+});
+document.getElementById('metrics-refresh-btn').addEventListener('click', loadMetrics);
+
+document.querySelectorAll('.mtime-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.mtime-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    metricsRange = btn.dataset.range;
+    renderMetrics();
+  });
+});
+
+async function loadMetrics() {
+  if (currentUserProfile.role !== 'owner') return;
+
+  // Load all employees in company
+  const empSnap = await getDocs(query(collection(db, 'users'), where('companyId', '==', companyId)));
+  allEmployees = [];
+  empSnap.forEach(d => allEmployees.push({ uid: d.id, ...d.data() }));
+
+  // Load all shifts
+  const shiftsSnap = await getDocs(collection(db, 'companies', companyId, 'shifts'));
+  allShifts = [];
+  shiftsSnap.forEach(d => allShifts.push({ id: d.id, ...d.data() }));
+  allShifts.sort((a,b) => b.clockIn - a.clockIn);
+
+  // Rebuild employee selector
+  const sel = document.getElementById('metrics-emp-selector');
+  sel.innerHTML = '<button class="memp-btn active" data-uid="all">All Employees</button>';
+  allEmployees.forEach(emp => {
+    const btn = document.createElement('button');
+    btn.className = 'memp-btn';
+    btn.dataset.uid = emp.uid;
+    btn.textContent = emp.name || emp.email;
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.memp-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      metricsUid = emp.uid;
+      renderMetrics();
+    });
+    sel.appendChild(btn);
+  });
+  // All employees button handler
+  sel.querySelector('[data-uid="all"]').addEventListener('click', () => {
+    document.querySelectorAll('.memp-btn').forEach(b => b.classList.remove('active'));
+    sel.querySelector('[data-uid="all"]').classList.add('active');
+    metricsUid = 'all';
+    renderMetrics();
+  });
+
+  renderMetrics();
+}
+
+function renderMetrics() {
+  const since = getRangeMs(metricsRange);
+
+  // Filter shifts by time and employee
+  const filtered = allShifts.filter(s => {
+    if (s.clockIn < since) return false;
+    if (metricsUid !== 'all' && s.userId !== metricsUid) return false;
+    return true;
+  });
+
+  // Count interested pins per employee (from pins collection)
+  const interestedCount = Object.values(pins).filter(p => p.status === 'interest').length;
+
+  // Summary totals
+  const totalHangers = filtered.reduce((a,s) => a + (s.hangers||0), 0);
+  const totalHours = filtered.reduce((a,s) => a + (s.durationMs||0), 0) / 3600000;
+  const totalShifts = filtered.length;
+  const avgRate = totalHours > 0 ? (totalHangers / totalHours).toFixed(1) : '0';
+  const interested = metricsUid === 'all' ? interestedCount : Object.values(pins).filter(p => p.status === 'interest' && p.updatedBy === metricsUid).length;
+
+  document.getElementById('metrics-summary').innerHTML = `
+    <div class="metric-card accent">
+      <div class="mc-val">${totalHangers}</div>
+      <div class="mc-label">Hangers</div>
+    </div>
+    <div class="metric-card accent" style="--c-hanger:#10b981">
+      <div class="mc-val" style="color:var(--c-interest)">${interested}</div>
+      <div class="mc-label">Interested</div>
+    </div>
+    <div class="metric-card">
+      <div class="mc-val">${avgRate}</div>
+      <div class="mc-label">Hangers/hr</div>
+    </div>
+    <div class="metric-card">
+      <div class="mc-val">${totalHours.toFixed(1)}h</div>
+      <div class="mc-label">Hours</div>
+    </div>
+    <div class="metric-card">
+      <div class="mc-val">${totalShifts}</div>
+      <div class="mc-label">Shifts</div>
+    </div>
+    <div class="metric-card">
+      <div class="mc-val">${Math.round(totalHangers / (totalShifts||1))}</div>
+      <div class="mc-label">Hangers/shift</div>
+    </div>`;
+
+  // Employee breakdown (only show when "All Employees" selected)
+  const breakdownWrap = document.getElementById('metrics-breakdown-wrap');
+  const breakdown = document.getElementById('metrics-breakdown');
+  if (metricsUid === 'all') {
+    breakdownWrap.style.display = 'block';
+    breakdown.innerHTML = allEmployees.map(emp => {
+      const empShifts = filtered.filter(s => s.userId === emp.uid);
+      const empHangers = empShifts.reduce((a,s) => a+(s.hangers||0), 0);
+      const empHours = empShifts.reduce((a,s) => a+(s.durationMs||0), 0) / 3600000;
+      const empRate = empHours > 0 ? (empHangers/empHours).toFixed(1) : '0';
+      return `<div class="breakdown-row">
+        <div class="breakdown-name">${emp.name || emp.email}</div>
+        <div class="breakdown-stats">
+          <div class="breakdown-stat hi"><div class="bs-val">${empHangers}</div><div class="bs-label">Hangers</div></div>
+          <div class="breakdown-stat"><div class="bs-val">${empRate}</div><div class="bs-label">Per Hour</div></div>
+          <div class="breakdown-stat"><div class="bs-val">${empHours.toFixed(1)}h</div><div class="bs-label">Hours</div></div>
+        </div>
+      </div>`;
+    }).join('') || '<div style="padding:16px;color:var(--text2);font-size:13px;text-align:center">No employee data yet</div>';
+  } else {
+    breakdownWrap.style.display = 'none';
+  }
+
+  // Recent shifts list
+  const recentShifts = filtered.slice(0, 20);
+  document.getElementById('metrics-shifts').innerHTML = recentShifts.map(s => {
+    const emp = allEmployees.find(e => e.uid === s.userId);
+    const name = emp ? (emp.name || emp.email) : 'Unknown';
+    const date = new Date(s.clockIn).toLocaleDateString('en-US', {weekday:'short', month:'short', day:'numeric'});
+    const duration = formatDuration(s.durationMs);
+    return `<div class="mshift-row">
+      <div class="mshift-left">
+        <div class="mshift-name">${name}</div>
+        <div class="mshift-date">${date} · ${duration}</div>
+      </div>
+      <div class="mshift-right">
+        <div class="mshift-hangers">${s.hangers||0}</div>
+        <div class="mshift-rate">${s.hangersPerHour||0}/hr</div>
+      </div>
+    </div>`;
+  }).join('') || '<div style="padding:16px;color:var(--text2);font-size:13px;text-align:center">No shifts in this period</div>';
+}
+
 // ── Toast ─────────────────────────────────────────────────
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2000);}
 
@@ -1166,6 +1347,36 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--bg);font-famil
 .emp-name{font-size:14px;font-weight:600}
 .emp-email{font-size:12px;color:var(--text2);margin-top:2px}
 
+/* Metrics */
+#metrics-time-filters{display:flex;gap:8px;padding:16px 16px 8px;flex-wrap:wrap}
+.mtime-btn{padding:7px 14px;border-radius:20px;border:1px solid var(--border);background:var(--surface);color:var(--text2);font-size:13px;font-weight:600;cursor:pointer;-webkit-appearance:none}
+.mtime-btn.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+#metrics-emp-selector{display:flex;gap:8px;padding:0 16px 12px;flex-wrap:wrap;overflow-x:auto}
+.memp-btn{padding:6px 14px;border-radius:20px;border:1px solid var(--border);background:var(--surface);color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;-webkit-appearance:none}
+.memp-btn.active{background:var(--surface2);color:var(--text);border-color:rgba(255,255,255,0.2)}
+#metrics-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:0 16px 16px}
+.metric-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:12px;text-align:center}
+.metric-card .mc-val{font-size:26px;font-weight:800;color:var(--text)}
+.metric-card .mc-label{font-size:10px;color:var(--text2);margin-top:3px;text-transform:uppercase;letter-spacing:0.4px}
+.metric-card.accent .mc-val{color:var(--c-hanger)}
+.metrics-section-title{font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;padding:0 16px 8px}
+#metrics-breakdown{padding:0 16px 16px;display:flex;flex-direction:column;gap:8px}
+.breakdown-row{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px}
+.breakdown-name{font-size:14px;font-weight:600;margin-bottom:6px}
+.breakdown-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.breakdown-stat{background:var(--surface2);border-radius:8px;padding:6px 8px;text-align:center}
+.breakdown-stat .bs-val{font-size:16px;font-weight:700;color:var(--text)}
+.breakdown-stat .bs-label{font-size:10px;color:var(--text2)}
+.breakdown-stat.hi .bs-val{color:var(--c-hanger)}
+#metrics-shifts{padding:0 16px 16px;display:flex;flex-direction:column;gap:8px}
+.mshift-row{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.mshift-left .mshift-name{font-size:13px;font-weight:600}
+.mshift-left .mshift-date{font-size:11px;color:var(--text2);margin-top:2px}
+.mshift-right{text-align:right;flex-shrink:0}
+.mshift-hangers{font-size:18px;font-weight:700;color:var(--c-hanger)}
+.mshift-rate{font-size:11px;color:var(--text2)}
+#metrics-loading{text-align:center;padding:32px;color:var(--text2);font-size:13px;display:none}
+
 /* Spinner */
 .spinner{width:28px;height:28px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.7s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -1258,6 +1469,9 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--bg);font-famil
       </button>
       <button class="hbtn" id="export-btn" title="Export">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      </button>
+      <button class="hbtn" id="metrics-btn" title="Metrics" style="display:none">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
       </button>
       <button class="hbtn" id="admin-btn" title="Team admin" style="display:none">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
@@ -1386,6 +1600,43 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--bg);font-famil
     <div id="export-filters"><p class="filter-label">Include statuses</p><div id="export-status-toggles"></div></div>
     <div id="export-preview-wrap"><p class="filter-label">Preview <span id="export-count"></span></p><div id="export-preview"></div></div>
     <button id="export-csv-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Download CSV</button>
+  </div>
+</div>
+
+<!-- Metrics Panel -->
+<div id="metrics-panel" class="panel">
+  <div class="panel-header">
+    <button class="panel-back" id="metrics-back"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg></button>
+    <h2>Team Metrics</h2>
+    <button class="panel-action-btn" id="metrics-refresh-btn">↻ Refresh</button>
+  </div>
+
+  <!-- Time filter -->
+  <div id="metrics-time-filters">
+    <button class="mtime-btn active" data-range="today">Today</button>
+    <button class="mtime-btn" data-range="week">This Week</button>
+    <button class="mtime-btn" data-range="month">This Month</button>
+    <button class="mtime-btn" data-range="all">All Time</button>
+  </div>
+
+  <!-- Employee selector -->
+  <div id="metrics-emp-selector">
+    <button class="memp-btn active" data-uid="all">All Employees</button>
+  </div>
+
+  <!-- Summary cards -->
+  <div id="metrics-summary"></div>
+
+  <!-- Employee breakdown table -->
+  <div id="metrics-breakdown-wrap">
+    <div class="metrics-section-title">Employee Breakdown</div>
+    <div id="metrics-breakdown"></div>
+  </div>
+
+  <!-- Shift list -->
+  <div id="metrics-shifts-wrap">
+    <div class="metrics-section-title">Recent Shifts</div>
+    <div id="metrics-shifts"></div>
   </div>
 </div>
 

@@ -1142,6 +1142,165 @@ function renderMetrics() {
   }).join('') || '<div style="padding:16px;color:var(--text2);font-size:13px;text-align:center">No shifts in this period</div>';
 }
 
+// ── Zip Code Overlay ──────────────────────────────────────
+const ZIP_COLORS = ['#4f6ef7','#10b981','#f59e0b','#7c3aed','#ef4444','#06b6d4'];
+let zipLayers = {}; // zip -> {layer, color, visible}
+let zipColorIdx = 0;
+
+document.getElementById('zip-add-toggle').addEventListener('click', () => {
+  const row = document.getElementById('zip-input-row');
+  const visible = row.style.display !== 'none';
+  row.style.display = visible ? 'none' : 'flex';
+  if (!visible) document.getElementById('zip-input').focus();
+});
+
+document.getElementById('zip-add-btn').addEventListener('click', () => addZip());
+document.getElementById('zip-input').addEventListener('keydown', e => { if(e.key==='Enter') addZip(); });
+
+async function addZip() {
+  const zip = document.getElementById('zip-input').value.trim();
+  if (zip.length !== 5 || isNaN(zip)) { showToast('Enter a valid 5-digit zip'); return; }
+  if (zipLayers[zip]) { showToast('Already added'); return; }
+
+  document.getElementById('zip-input').value = '';
+  document.getElementById('zip-input-row').style.display = 'none';
+
+  // Show loading tag
+  const loadingEl = document.createElement('div');
+  loadingEl.className = 'zip-loading';
+  loadingEl.textContent = `Loading ${zip}…`;
+  loadingEl.id = `zip-loading-${zip}`;
+  document.getElementById('zip-list').appendChild(loadingEl);
+
+  try {
+    const coords = await fetchZipBoundary(zip);
+    const el = document.getElementById(`zip-loading-${zip}`);
+    if (el) el.remove();
+
+    if (!coords || coords.length === 0) { showToast(`No boundary found for ${zip}`); return; }
+
+    const color = ZIP_COLORS[zipColorIdx % ZIP_COLORS.length];
+    zipColorIdx++;
+
+    const layer = L.polygon(coords, {
+      color, weight: 2, fillColor: color, fillOpacity: 0.08, dashArray: '6,4'
+    }).addTo(map);
+
+    // Add label at center
+    const bounds = layer.getBounds();
+    const label = L.divIcon({
+      html: `<div style="background:${color};color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;opacity:0.85">${zip}</div>`,
+      className: '', iconAnchor: [0,0]
+    });
+    const labelMarker = L.marker(bounds.getCenter(), { icon: label, interactive: false }).addTo(map);
+
+    zipLayers[zip] = { layer, labelMarker, color, visible: true };
+    map.fitBounds(bounds.pad(0.05));
+    renderZipList();
+    showToast(`${zip} added`);
+  } catch(e) {
+    const el = document.getElementById(`zip-loading-${zip}`);
+    if (el) el.remove();
+    showToast(`Could not load ${zip}`);
+    console.error(e);
+  }
+}
+
+async function fetchZipBoundary(zip) {
+  // Use Nominatim to get OSM relation ID for the postal code
+  const searchUrl = `https://nominatim.openstreetmap.org/search?q=${zip}&format=json&limit=1&addressdetails=1&countrycodes=us`;
+  const searchRes = await fetch(searchUrl);
+  const searchData = await searchRes.json();
+  if (!searchData.length) return null;
+
+  const osmId = searchData[0].osm_id;
+  const osmType = searchData[0].osm_type; // relation, way, node
+
+  // Fetch the full polygon from Nominatim
+  const detailUrl = `https://nominatim.openstreetmap.org/details?osmtype=${osmType === 'relation' ? 'R' : osmType === 'way' ? 'W' : 'N'}&osmid=${osmId}&format=json&polygon_geojson=1`;
+  const detailRes = await fetch(detailUrl);
+  const detail = await detailRes.json();
+
+  if (detail.geometry && detail.geometry.coordinates) {
+    return geojsonToLatLng(detail.geometry);
+  }
+
+  // Fallback: use Overpass to get the postal boundary
+  return await fetchZipViaOverpass(zip);
+}
+
+async function fetchZipViaOverpass(zip) {
+  const query = `[out:json][timeout:20];relation["postal_code"="${zip}"]["boundary"="postal_code"];out geom;`;
+  const endpoints = ['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter'];
+  for (const ep of endpoints) {
+    try {
+      const r = await fetch(`${ep}?data=${encodeURIComponent(query)}`);
+      if (!r.ok) continue;
+      const d = await r.json();
+      if (!d.elements || !d.elements.length) continue;
+      // Build polygon from way members
+      const el = d.elements[0];
+      if (el.members) {
+        const coords = [];
+        el.members.filter(m => m.type === 'way' && m.geometry).forEach(m => {
+          m.geometry.forEach(pt => coords.push([pt.lat, pt.lon]));
+        });
+        if (coords.length) return coords;
+      }
+    } catch(e) { continue; }
+  }
+  return null;
+}
+
+function geojsonToLatLng(geometry) {
+  if (geometry.type === 'Polygon') {
+    return geometry.coordinates[0].map(c => [c[1], c[0]]);
+  }
+  if (geometry.type === 'MultiPolygon') {
+    // Return the largest ring
+    const rings = geometry.coordinates.map(poly => poly[0].map(c => [c[1], c[0]]));
+    return rings.reduce((a,b) => a.length > b.length ? a : b, []);
+  }
+  return null;
+}
+
+function renderZipList() {
+  const list = document.getElementById('zip-list');
+  list.innerHTML = '';
+  Object.entries(zipLayers).forEach(([zip, info]) => {
+    const tag = document.createElement('div');
+    tag.className = 'zip-tag' + (info.visible ? ' active' : '');
+    tag.style.color = info.color;
+    tag.style.background = info.color + '18';
+    tag.innerHTML = `<span>${zip}</span><span class="zip-tag-remove" data-zip="${zip}">✕</span>`;
+    tag.addEventListener('click', (e) => {
+      if (e.target.classList.contains('zip-tag-remove')) {
+        removeZip(zip); return;
+      }
+      toggleZip(zip);
+    });
+    list.appendChild(tag);
+  });
+}
+
+function toggleZip(zip) {
+  const info = zipLayers[zip];
+  if (!info) return;
+  info.visible = !info.visible;
+  if (info.visible) { info.layer.addTo(map); info.labelMarker.addTo(map); }
+  else { map.removeLayer(info.layer); map.removeLayer(info.labelMarker); }
+  renderZipList();
+}
+
+function removeZip(zip) {
+  const info = zipLayers[zip];
+  if (!info) return;
+  map.removeLayer(info.layer);
+  map.removeLayer(info.labelMarker);
+  delete zipLayers[zip];
+  renderZipList();
+}
+
 // ── Toast ─────────────────────────────────────────────────
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2000);}
 
@@ -1255,7 +1414,7 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--bg);font-famil
 .leaflet-bottom.leaflet-right{bottom:160px!important}
 
 /* Roofing */
-#roof-mode-banner{position:fixed;bottom:max(env(safe-area-inset-bottom),20px);left:12px;z-index:900;background:#10b981;color:#fff;border-radius:12px;padding:8px 14px;font-size:12px;font-weight:600;display:none;align-items:center;gap:6px}
+#roof-mode-banner{position:fixed;bottom:calc(max(env(safe-area-inset-bottom),20px) + 160px);left:12px;z-index:900;background:#10b981;color:#fff;border-radius:12px;padding:8px 14px;font-size:12px;font-weight:600;display:none;align-items:center;gap:6px;box-shadow:0 4px 16px rgba(16,185,129,0.4)}
 #roof-mode-banner.show{display:flex}
 
 /* Zone toolbar */
@@ -1390,6 +1549,24 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--bg);font-famil
 .mshift-hangers{font-size:18px;font-weight:700;color:var(--c-hanger)}
 .mshift-rate{font-size:11px;color:var(--text2)}
 #metrics-loading{text-align:center;padding:32px;color:var(--text2);font-size:13px;display:none}
+
+/* Zip widget */
+#zip-widget{position:fixed;bottom:max(env(safe-area-inset-bottom),20px);left:12px;z-index:900;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:10px 12px;min-width:160px;max-width:200px}
+#zip-header{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);margin-bottom:4px}
+#zip-header span{flex:1}
+#zip-add-toggle{background:transparent;border:1px solid var(--border);border-radius:6px;color:var(--text2);width:22px;height:22px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;padding:0;line-height:1}
+#zip-add-toggle:active{background:var(--surface2)}
+#zip-input-row{display:flex;gap:6px;margin-bottom:6px}
+#zip-input{flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:6px 8px;outline:none;font-family:inherit;width:0}
+#zip-input::-webkit-outer-spin-button,#zip-input::-webkit-inner-spin-button{-webkit-appearance:none}
+#zip-add-btn{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:6px 10px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap}
+#zip-add-btn:active{opacity:0.85}
+#zip-list{display:flex;flex-direction:column;gap:4px}
+.zip-tag{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:4px 8px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid transparent}
+.zip-tag.active{border-color:currentColor}
+.zip-tag-remove{opacity:0.5;font-size:14px;line-height:1;cursor:pointer;padding:0 2px}
+.zip-tag-remove:hover{opacity:1}
+.zip-loading{font-size:11px;color:var(--text2);text-align:center;padding:4px}
 
 /* Spinner */
 .spinner{width:28px;height:28px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.7s linear infinite}
@@ -1544,6 +1721,20 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--bg);font-famil
   <div id="roof-mode-banner">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
     Roofing Target Mode — zones built before 2012
+  </div>
+
+  <!-- Zip Code Filter -->
+  <div id="zip-widget">
+    <div id="zip-header">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+      <span>Zip Codes</span>
+      <button id="zip-add-toggle">+</button>
+    </div>
+    <div id="zip-input-row" style="display:none">
+      <input id="zip-input" type="number" placeholder="e.g. 37923" maxlength="5">
+      <button id="zip-add-btn">Add</button>
+    </div>
+    <div id="zip-list"></div>
   </div>
 
   <div id="zone-toolbar">

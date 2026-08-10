@@ -1052,12 +1052,23 @@ function renderMetrics() {
   // Count interested pins per employee (from pins collection)
   const interestedCount = Object.values(pins).filter(p => p.status === 'interest').length;
 
-  // Summary totals
-  const totalHangers = filtered.reduce((a,s) => a + (s.hangers||0), 0);
+  // Summary totals — count pins directly for hangers/interested (shift data may be incomplete)
+  const sinceDate = since;
+  const filteredPins = Object.values(pins).filter(p => {
+    if (p.ts < sinceDate) return false;
+    if (metricsUid !== 'all' && p.updatedBy !== metricsUid) return false;
+    return true;
+  });
+  // Use pin counts as the source of truth for hangers and interested
+  const totalHangers = metricsRange === 'all' && metricsUid === 'all'
+    ? Object.values(pins).filter(p => p.status === 'hanger').length
+    : filteredPins.filter(p => p.status === 'hanger').length;
+  const interested = metricsRange === 'all' && metricsUid === 'all'
+    ? Object.values(pins).filter(p => p.status === 'interest').length
+    : filteredPins.filter(p => p.status === 'interest').length;
   const totalHours = filtered.reduce((a,s) => a + (s.durationMs||0), 0) / 3600000;
   const totalShifts = filtered.length;
-  const avgRate = totalHours > 0 ? (totalHangers / totalHours).toFixed(1) : '0';
-  const interested = metricsUid === 'all' ? interestedCount : Object.values(pins).filter(p => p.status === 'interest' && p.updatedBy === metricsUid).length;
+  const avgRate = totalHours > 0 ? (totalHangers / totalHours).toFixed(1) : '—';
 
   document.getElementById('metrics-summary').innerHTML = `
     <div class="metric-card accent">
@@ -1092,9 +1103,12 @@ function renderMetrics() {
     breakdownWrap.style.display = 'block';
     breakdown.innerHTML = allEmployees.map(emp => {
       const empShifts = filtered.filter(s => s.userId === emp.uid);
-      const empHangers = empShifts.reduce((a,s) => a+(s.hangers||0), 0);
+      // Count hangers from pins directly for accuracy
+      const empHangers = metricsRange === 'all'
+        ? Object.values(pins).filter(p => p.status === 'hanger' && p.updatedBy === emp.uid).length
+        : Object.values(pins).filter(p => p.status === 'hanger' && p.updatedBy === emp.uid && p.ts >= since).length;
       const empHours = empShifts.reduce((a,s) => a+(s.durationMs||0), 0) / 3600000;
-      const empRate = empHours > 0 ? (empHangers/empHours).toFixed(1) : '0';
+      const empRate = empHours > 0 ? (empHangers/empHours).toFixed(1) : '—';
       return `<div class="breakdown-row">
         <div class="breakdown-name">${emp.name || emp.email}</div>
         <div class="breakdown-stats">

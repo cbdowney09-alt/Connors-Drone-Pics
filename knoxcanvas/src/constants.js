@@ -1,0 +1,10 @@
+export const COLORS = { none: '#6b7280', hanger: '#f59e0b', interest: '#10b981', no: '#ef4444', dnr: '#7c3aed' };
+export const LABELS = { none: 'Not visited', hanger: 'Door hanger', interest: 'Interested', no: 'Not interested', dnr: 'Do not return' };
+export const ROOF_CUTOFF = 2012;
+export const GEO_PROXY = 'https://broken-tree-befb.connorbdowney48.workers.dev';
+export const SHEETS_URL = 'https://script.google.com/macros/s/AKfycbxeNoWtEdYnmXDfGq9aBjRpspGS6nucshZaxWj2OYY63zVtOb7XtZuYoDRsgCV0aVFs/exec';
+export const LEGACY_BIN_URL = 'https://api.jsonbin.io/v3/b/6a0e72bd6610dd3ae87ce698/latest';
+export const LEGACY_ACCESS_KEY = '$2a$10$KLNJA3b6TXj1typeNBbMZ.9yAbwJgVSw22eETJba1qFG1582s4jV6';
+export const LEGACY_OWNER_UID = '9vYmWuYgjwQYHrO1yd3msBo48xi2';
+export const ZIP_COLORS = ['#4f6ef7', '#10b981', '#f59e0b', '#7c3aed', '#ef4444', '#06b6d4'];
+export const KNOXVILLE_CENTER = [35.9606, -83.9207];

@@ -11,6 +11,17 @@ const QUICK_TAP_OPTIONS = [
   { key: 'dnr', label: 'Do not return' },
 ];
 
+function useIsTouchDevice() {
+  const [isTouch, setIsTouch] = useState(() => window.matchMedia('(hover: none) and (pointer: coarse)').matches);
+  useEffect(() => {
+    const mq = window.matchMedia('(hover: none) and (pointer: coarse)');
+    const onChange = (e) => setIsTouch(e.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  return isTouch;
+}
+
 export default function Header() {
   const { pins, currentUserProfile, currentUser, clockedIn, mapUi, logout } = useApp();
   const { roofingMode, toggleRoofingMode, quickTapStatus, setQuickTapStatus, drawingMode, startDrawing, stopDrawing, openPanel, activePanel, setAdminOpen } = mapUi;
@@ -42,6 +53,39 @@ export default function Header() {
     document.addEventListener('click', onDocClick);
     return () => document.removeEventListener('click', onDocClick);
   }, [quickTapMenuOpen]);
+
+  const isTouch = useIsTouchDevice();
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const [moreMenuPos, setMoreMenuPos] = useState({ top: 0, right: 0 });
+  const moreBtnRef = useRef(null);
+
+  const openMoreMenu = () => {
+    const rect = moreBtnRef.current?.getBoundingClientRect();
+    if (rect) setMoreMenuPos({ top: rect.bottom + 6, right: window.innerWidth - rect.right });
+    setMoreMenuOpen((v) => !v);
+  };
+
+  useEffect(() => {
+    if (!moreMenuOpen) return;
+    const onDocClick = (e) => {
+      if (!e.target.closest('#more-menu') && !e.target.closest('#more-btn')) setMoreMenuOpen(false);
+    };
+    document.addEventListener('click', onDocClick);
+    return () => document.removeEventListener('click', onDocClick);
+  }, [moreMenuOpen]);
+
+  const MORE_OPTIONS = [
+    { label: 'Draw Zone', onClick: () => (drawingMode ? stopDrawing() : startDrawing(false)), show: true,
+      icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5" /></svg> },
+    { label: 'Export', onClick: () => openPanel('export'), show: true,
+      icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg> },
+    { label: 'Metrics', onClick: () => openPanel('metrics'), show: isOwner,
+      icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" /></svg> },
+    { label: 'Team Admin', onClick: () => setAdminOpen(true), show: isOwner,
+      icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg> },
+    { label: 'Log Out', onClick: logout, show: true,
+      icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></svg> },
+  ];
 
   const quickTapBtnStyle = quickTapStatus
     ? { background: COLORS[quickTapStatus], borderColor: COLORS[quickTapStatus], color: '#fff' }
@@ -78,22 +122,39 @@ export default function Header() {
         <button id="quicktap-btn" ref={quickTapBtnRef} className={'hbtn' + (quickTapStatus ? ' active' : '')} style={quickTapBtnStyle} title="Quick tap mode" onClick={openQuickTapMenu}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" /></svg>
         </button>
-        <button className="hbtn" title="Draw zone" onClick={() => (drawingMode ? stopDrawing() : startDrawing(false))}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5" /></svg>
-        </button>
-        <button className="hbtn" title="Export" onClick={() => openPanel('export')}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
-        </button>
-        <button className="hbtn" title="Metrics" style={{ display: isOwner ? 'flex' : 'none' }} onClick={() => openPanel('metrics')}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" /></svg>
-        </button>
-        <button className="hbtn" title="Team admin" style={{ display: isOwner ? 'flex' : 'none' }} onClick={() => setAdminOpen(true)}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
-        </button>
-        <button className="hbtn" title="Log out" onClick={logout}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></svg>
-        </button>
+        {isTouch ? (
+          <button id="more-btn" ref={moreBtnRef} className={'hbtn' + (moreMenuOpen ? ' active' : '')} title="More" onClick={openMoreMenu}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="19" cy="12" r="2" /></svg>
+          </button>
+        ) : (
+          <>
+            <button className="hbtn" title="Draw zone" onClick={() => (drawingMode ? stopDrawing() : startDrawing(false))}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5" /></svg>
+            </button>
+            <button className="hbtn" title="Export" onClick={() => openPanel('export')}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+            </button>
+            <button className="hbtn" title="Metrics" style={{ display: isOwner ? 'flex' : 'none' }} onClick={() => openPanel('metrics')}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" /></svg>
+            </button>
+            <button className="hbtn" title="Team admin" style={{ display: isOwner ? 'flex' : 'none' }} onClick={() => setAdminOpen(true)}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
+            </button>
+            <button className="hbtn" title="Log out" onClick={logout}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></svg>
+            </button>
+          </>
+        )}
       </div>
+      {moreMenuOpen && (
+        <div id="more-menu" style={{ top: moreMenuPos.top, right: moreMenuPos.right }}>
+          {MORE_OPTIONS.filter((o) => o.show).map(({ label, onClick, icon }) => (
+            <div key={label} className="more-option" onClick={() => { onClick(); setMoreMenuOpen(false); }}>
+              {icon}{label}
+            </div>
+          ))}
+        </div>
+      )}
       {quickTapMenuOpen && (
         <div id="quicktap-menu" style={{ top: quickTapMenuPos.top, right: quickTapMenuPos.right }}>
           {QUICK_TAP_OPTIONS.map(({ key, label }) => (

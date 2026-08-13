@@ -1,3 +1,4 @@
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { useApp } from './context/AppContext';
 import AuthScreen from './components/AuthScreen';
 import SetupScreen from './components/SetupScreen';
@@ -11,14 +12,29 @@ import QuickTapBanner from './components/QuickTapBanner';
 import ZipWidget from './components/ZipWidget';
 import ZoneToolbar from './components/ZoneToolbar';
 import ShiftsPanel from './components/panels/ShiftsPanel';
-import RoutePanel from './components/panels/RoutePanel';
-import ExportPanel from './components/panels/ExportPanel';
-import MetricsPanel from './components/panels/MetricsPanel';
-import AdminPanel from './components/AdminPanel';
 import Toast from './components/Toast';
 
+const RoutePanel = lazy(() => import('./components/panels/RoutePanel'));
+const ExportPanel = lazy(() => import('./components/panels/ExportPanel'));
+const MetricsPanel = lazy(() => import('./components/panels/MetricsPanel'));
+const AdminPanel = lazy(() => import('./components/AdminPanel'));
+
 export default function App() {
-  const { authReady, currentUser, currentUserProfile, companyId } = useApp();
+  const { authReady, currentUser, currentUserProfile, companyId, mapUi } = useApp();
+  const { activePanel, adminOpen } = mapUi || {};
+
+  // Panels are only fetched once actually needed, then stay mounted so the
+  // usual slide-in CSS transition still plays on subsequent opens/closes.
+  const [everOpened, setEverOpened] = useState({ route: false, export: false, metrics: false, admin: false });
+  useEffect(() => {
+    if (!activePanel && !adminOpen) return;
+    setEverOpened((prev) => ({
+      route: prev.route || activePanel === 'route',
+      export: prev.export || activePanel === 'export',
+      metrics: prev.metrics || activePanel === 'metrics',
+      admin: prev.admin || !!adminOpen,
+    }));
+  }, [activePanel, adminOpen]);
 
   if (!authReady) return null;
 
@@ -53,11 +69,15 @@ export default function App() {
         <ZipWidget />
         <ZoneToolbar />
         <ShiftsPanel />
-        <RoutePanel />
-        <ExportPanel />
+        <Suspense fallback={null}>
+          {everOpened.route && <RoutePanel />}
+          {everOpened.export && <ExportPanel />}
+        </Suspense>
       </div>
-      <MetricsPanel />
-      <AdminPanel />
+      <Suspense fallback={null}>
+        {everOpened.metrics && <MetricsPanel />}
+        {everOpened.admin && <AdminPanel />}
+      </Suspense>
       <Toast />
     </>
   );

@@ -17,7 +17,7 @@ export function AppProvider({ children }) {
   const auth = useAuth();
   const { currentUser, currentUserProfile, companyId } = auth;
   const { toast, showToast } = useToast();
-  const { pins, savePin, deletePin } = usePins(companyId, currentUser);
+  const { pins, savePin, deletePin, getPinFresh } = usePins(companyId, currentUser);
   const { neighborhoodYears, saveNeighborhoodYears } = useNeighborhoodYears(companyId);
   const mapUi = useMapUiState();
 
@@ -35,6 +35,18 @@ export function AppProvider({ children }) {
     if (!companyId) migratedRef.current = false;
   }, [companyId, currentUser, currentUserProfile, showToast]);
 
+  // Once the real address comes back, patch it in — and if the pin has since
+  // become (or already was) a hanger, re-send the corrected row to Sheets so
+  // "Loading address…" never gets stuck there regardless of how fast someone taps.
+  const finalizeAddress = useCallback(async (id, lat, lng) => {
+    const addr = await reverseGeocode(lat, lng);
+    await savePin(id, { addr });
+    const fresh = await getPinFresh(id);
+    if (fresh && fresh.status === 'hanger') {
+      syncToSheets('upsert', { ...fresh, addr }, id);
+    }
+  }, [savePin, getPinFresh]);
+
   const ensurePinAt = useCallback(async (lat, lng, presetAddr) => {
     const id = lat.toFixed(6) + ',' + lng.toFixed(6);
     if (!pins[id]) {
@@ -42,11 +54,22 @@ export function AppProvider({ children }) {
       const newPin = { lat, lng, addr: presetAddr || 'Loading address…', status: 'none', note: '', yearBuilt: autoYear, ts: Date.now() };
       await savePin(id, newPin);
       if (!presetAddr) {
-        reverseGeocode(lat, lng).then((addr) => savePin(id, { addr }));
+        finalizeAddress(id, lat, lng);
       }
     }
     return id;
-  }, [pins, neighborhoodYears, savePin]);
+  }, [pins, neighborhoodYears, savePin, finalizeAddress]);
+
+  const quickTapPin = useCallback(async (lat, lng, status) => {
+    const id = lat.toFixed(6) + ',' + lng.toFixed(6);
+    const autoYear = getNeighborhoodYearForPoint(lat, lng, neighborhoodYears);
+    const newPin = { lat, lng, addr: 'Loading address…', status, note: '', yearBuilt: autoYear, ts: Date.now() };
+    await savePin(id, newPin);
+    finalizeAddress(id, lat, lng);
+    showToast('Saved: ' + LABELS[status]);
+    syncToSheets('upsert', { ...newPin, id }, id);
+    return id;
+  }, [neighborhoodYears, savePin, showToast, finalizeAddress]);
 
   const updatePinStatus = useCallback(async (id, status) => {
     const patch = { status, ts: Date.now() };
@@ -92,13 +115,13 @@ export function AppProvider({ children }) {
   const value = useMemo(() => ({
     ...auth,
     toast, showToast,
-    pins, savePin, deletePin, removePin, updatePinStatus, ensurePinAt,
+    pins, savePin, deletePin, removePin, updatePinStatus, ensurePinAt, quickTapPin,
     neighborhoodYears, saveNeighborhoodYears, applyYearToRadius, applyYearToPolygon,
     hangerCount,
     ...shiftsApi,
     mapUi,
     mapRef,
-  }), [auth, toast, showToast, pins, savePin, deletePin, removePin, updatePinStatus, ensurePinAt, neighborhoodYears, saveNeighborhoodYears, applyYearToRadius, applyYearToPolygon, hangerCount, shiftsApi, mapUi]);
+  }), [auth, toast, showToast, pins, savePin, deletePin, removePin, updatePinStatus, ensurePinAt, quickTapPin, neighborhoodYears, saveNeighborhoodYears, applyYearToRadius, applyYearToPolygon, hangerCount, shiftsApi, mapUi]);
 
   return <AppCtx.Provider value={value}>{children}</AppCtx.Provider>;
 }

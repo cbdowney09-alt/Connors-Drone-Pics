@@ -13,10 +13,11 @@ function makeIcon(status) {
 }
 
 export default function MapView() {
-  const { pins, mapUi, ensurePinAt, mapRef, companyId, neighborhoodYears } = useApp();
+  const { pins, mapUi, ensurePinAt, quickTapPin, mapRef, companyId, neighborhoodYears } = useApp();
   const {
     hiddenStatuses, openSheet,
     roofingMode,
+    quickTapStatus,
     drawingMode, drawnPoints, addDrawPoint,
     routeStart, routeStops, routeZonePolygon,
     zipLayers,
@@ -143,12 +144,17 @@ export default function MapView() {
         return;
       }
       if (!companyId) return;
-      const id = await ensurePinAt(lat, lng);
-      openSheet(id);
+      const id = lat.toFixed(6) + ',' + lng.toFixed(6);
+      if (quickTapStatus && !pins[id]) {
+        await quickTapPin(lat, lng, quickTapStatus);
+        return;
+      }
+      const pinId = await ensurePinAt(lat, lng);
+      openSheet(pinId);
     };
     map.on('click', handler);
     return () => map.off('click', handler);
-  }, [drawingMode, addDrawPoint, companyId, ensurePinAt, openSheet]);
+  }, [drawingMode, addDrawPoint, companyId, ensurePinAt, openSheet, quickTapStatus, pins, quickTapPin]);
 
   return <div id="map" ref={containerRef} />;
 }

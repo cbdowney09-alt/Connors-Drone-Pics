@@ -7,6 +7,7 @@ import MapView from './components/MapView';
 import PinSheet from './components/PinSheet';
 import Legend from './components/Legend';
 import RoofModeBanner from './components/RoofModeBanner';
+import QuickTapBanner from './components/QuickTapBanner';
 import ZipWidget from './components/ZipWidget';
 import ZoneToolbar from './components/ZoneToolbar';
 import ShiftsPanel from './components/panels/ShiftsPanel';
@@ -48,6 +49,7 @@ export default function App() {
         <PinSheet />
         <Legend />
         <RoofModeBanner />
+        <QuickTapBanner />
         <ZipWidget />
         <ZoneToolbar />
         <ShiftsPanel />

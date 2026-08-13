@@ -22,6 +22,9 @@ export function useMapUiState() {
   const [roofingMode, setRoofingMode] = useState(false);
   const toggleRoofingMode = useCallback(() => setRoofingMode((v) => !v), []);
 
+  // Quick tap mode
+  const [quickTapStatus, setQuickTapStatus] = useState(null); // null | 'none'|'hanger'|'interest'|'no'|'dnr'
+
   // Zone drawing
   const [drawingMode, setDrawingMode] = useState(false);
   const [drawingForRoute, setDrawingForRoute] = useState(false);
@@ -31,6 +34,7 @@ export function useMapUiState() {
     setDrawingMode(true);
     setDrawingForRoute(!!forRoute);
     setDrawnPoints([]);
+    setQuickTapStatus(null);
   }, []);
 
   const stopDrawing = useCallback(() => {
@@ -85,6 +89,7 @@ export function useMapUiState() {
     selectedPinId, openSheet, closeSheet,
     hiddenStatuses, toggleStatusFilter,
     roofingMode, toggleRoofingMode,
+    quickTapStatus, setQuickTapStatus,
     drawingMode, drawingForRoute, drawnPoints, startDrawing, stopDrawing, addDrawPoint, undoDrawPoint,
     routeStart, setRouteStart, routeZonePolygon, setRouteZonePolygon, routeStops, setRouteStops, clearRoute,
     zipLayers, addZipLayer, toggleZipVisible, removeZipLayer,

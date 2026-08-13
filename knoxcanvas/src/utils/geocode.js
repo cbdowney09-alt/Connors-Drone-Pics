@@ -69,44 +69,11 @@ function geojsonToLatLng(geometry) {
   return null;
 }
 
-async function fetchZipViaOverpass(zip) {
-  const query = `[out:json][timeout:20];relation["postal_code"="${zip}"]["boundary"="postal_code"];out geom;`;
-  const endpoints = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
-  for (const ep of endpoints) {
-    try {
-      const r = await fetch(`${ep}?data=${encodeURIComponent(query)}`);
-      if (!r.ok) continue;
-      const d = await r.json();
-      if (!d.elements || !d.elements.length) continue;
-      const el = d.elements[0];
-      if (el.members) {
-        const coords = [];
-        el.members.filter((m) => m.type === 'way' && m.geometry).forEach((m) => {
-          m.geometry.forEach((pt) => coords.push([pt.lat, pt.lon]));
-        });
-        if (coords.length) return coords;
-      }
-    } catch (e) { continue; }
-  }
-  return null;
-}
-
 export async function fetchZipBoundary(zip) {
-  const searchUrl = `https://nominatim.openstreetmap.org/search?q=${zip}&format=json&limit=1&addressdetails=1&countrycodes=us`;
-  const searchRes = await fetch(searchUrl);
-  const searchData = await searchRes.json();
-  if (!searchData.length) return null;
-
-  const osmId = searchData[0].osm_id;
-  const osmType = searchData[0].osm_type;
-
-  const detailUrl = `https://nominatim.openstreetmap.org/details?osmtype=${osmType === 'relation' ? 'R' : osmType === 'way' ? 'W' : 'N'}&osmid=${osmId}&format=json&polygon_geojson=1`;
-  const detailRes = await fetch(detailUrl);
-  const detail = await detailRes.json();
-
-  if (detail.geometry && detail.geometry.coordinates) {
-    return geojsonToLatLng(detail.geometry);
-  }
-
-  return await fetchZipViaOverpass(zip);
+  const where = encodeURIComponent(`ZCTA5='${zip}'`);
+  const url = `https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/tigerWMS_Current/MapServer/2/query?where=${where}&outFields=ZCTA5&f=geojson&outSR=4326`;
+  const res = await fetch(url);
+  const data = await res.json();
+  if (!data.features || !data.features.length) return null;
+  return geojsonToLatLng(data.features[0].geometry);
 }

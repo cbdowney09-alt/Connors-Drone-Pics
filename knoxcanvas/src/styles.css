@@ -107,6 +107,14 @@ html,body,#root{height:100%;width:100%;overflow:hidden;background:var(--bg);font
 #roof-mode-banner{position:fixed;bottom:calc(max(env(safe-area-inset-bottom),20px) + 160px);left:12px;z-index:900;background:#10b981;color:#fff;border-radius:12px;padding:8px 14px;font-size:12px;font-weight:600;display:none;align-items:center;gap:6px;box-shadow:0 4px 16px rgba(16,185,129,0.4)}
 #roof-mode-banner.show{display:flex}
 
+/* Quick tap */
+#quicktap-menu{position:fixed;z-index:1300;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:6px;box-shadow:0 8px 32px rgba(0,0,0,0.5);min-width:180px}
+.quicktap-option{display:flex;align-items:center;gap:8px;padding:9px 10px;border-radius:8px;font-size:13px;color:var(--text2);cursor:pointer}
+.quicktap-option:active{background:var(--surface2)}
+.quicktap-option.active{color:var(--text);background:var(--surface2)}
+.quicktap-option .dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+#quicktap-banner{position:fixed;top:calc(max(env(safe-area-inset-top),16px) + 116px);left:12px;right:12px;z-index:950;color:#fff;border-radius:12px;padding:9px 14px;font-size:12px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,0.35);text-align:center}
+
 /* Zone toolbar */
 #zone-toolbar{position:fixed;top:0;left:0;right:0;z-index:2500;pointer-events:none;opacity:0;transition:opacity 0.2s}
 #zone-toolbar.active{opacity:1;pointer-events:all}

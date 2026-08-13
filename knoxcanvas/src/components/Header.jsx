@@ -1,10 +1,19 @@
-import { useMemo } from 'react';
+import { useMemo, useRef, useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { COLORS } from '../constants';
 
+const QUICK_TAP_OPTIONS = [
+  { key: null, label: 'Off' },
+  { key: 'none', label: 'Not visited' },
+  { key: 'hanger', label: 'Door hanger' },
+  { key: 'interest', label: 'Interested' },
+  { key: 'no', label: 'Not interested' },
+  { key: 'dnr', label: 'Do not return' },
+];
+
 export default function Header() {
   const { pins, currentUserProfile, currentUser, clockedIn, mapUi, logout } = useApp();
-  const { roofingMode, toggleRoofingMode, drawingMode, startDrawing, stopDrawing, openPanel, activePanel, setAdminOpen } = mapUi;
+  const { roofingMode, toggleRoofingMode, quickTapStatus, setQuickTapStatus, drawingMode, startDrawing, stopDrawing, openPanel, activePanel, setAdminOpen } = mapUi;
 
   const stats = useMemo(() => {
     const counts = { none: 0, hanger: 0, interest: 0, no: 0, dnr: 0 };
@@ -14,6 +23,29 @@ export default function Header() {
   }, [pins]);
 
   const isOwner = currentUserProfile?.role === 'owner';
+
+  const [quickTapMenuOpen, setQuickTapMenuOpen] = useState(false);
+  const [quickTapMenuPos, setQuickTapMenuPos] = useState({ top: 0, right: 0 });
+  const quickTapBtnRef = useRef(null);
+
+  const openQuickTapMenu = () => {
+    const rect = quickTapBtnRef.current?.getBoundingClientRect();
+    if (rect) setQuickTapMenuPos({ top: rect.bottom + 6, right: window.innerWidth - rect.right });
+    setQuickTapMenuOpen((v) => !v);
+  };
+
+  useEffect(() => {
+    if (!quickTapMenuOpen) return;
+    const onDocClick = (e) => {
+      if (!e.target.closest('#quicktap-menu') && !e.target.closest('#quicktap-btn')) setQuickTapMenuOpen(false);
+    };
+    document.addEventListener('click', onDocClick);
+    return () => document.removeEventListener('click', onDocClick);
+  }, [quickTapMenuOpen]);
+
+  const quickTapBtnStyle = quickTapStatus
+    ? { background: COLORS[quickTapStatus], borderColor: COLORS[quickTapStatus], color: '#fff' }
+    : undefined;
 
   return (
     <div id="header">
@@ -43,6 +75,9 @@ export default function Header() {
         <button className={'hbtn' + (roofingMode ? ' active' : '')} title="Roofing mode" onClick={toggleRoofingMode}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><polyline points="9 22 9 12 15 12 15 22" /></svg>
         </button>
+        <button id="quicktap-btn" ref={quickTapBtnRef} className={'hbtn' + (quickTapStatus ? ' active' : '')} style={quickTapBtnStyle} title="Quick tap mode" onClick={openQuickTapMenu}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" /></svg>
+        </button>
         <button className="hbtn" title="Draw zone" onClick={() => (drawingMode ? stopDrawing() : startDrawing(false))}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5" /></svg>
         </button>
@@ -59,6 +94,17 @@ export default function Header() {
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></svg>
         </button>
       </div>
+      {quickTapMenuOpen && (
+        <div id="quicktap-menu" style={{ top: quickTapMenuPos.top, right: quickTapMenuPos.right }}>
+          {QUICK_TAP_OPTIONS.map(({ key, label }) => (
+            <div key={label} className={'quicktap-option' + (quickTapStatus === key ? ' active' : '')}
+              onClick={() => { setQuickTapStatus(key); setQuickTapMenuOpen(false); }}>
+              <span className="dot" style={{ background: key ? COLORS[key] : 'rgba(255,255,255,0.2)' }} />
+              {label}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

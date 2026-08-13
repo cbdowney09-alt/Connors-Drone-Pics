@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { collection, doc, setDoc, deleteDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
+import { collection, doc, getDoc, setDoc, deleteDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../firebase';
 
 export function usePins(companyId, currentUser) {
@@ -30,5 +30,11 @@ export function usePins(companyId, currentUser) {
     await deleteDoc(doc(db, 'companies', companyId, 'pins', id));
   }, [companyId]);
 
-  return { pins, savePin, deletePin };
+  const getPinFresh = useCallback(async (id) => {
+    if (!companyId) return null;
+    const snap = await getDoc(doc(db, 'companies', companyId, 'pins', id));
+    return snap.exists() ? { ...snap.data(), id } : null;
+  }, [companyId]);
+
+  return { pins, savePin, deletePin, getPinFresh };
 }

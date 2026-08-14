@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from './hooks/useAuth';
 import { usePins } from './hooks/usePins';
 import { useNeighborhoodYears } from './hooks/useNeighborhoodYears';
@@ -25,6 +25,12 @@ export function AppProvider({ children }) {
   const shiftsApi = useShifts(companyId, currentUser, currentUserProfile, hangerCount);
 
   const mapRef = useRef(null);
+
+  // Measured (not hardcoded) so SearchBar/QuickTapBanner stay correctly
+  // positioned no matter how tall the header grows -- e.g. its stats row
+  // wrapping to multiple lines on a narrow phone with many active statuses.
+  const [headerHeight, setHeaderHeight] = useState(90);
+  const [topChromeBottom, setTopChromeBottom] = useState(140);
 
   const migratedRef = useRef(false);
   useEffect(() => {
@@ -121,7 +127,8 @@ export function AppProvider({ children }) {
     ...shiftsApi,
     mapUi,
     mapRef,
-  }), [auth, toast, showToast, pins, savePin, deletePin, removePin, updatePinStatus, ensurePinAt, quickTapPin, neighborhoodYears, saveNeighborhoodYears, applyYearToRadius, applyYearToPolygon, hangerCount, shiftsApi, mapUi]);
+    headerHeight, setHeaderHeight, topChromeBottom, setTopChromeBottom,
+  }), [auth, toast, showToast, pins, savePin, deletePin, removePin, updatePinStatus, ensurePinAt, quickTapPin, neighborhoodYears, saveNeighborhoodYears, applyYearToRadius, applyYearToPolygon, hangerCount, shiftsApi, mapUi, headerHeight, topChromeBottom]);
 
   return <AppCtx.Provider value={value}>{children}</AppCtx.Provider>;
 }

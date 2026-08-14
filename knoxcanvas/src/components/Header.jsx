@@ -23,8 +23,17 @@ function useIsTouchDevice() {
 }
 
 export default function Header() {
-  const { pins, currentUserProfile, currentUser, clockedIn, mapUi, logout } = useApp();
+  const { pins, currentUserProfile, currentUser, clockedIn, mapUi, logout, setHeaderHeight } = useApp();
   const { roofingMode, toggleRoofingMode, quickTapStatus, setQuickTapStatus, drawingMode, startDrawing, stopDrawing, openPanel, activePanel, setAdminOpen } = mapUi;
+
+  const headerRef = useRef(null);
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => setHeaderHeight(entry.target.offsetHeight));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [setHeaderHeight]);
 
   const stats = useMemo(() => {
     const counts = { none: 0, hanger: 0, interest: 0, no: 0, dnr: 0 };
@@ -92,7 +101,7 @@ export default function Header() {
     : undefined;
 
   return (
-    <div id="header">
+    <div id="header" ref={headerRef}>
       <div id="header-inner">
         <h1>Knox<span>Canvas</span></h1>
         <div id="user-name-display">{currentUserProfile?.name || currentUser?.email}</div>

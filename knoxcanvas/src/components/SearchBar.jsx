@@ -1,15 +1,24 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { searchAddress } from '../utils/geocode';
 
 export default function SearchBar() {
-  const { mapRef, ensurePinAt, mapUi } = useApp();
+  const { mapRef, ensurePinAt, mapUi, headerHeight, setTopChromeBottom } = useApp();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [open, setOpen] = useState(false);
   const [resultsTop, setResultsTop] = useState(0);
   const timeoutRef = useRef(null);
   const wrapRef = useRef(null);
+
+  // Sits right below the header; report our own bottom edge so QuickTapBanner
+  // (which stacks below us) stays positioned correctly no matter how tall
+  // the header renders.
+  useLayoutEffect(() => {
+    if (wrapRef.current) {
+      setTopChromeBottom(wrapRef.current.getBoundingClientRect().bottom + 8);
+    }
+  }, [headerHeight, setTopChromeBottom]);
 
   useEffect(() => {
     clearTimeout(timeoutRef.current);
@@ -48,7 +57,7 @@ export default function SearchBar() {
 
   return (
     <div id="search-wrap">
-      <div id="search-bar" ref={wrapRef}>
+      <div id="search-bar" ref={wrapRef} style={{ marginTop: headerHeight + 10 }}>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" /></svg>
         <input id="search-input" type="text" placeholder="Search Knoxville address…" autoComplete="off" autoCorrect="off" spellCheck="false"
           value={query} onChange={(e) => setQuery(e.target.value)} />

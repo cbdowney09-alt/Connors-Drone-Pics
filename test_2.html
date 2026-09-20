@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>KnoxCanvas Test</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{
+  --bg:#0f1117;--surface:#1a1d27;--surface2:#22253a;
+  --border:rgba(255,255,255,0.08);--text:#f0f2ff;--text2:#8b90b0;--accent:#4f6ef7;
+}
+html,body{height:100%;width:100%;overflow:hidden;background:var(--bg);font-family:'SF Pro Display',-apple-system,BlinkMacSystemFont,sans-serif;color:var(--text)}
+#map{position:fixed;top:0;left:0;right:0;bottom:0;z-index:1}
+
+/* Banner */
+#test-banner{position:fixed;top:0;left:0;right:0;z-index:1000;background:#f59e0b;color:#1a1200;font-size:12px;font-weight:700;text-align:center;padding:6px 12px max(env(safe-area-inset-top),6px);padding-top:calc(6px + env(safe-area-inset-top))}
+
+/* Header */
+#header{position:fixed;top:32px;left:0;right:0;z-index:999;padding:12px 16px 8px;display:flex;align-items:center;gap:8px}
+#header h1{font-size:17px;font-weight:700;letter-spacing:-0.3px}
+#header h1 span{color:var(--accent)}
+
+/* Search */
+#search-wrap{position:fixed;top:0;left:0;right:0;z-index:1100;pointer-events:none}
+#search-bar{margin:calc(32px + 62px) 12px 0;background:var(--surface);border:1px solid var(--border);border-radius:12px;display:flex;align-items:center;padding:0 12px;gap:8px;pointer-events:all;box-shadow:0 4px 24px rgba(0,0,0,0.4)}
+#search-bar svg{flex-shrink:0;opacity:0.5}
+#search-input{flex:1;background:transparent;border:none;outline:none;color:var(--text);font-size:14px;padding:11px 0;font-family:inherit}
+#search-input::placeholder{color:var(--text2)}
+#search-results{position:fixed;left:12px;right:12px;z-index:1200;background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.5);display:none}
+.search-result{padding:12px 16px;font-size:14px;cursor:pointer;border-top:1px solid var(--border);color:var(--text2)}
+.search-result:first-child{border-top:none}
+.search-result:active{background:var(--surface2)}
+.search-result strong{color:var(--text)}
+
+/* Overlay & Sheet */
+#overlay{position:fixed;inset:0;z-index:1500;background:rgba(0,0,0,0.5);opacity:0;pointer-events:none;transition:opacity 0.2s}
+#overlay.visible{opacity:1;pointer-events:all}
+#sheet{position:fixed;bottom:0;left:0;right:0;z-index:2000;background:var(--surface);border-radius:20px 20px 0 0;border-top:1px solid var(--border);padding:0 0 max(env(safe-area-inset-bottom),20px);transform:translateY(100%);transition:transform 0.32s cubic-bezier(0.32,0.72,0,1);max-height:75vh;overflow-y:auto}
+#sheet.open{transform:translateY(0)}
+#sheet-handle{width:36px;height:4px;background:rgba(255,255,255,0.2);border-radius:2px;margin:12px auto 0}
+#sheet-addr{font-size:15px;font-weight:600;padding:16px 20px 4px;line-height:1.3}
+#sheet-coords{font-size:12px;color:var(--text2);padding:0 20px 8px}
+#zillow-btn{display:flex;align-items:center;gap:8px;margin:0 20px 12px;background:transparent;color:#006aff;border:1px solid rgba(0,106,255,0.3);border-radius:10px;padding:10px 14px;font-size:13px;font-weight:600;text-decoration:none;width:calc(100% - 40px)}
+#sheet-year-row{padding:8px 20px 4px;border-top:1px solid var(--border)}
+#sheet-year-label{font-size:11px;color:var(--text2);margin-bottom:6px}
+#sheet-year{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:14px;padding:10px 12px;font-family:inherit;outline:none}
+#sheet-year::placeholder{color:var(--text2)}
+#sheet-note{margin-top:8px;width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:14px;padding:10px 12px;resize:none;font-family:inherit;outline:none}
+#sheet-note::placeholder{color:var(--text2)}
+#sheet-close{display:block;margin:16px 20px 0;background:var(--accent);color:#fff;border:none;border-radius:12px;padding:13px;font-size:15px;font-weight:600;cursor:pointer;width:calc(100% - 40px);-webkit-appearance:none}
+
+/* Zip widget */
+#zip-widget{position:fixed;bottom:max(env(safe-area-inset-bottom),20px);left:12px;z-index:900;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:10px 12px;min-width:160px;max-width:200px}
+#zip-header{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);margin-bottom:4px}
+#zip-header span{flex:1}
+#zip-add-toggle{background:transparent;border:1px solid var(--border);border-radius:6px;color:var(--text2);width:22px;height:22px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;padding:0;line-height:1}
+#zip-add-toggle:active{background:var(--surface2)}
+#zip-input-row{display:flex;gap:6px;margin-bottom:6px}
+#zip-input{flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:6px 8px;outline:none;font-family:inherit;width:0}
+#zip-input::-webkit-outer-spin-button,#zip-input::-webkit-inner-spin-button{-webkit-appearance:none}
+#zip-add-btn{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:6px 10px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap}
+#zip-add-btn:active{opacity:0.85}
+#zip-list{display:flex;flex-direction:column;gap:4px}
+.zip-tag{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:4px 8px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid transparent}
+.zip-tag.active{border-color:currentColor}
+.zip-tag-remove{opacity:0.5;font-size:14px;line-height:1;cursor:pointer;padding:0 2px}
+.zip-tag-remove:hover{opacity:1}
+.zip-loading{font-size:11px;color:var(--text2);text-align:center;padding:4px}
+
+/* House age legend */
+#age-legend{position:fixed;bottom:max(env(safe-area-inset-bottom),20px);right:12px;z-index:900;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:10px 12px;font-size:11px;color:var(--text2);max-width:170px;line-height:1.5}
+#age-legend b{color:var(--text);display:block;margin-bottom:4px;font-size:12px}
+
+.leaflet-control-zoom{display:none}
+
+/* Toast */
+#toast{position:fixed;bottom:120px;left:50%;transform:translateX(-50%);background:rgba(20,20,30,0.95);color:#fff;font-size:13px;padding:8px 18px;border-radius:20px;z-index:9999;pointer-events:none;opacity:0;transition:opacity 0.3s;white-space:nowrap;border:1px solid var(--border)}
+#toast.show{opacity:1}
+</style>
+</head>
+<body>
+
+<div id="test-banner">TEST MODE — no login, nothing here is saved</div>
+
+<div id="map"></div>
+
+<div id="header">
+  <h1>Knox<span>Canvas</span> — Test</h1>
+</div>
+
+<div id="search-wrap">
+  <div id="search-bar">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+    <input id="search-input" type="text" placeholder="Search Knoxville address…" autocomplete="off" autocorrect="off" spellcheck="false">
+  </div>
+  <div id="search-results"></div>
+</div>
+
+<div id="overlay"></div>
+
+<div id="sheet">
+  <div id="sheet-handle"></div>
+  <div id="sheet-addr">Select a location</div>
+  <div id="sheet-coords"></div>
+  <a id="zillow-btn" href="#" target="_blank" rel="noopener">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+    Check on Zillow
+  </a>
+  <div id="sheet-year-row">
+    <div id="sheet-year-label">Year built — from OSM if available, or check Zillow and enter it here</div>
+    <input id="sheet-year" type="number" placeholder="Year built (e.g. 1998)" min="1800" max="2025">
+    <textarea id="sheet-note" rows="2" placeholder="Note (not saved — this session only)…"></textarea>
+  </div>
+  <button id="sheet-close">Done</button>
+</div>
+
+<!-- Zip Code Filter -->
+<div id="zip-widget">
+  <div id="zip-header">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+    <span>Zip Codes</span>
+    <button id="zip-add-toggle">+</button>
+  </div>
+  <div id="zip-input-row" style="display:none">
+    <input id="zip-input" type="number" placeholder="e.g. 37923" maxlength="5">
+    <button id="zip-add-btn">Add</button>
+  </div>
+  <div id="zip-list"></div>
+</div>
+
+<div id="age-legend">
+  <b>House age check</b>
+  Tap any address to drop a pin. If OSM has a build year it fills in automatically — otherwise tap "Check on Zillow" and enter it yourself.
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ── Map ───────────────────────────────────────────────────
+const map = L.map('map', { center: [35.9606, -83.9207], zoom: 17, zoomControl: false, attributionControl: false });
+L.tileLayer('https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', { maxZoom: 22, subdomains: '0123', attribution: '© Google Maps' }).addTo(map);
+L.control.attribution({ position: 'bottomleft', prefix: false }).addTo(map);
+
+let tempMarker = null;
+let currentPoint = null; // {lat,lng,addr,yearBuilt}
+
+function makeIcon(){
+  return L.divIcon({ html: `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36"><path d="M14 2C8.48 2 4 6.48 4 12c0 7 10 22 10 22S24 19 24 12c0-5.52-4.48-10-10-10z" fill="#4f6ef7"/><circle cx="14" cy="12" r="5" fill="rgba(255,255,255,0.35)"/></svg>`, iconSize: [28,36], iconAnchor: [14,36], className: '' });
+}
+
+// ── Overpass: try to find a build year near a point ────────
+async function fetchYearBuiltNear(lat, lng) {
+  const query = `[out:json][timeout:15];(way["building"](around:35,${lat},${lng}););out tags 1;`;
+  const endpoints = ['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter'];
+  for (const ep of endpoints) {
+    try {
+      const r = await fetch(`${ep}?data=${encodeURIComponent(query)}`);
+      if (!r.ok) continue;
+      const d = await r.json();
+      if (!d.elements || !d.elements.length) continue;
+      for (const el of d.elements) {
+        const raw = el.tags?.start_date || el.tags?.['building:start_date'] || el.tags?.year_built;
+        if (raw) {
+          const match = String(raw).match(/\d{4}/);
+          if (match) return match[0];
+        }
+      }
+      return '';
+    } catch(e) { continue; }
+  }
+  return '';
+}
+
+// ── Sheet ─────────────────────────────────────────────────
+function openSheet() {
+  const p = currentPoint;
+  document.getElementById('sheet-addr').textContent = p.addr || 'Unnamed location';
+  document.getElementById('sheet-coords').textContent = p.lat.toFixed(5)+', '+p.lng.toFixed(5);
+  document.getElementById('sheet-year').value = p.yearBuilt || '';
+  document.getElementById('sheet-note').value = '';
+  document.getElementById('zillow-btn').href = `https://www.zillow.com/homes/${encodeURIComponent((p.addr||'').trim())}_rb/`;
+  document.getElementById('sheet').classList.add('open');
+  document.getElementById('overlay').classList.add('visible');
+}
+function closeSheet() {
+  document.getElementById('sheet').classList.remove('open');
+  document.getElementById('overlay').classList.remove('visible');
+}
+document.getElementById('overlay').addEventListener('click', closeSheet);
+document.getElementById('sheet-close').addEventListener('click', closeSheet);
+document.getElementById('sheet-year').addEventListener('input', () => {
+  if (!currentPoint) return;
+  currentPoint.yearBuilt = document.getElementById('sheet-year').value;
+});
+
+async function dropPin(lat, lng, addr) {
+  if (tempMarker) map.removeLayer(tempMarker);
+  tempMarker = L.marker([lat, lng], { icon: makeIcon() }).addTo(map);
+  currentPoint = { lat, lng, addr: addr || 'Loading address…', yearBuilt: '' };
+  openSheet();
+  document.getElementById('sheet-year').placeholder = 'Checking OSM…';
+
+  if (!addr) reverseGeocode(lat, lng);
+
+  const year = await fetchYearBuiltNear(lat, lng);
+  document.getElementById('sheet-year').placeholder = 'Year built (e.g. 1998)';
+  if (year && currentPoint) {
+    currentPoint.yearBuilt = year;
+    document.getElementById('sheet-year').value = year;
+    showToast('Found build year on OSM: '+year);
+  }
+}
+
+async function reverseGeocode(lat, lng) {
+  let addr = '';
+  try {
+    const r = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&addressdetails=1&zoom=18`);
+    const d = await r.json();
+    if (d.address) {
+      const a = d.address; const num = a.house_number||'', road = a.road||'';
+      const city = a.city||a.town||a.village||'Knoxville'; const state = a.state_code||'TN', zip = a.postcode||'';
+      if (num && road) addr = `${num} ${road}, ${city}, ${state} ${zip}`.trim();
+    }
+  } catch(e) {}
+  if (!addr) addr = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+  if (currentPoint) {
+    currentPoint.addr = addr;
+    document.getElementById('sheet-addr').textContent = addr;
+    document.getElementById('zillow-btn').href = `https://www.zillow.com/homes/${encodeURIComponent(addr)}_rb/`;
+  }
+}
+
+map.on('click', (e) => { dropPin(e.latlng.lat, e.latlng.lng, null); });
+
+// ── Search ────────────────────────────────────────────────
+const searchInput = document.getElementById('search-input');
+const searchResults = document.getElementById('search-results');
+let searchTimeout;
+searchInput.addEventListener('input', () => {
+  clearTimeout(searchTimeout); const q = searchInput.value.trim();
+  if (q.length < 3) { searchResults.style.display = 'none'; return; }
+  searchTimeout = setTimeout(() => doSearch(q), 400);
+});
+async function doSearch(q) {
+  try {
+    const r = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q+' Knoxville Tennessee')}&format=json&limit=5`);
+    const data = await r.json(); searchResults.innerHTML = '';
+    if (!data.length) { searchResults.style.display = 'none'; return; }
+    const rect = document.getElementById('search-bar').getBoundingClientRect();
+    searchResults.style.top = (rect.bottom+6)+'px';
+    data.forEach(item => {
+      const d = document.createElement('div'); d.className = 'search-result';
+      const parts = item.display_name.split(',');
+      d.innerHTML = `<strong>${parts[0]}</strong>, ${parts.slice(1,3).join(',')}`;
+      d.addEventListener('click', () => {
+        const lat = parseFloat(item.lat), lng = parseFloat(item.lon);
+        map.setView([lat,lng], 18); searchResults.style.display = 'none'; searchInput.value = ''; searchInput.blur();
+        dropPin(lat, lng, item.display_name.split(',').slice(0,3).join(','));
+      });
+      searchResults.appendChild(d);
+    });
+    searchResults.style.display = 'block';
+  } catch(e) { searchResults.style.display = 'none'; }
+}
+document.addEventListener('click', e => { if (!e.target.closest('#search-bar') && !e.target.closest('#search-results')) searchResults.style.display = 'none'; });
+
+// ── Zip Code Overlay ──────────────────────────────────────
+const ZIP_COLORS = ['#4f6ef7','#10b981','#f59e0b','#7c3aed','#ef4444','#06b6d4'];
+let zipLayers = {};
+let zipColorIdx = 0;
+
+document.getElementById('zip-add-toggle').addEventListener('click', () => {
+  const row = document.getElementById('zip-input-row');
+  const visible = row.style.display !== 'none';
+  row.style.display = visible ? 'none' : 'flex';
+  if (!visible) document.getElementById('zip-input').focus();
+});
+document.getElementById('zip-add-btn').addEventListener('click', () => addZip());
+document.getElementById('zip-input').addEventListener('keydown', e => { if(e.key==='Enter') addZip(); });
+
+async function addZip() {
+  const zip = document.getElementById('zip-input').value.trim();
+  if (zip.length !== 5 || isNaN(zip)) { showToast('Enter a valid 5-digit zip'); return; }
+  if (zipLayers[zip]) { showToast('Already added'); return; }
+
+  document.getElementById('zip-input').value = '';
+  document.getElementById('zip-input-row').style.display = 'none';
+
+  const loadingEl = document.createElement('div');
+  loadingEl.className = 'zip-loading';
+  loadingEl.textContent = `Loading ${zip}…`;
+  loadingEl.id = `zip-loading-${zip}`;
+  document.getElementById('zip-list').appendChild(loadingEl);
+
+  try {
+    const coords = await fetchZipBoundary(zip);
+    const el = document.getElementById(`zip-loading-${zip}`);
+    if (el) el.remove();
+    if (!coords || coords.length === 0) { showToast(`No boundary found for ${zip}`); return; }
+
+    const color = ZIP_COLORS[zipColorIdx % ZIP_COLORS.length];
+    zipColorIdx++;
+    const layer = L.polygon(coords, { color, weight: 2, fillColor: color, fillOpacity: 0.08, dashArray: '6,4' }).addTo(map);
+    const bounds = layer.getBounds();
+    const label = L.divIcon({ html: `<div style="background:${color};color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;opacity:0.85">${zip}</div>`, className: '', iconAnchor: [0,0] });
+    const labelMarker = L.marker(bounds.getCenter(), { icon: label, interactive: false }).addTo(map);
+
+    zipLayers[zip] = { layer, labelMarker, color, visible: true };
+    map.fitBounds(bounds.pad(0.05));
+    renderZipList();
+    showToast(`${zip} added`);
+  } catch(e) {
+    const el = document.getElementById(`zip-loading-${zip}`);
+    if (el) el.remove();
+    showToast(`Could not load ${zip}`);
+  }
+}
+
+async function fetchZipBoundary(zip) {
+  // Primary: US Census Bureau TIGERweb ZCTA layer — this is the actual
+  // authoritative source for ZIP boundaries (OSM doesn't map them reliably).
+  try {
+    const tigerUrl = `https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/PUMA_TAD_TAZ_UGA_ZCTA/MapServer/1/query?where=ZCTA5%3D%27${zip}%27&outFields=ZCTA5&returnGeometry=true&outSR=4326&f=geojson`;
+    const r = await fetch(tigerUrl);
+    if (r.ok) {
+      const d = await r.json();
+      if (d.features && d.features.length) {
+        const coords = geojsonToLatLng(d.features[0].geometry);
+        if (coords && coords.length) return coords;
+      }
+    }
+  } catch(e) { /* fall through to OSM-based fallback below */ }
+
+  // Fallback: Nominatim + Overpass (OSM rarely has clean ZIP polygons, but
+  // worth a shot if TIGERweb is unreachable or the ZIP isn't in the dataset)
+  try {
+    const searchUrl = `https://nominatim.openstreetmap.org/search?q=${zip}&format=json&limit=1&addressdetails=1&countrycodes=us`;
+    const searchRes = await fetch(searchUrl);
+    const searchData = await searchRes.json();
+    if (searchData.length) {
+      const osmId = searchData[0].osm_id;
+      const osmType = searchData[0].osm_type;
+      const detailUrl = `https://nominatim.openstreetmap.org/details?osmtype=${osmType === 'relation' ? 'R' : osmType === 'way' ? 'W' : 'N'}&osmid=${osmId}&format=json&polygon_geojson=1`;
+      const detailRes = await fetch(detailUrl);
+      const detail = await detailRes.json();
+      if (detail.geometry && detail.geometry.coordinates) {
+        const coords = geojsonToLatLng(detail.geometry);
+        if (coords && coords.length) return coords;
+      }
+    }
+  } catch(e) {}
+
+  return await fetchZipViaOverpass(zip);
+}
+
+async function fetchZipViaOverpass(zip) {
+  const query = `[out:json][timeout:20];relation["postal_code"="${zip}"]["boundary"="postal_code"];out geom;`;
+  const endpoints = ['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter'];
+  for (const ep of endpoints) {
+    try {
+      const r = await fetch(`${ep}?data=${encodeURIComponent(query)}`);
+      if (!r.ok) continue;
+      const d = await r.json();
+      if (!d.elements || !d.elements.length) continue;
+      const el = d.elements[0];
+      if (el.members) {
+        const coords = [];
+        el.members.filter(m => m.type === 'way' && m.geometry).forEach(m => { m.geometry.forEach(pt => coords.push([pt.lat, pt.lon])); });
+        if (coords.length) return coords;
+      }
+    } catch(e) { continue; }
+  }
+  return null;
+}
+
+function geojsonToLatLng(geometry) {
+  if (geometry.type === 'Polygon') return geometry.coordinates[0].map(c => [c[1], c[0]]);
+  if (geometry.type === 'MultiPolygon') {
+    const rings = geometry.coordinates.map(poly => poly[0].map(c => [c[1], c[0]]));
+    return rings.reduce((a,b) => a.length > b.length ? a : b, []);
+  }
+  return null;
+}
+
+function renderZipList() {
+  const list = document.getElementById('zip-list');
+  list.innerHTML = '';
+  Object.entries(zipLayers).forEach(([zip, info]) => {
+    const tag = document.createElement('div');
+    tag.className = 'zip-tag' + (info.visible ? ' active' : '');
+    tag.style.color = info.color;
+    tag.style.background = info.color + '18';
+    tag.innerHTML = `<span>${zip}</span><span class="zip-tag-remove" data-zip="${zip}">✕</span>`;
+    tag.addEventListener('click', (e) => {
+      if (e.target.classList.contains('zip-tag-remove')) { removeZip(zip); return; }
+      toggleZip(zip);
+    });
+    list.appendChild(tag);
+  });
+}
+function toggleZip(zip) {
+  const info = zipLayers[zip];
+  if (!info) return;
+  info.visible = !info.visible;
+  if (info.visible) { info.layer.addTo(map); info.labelMarker.addTo(map); }
+  else { map.removeLayer(info.layer); map.removeLayer(info.labelMarker); }
+  renderZipList();
+}
+function removeZip(zip) {
+  const info = zipLayers[zip];
+  if (!info) return;
+  map.removeLayer(info.layer); map.removeLayer(info.labelMarker);
+  delete zipLayers[zip];
+  renderZipList();
+}
+
+// ── Toast ─────────────────────────────────────────────────
+function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);}
+</script>
+</body>
+</html>

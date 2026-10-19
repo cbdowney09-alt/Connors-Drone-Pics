@@ -106,8 +106,12 @@ struct KnoxWebView: UIViewRepresentable {
             }
             // Keep our own site and Firebase auth inside the app; open everything else (Zillow, etc.) in Safari.
             let host = target.host?.lowercased() ?? ""
-            let appHost = url.host?.lowercased() ?? ""
-            let isInternal = scheme == "about" || scheme == "data" || scheme == "blob" || host == appHost
+            // Treat connorsdronepics.com and www.connorsdronepics.com (and any subdomain) as the app,
+            // so a www/non-www redirect from Vercel doesn't get bounced out to Safari.
+            let site = Self.bareHost(url.host)
+            let isInternal = scheme == "about" || scheme == "data" || scheme == "blob"
+                || Self.bareHost(host) == site || host.hasSuffix("." + site)
+                || host.hasSuffix(".vercel.app")
                 || host.hasSuffix(".firebaseapp.com") || host.hasSuffix(".web.app")
             if action.targetFrame?.isMainFrame == true && !isInternal {
                 UIApplication.shared.open(target); return decisionHandler(.cancel)
@@ -148,6 +152,11 @@ struct KnoxWebView: UIViewRepresentable {
             alert.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in completionHandler(nil) })
             alert.addAction(UIAlertAction(title: "OK", style: .default) { _ in completionHandler(alert.textFields?.first?.text) })
             present(alert, orElse: { completionHandler(nil) })
+        }
+
+        private static func bareHost(_ h: String?) -> String {
+            let h = (h ?? "").lowercased()
+            return h.hasPrefix("www.") ? String(h.dropFirst(4)) : h
         }
 
         // MARK: Google sign-in

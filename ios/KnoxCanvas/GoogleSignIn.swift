@@ -31,6 +31,7 @@ final class GoogleSignIn: NSObject, ASWebAuthenticationPresentationContextProvid
     private var session: ASWebAuthenticationSession?
 
     func signIn(completion: @escaping (Result<Tokens, SignInError>) -> Void) {
+        guard session == nil else { return }   // already showing (popup + redirect can both trigger it)
         let clientID = AppConfig.googleIOSClientID
         guard clientID.hasSuffix(".apps.googleusercontent.com"), !clientID.hasPrefix("PASTE") else {
             return completion(.failure(.notConfigured))

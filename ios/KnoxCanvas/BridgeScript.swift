@@ -37,6 +37,19 @@ enum BridgeScript {
         clearWatch: function (id) { delete g.watchers[id]; if (!active()) post({ cmd: 'geoStop' }); }
       };
       try { Object.defineProperty(navigator, 'geolocation', { value: geo, configurable: true }); } catch (e) {}
+
+      // Native Google sign-in hands its tokens here. Importing the same Firebase URLs the page uses
+      // returns the page's own module instances, so this signs in the page's Firebase app and its
+      // onAuthStateChanged fires. Keep the version in sync with app.html (10.12.0).
+      window.__knoxGoogleCredential = function (idToken, accessToken) {
+        var base = 'https://www.gstatic.com/firebasejs/10.12.0/';
+        Promise.all([import(base + 'firebase-app.js'), import(base + 'firebase-auth.js')])
+          .then(function (m) {
+            var a = m[1];
+            return a.signInWithCredential(a.getAuth(m[0].getApp()), a.GoogleAuthProvider.credential(idToken, accessToken || null));
+          })
+          .catch(function (e) { post({ cmd: 'googleFailed', message: String((e && (e.code || e.message)) || e) }); });
+      };
     })();
     """
 }

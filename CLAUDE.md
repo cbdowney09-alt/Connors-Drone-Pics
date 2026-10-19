@@ -100,7 +100,11 @@ yet**. Expect to fix small Swift errors on the first build.
   so the page's popup/redirect flow can't work in the app. In the app, the Google button sends
   `googleSignIn` to native code. Native runs Google OAuth (PKCE) in `ASWebAuthenticationSession`,
   exchanges the code for an ID token and calls `KnoxNative.onGoogleCredential(idToken, accessToken)`.
-  The page then calls `signInWithCredential`. **Setup:** Firebase console → Project settings →
+  The native code also catches the page's own Google popup or redirect (Firebase's `/__/auth/` handler or
+  `accounts.google.com`) and runs the native flow instead. Before this, older page versions sent
+  users to Safari. The tokens go to `window.__knoxGoogleCredential` (defined in `BridgeScript`).
+  That function dynamic-imports the same Firebase 10.12.0 URLs the page uses, so it signs in the
+  page's own Firebase instance and works with any page version. Keep that version in sync with `app.html`. **Setup:** Firebase console → Project settings →
   Add app → iOS, using the same bundle ID as the Xcode target. Download `GoogleService-Info.plist`
   and paste its `CLIENT_ID` into `AppConfig.googleIOSClientID`. Until that's done, the button
   shows "isn't set up yet". Both `app.html` and `docs/app.html` have this hook.

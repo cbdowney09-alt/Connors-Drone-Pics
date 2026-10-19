@@ -54,15 +54,9 @@ struct KnoxWebView: UIViewRepresentable {
             case "stopTracking":  LocationBridge.shared.pageStoppedTracking()
             case "geoStart":      LocationBridge.shared.geoStart()
             case "geoStop":       LocationBridge.shared.geoStop()
-            case "googleSignIn":
-                GoogleSignIn.shared.signIn { [weak self] result in
-                    switch result {
-                    case .success(let t):
-                        self?.callPage("window.KnoxNative.onGoogleCredential", t.idToken, t.accessToken ?? "")
-                    case .failure(let e):
-                        self?.callPage("window.KnoxNative.onGoogleError", e.errorDescription ?? "")
-                    }
-                }
+            case "googleSignIn":  startGoogleSignIn()
+            case "googleFailed":
+                showMessage("Google sign-in didn't finish (\((body["message"] as? String) ?? "unknown error")). Try again, or use email and password.")
             case "haptic":        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
             case "share":
                 let name = (body["filename"] as? String) ?? "knoxcanvas.csv"
@@ -102,6 +96,10 @@ struct KnoxWebView: UIViewRepresentable {
         func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction,
                      decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
             guard let target = action.request.url else { return decisionHandler(.allow) }
+            // The web page's own Google flow (popup → redirect) can't work in an app; do it natively.
+            if action.targetFrame?.isMainFrame == true && Self.isGoogleAuth(target) {
+                startGoogleSignIn(); return decisionHandler(.cancel)
+            }
             let scheme = target.scheme?.lowercased() ?? ""
             if ["tel", "mailto", "sms", "maps", "itms-apps"].contains(scheme) {
                 UIApplication.shared.open(target); return decisionHandler(.cancel)
@@ -120,7 +118,9 @@ struct KnoxWebView: UIViewRepresentable {
         // target="_blank" links (e.g. "View on Zillow") → Safari
         func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
                      for action: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
-            if let target = action.request.url { UIApplication.shared.open(target) }
+            guard let target = action.request.url, target.scheme?.hasPrefix("http") == true else { return nil }
+            if Self.isGoogleAuth(target) { startGoogleSignIn() }   // Firebase's Google popup
+            else { UIApplication.shared.open(target) }
             return nil
         }
 
@@ -148,6 +148,33 @@ struct KnoxWebView: UIViewRepresentable {
             alert.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in completionHandler(nil) })
             alert.addAction(UIAlertAction(title: "OK", style: .default) { _ in completionHandler(alert.textFields?.first?.text) })
             present(alert, orElse: { completionHandler(nil) })
+        }
+
+        // MARK: Google sign-in
+
+        /// Firebase's Google sign-in pages (popup or redirect) and Google's own login page.
+        private static func isGoogleAuth(_ u: URL) -> Bool {
+            let host = u.host?.lowercased() ?? ""
+            return host == "accounts.google.com"
+                || ((host.hasSuffix(".firebaseapp.com") || host.hasSuffix(".web.app")) && u.path.hasPrefix("/__/auth/"))
+        }
+
+        private func startGoogleSignIn() {
+            GoogleSignIn.shared.signIn { [weak self] result in
+                switch result {
+                case .success(let t):
+                    // Signs in to the page's Firebase instance (see BridgeScript), so any page version works.
+                    self?.callPage("window.__knoxGoogleCredential", t.idToken, t.accessToken ?? "")
+                case .failure(let e):
+                    if let msg = e.errorDescription { self?.showMessage(msg) }
+                }
+            }
+        }
+
+        private func showMessage(_ text: String) {
+            let alert = UIAlertController(title: "Google sign-in", message: text, preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: "OK", style: .default))
+            present(alert, orElse: {})
         }
 
         // MARK: Helpers

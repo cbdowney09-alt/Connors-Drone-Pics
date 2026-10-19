@@ -145,6 +145,11 @@ yet**. Expect to fix small Swift errors on the first build.
 - Firestore security rules aren't in this repo. Make sure they allow the new pin field `source`
   and the shift fields `trail`, `trailMeters` and `gpsHangers`.
 
+## Native rewrite
+
+A full SwiftUI rewrite is planned in `NATIVE_PLAN.md` (phases, rules and a kickoff prompt). It
+goes in `ios-native/`, and `ios/` stays as the fallback until the rewrite reaches parity.
+
 ## Next steps
 
 1. Build the iOS app on a real iPhone and fix any compile errors.

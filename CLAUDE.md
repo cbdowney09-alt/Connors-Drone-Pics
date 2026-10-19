@@ -56,6 +56,20 @@ Pin statuses (keep these five; exports and Sheets depend on them):
 7. After editing, run `node --check` on the extracted `<script type="module">`, confirm that old
    records without the new fields still load, and check the layout at phone width.
 
+## Map screen layout (redesigned Oct 2026)
+
+- **Top:** a floating search card with a locate button. Below it, horizontally scrolling status
+  filter chips (`#legend .legend-row`, which also show counts), then a status row (sync problems,
+  GPS off, and the "On shift" chip).
+- **Bottom tab bar (`#tabbar`):** Shift (shows the live timer), Route, Zone, Layers, Account. Floating
+  banners sit above it using `--tabbar-h` + `--safe-b`.
+- **Layers panel:** street/satellite basemap (saved in localStorage as `knoxBasemap`), the roofing
+  target mode switch, and zip boundaries.
+- **Pins:** `L.circleMarker` dots on a shared canvas renderer (`pinRenderer`), sized by zoom.
+  Use `setStyle`, not `setIcon`.
+- **Preview harness:** render with Playwright using stubbed Firebase modules. Check at 390×844
+  before shipping UI changes.
+
 ## Street sweep (GPS auto-pinning) — added Oct 2026
 
 While a canvasser is **clocked in**, GPS builds a walking trail. Code is in the

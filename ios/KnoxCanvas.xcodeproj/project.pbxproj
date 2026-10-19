@@ -12,6 +12,7 @@
 		AA0000000000000000000103 /* LocationBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000203 /* LocationBridge.swift */; };
 		AA0000000000000000000104 /* BridgeScript.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000204 /* BridgeScript.swift */; };
 		AA0000000000000000000105 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000205 /* Assets.xcassets */; };
+		AA0000000000000000000106 /* GoogleSignIn.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000207 /* GoogleSignIn.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -20,6 +21,7 @@
 		AA0000000000000000000203 /* LocationBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationBridge.swift; sourceTree = "<group>"; };
 		AA0000000000000000000204 /* BridgeScript.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BridgeScript.swift; sourceTree = "<group>"; };
 		AA0000000000000000000205 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		AA0000000000000000000207 /* GoogleSignIn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleSignIn.swift; sourceTree = "<group>"; };
 		AA0000000000000000000206 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		AA0000000000000000000299 /* KnoxCanvas.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = KnoxCanvas.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -50,6 +52,7 @@
 				AA0000000000000000000202 /* WebView.swift */,
 				AA0000000000000000000203 /* LocationBridge.swift */,
 				AA0000000000000000000204 /* BridgeScript.swift */,
+				AA0000000000000000000207 /* GoogleSignIn.swift */,
 				AA0000000000000000000205 /* Assets.xcassets */,
 				AA0000000000000000000206 /* Info.plist */,
 			);
@@ -137,6 +140,7 @@
 				AA0000000000000000000102 /* WebView.swift in Sources */,
 				AA0000000000000000000103 /* LocationBridge.swift in Sources */,
 				AA0000000000000000000104 /* BridgeScript.swift in Sources */,
+				AA0000000000000000000106 /* GoogleSignIn.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

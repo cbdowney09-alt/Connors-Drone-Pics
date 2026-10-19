@@ -25,8 +25,7 @@ loads the live URL, so it only picks up changes once they're deployed.
 
 - Map: Leaflet 1.9.4 with Google tiles.
 - Data: Firebase project `knoxcanvas-a7bfe`. Firestore uses an offline persistent cache; auth is
-  email/password plus Google (Google is hidden inside the iOS app because Google blocks
-  embedded web views).
+  email/password plus Google (in the iOS app, Google sign-in runs natively; see GoogleSignIn.swift).
   - `users/{uid}` → `{ name, email, role: owner|employee, companyId, companyName }`
   - `companies/{id}` → `{ name, ownerId, roofCutoff, sheetsUrl }`
   - `companies/{id}/pins/{lat6,lng6}` → `{ lat, lng, addr, status, note, yearBuilt, ts, createdBy, statusBy, statusAt, hangerBy, hangerAt, source? }`
@@ -97,23 +96,32 @@ yet**. Expect to fix small Swift errors on the first build.
   When-In-Use plus the blue pill) keeps recording with the screen locked. Points are buffered in
   UserDefaults and flushed to the page when it's visible. While the app is in the background, it
   sends a silent notification about every 250 m walked, reminding the canvasser to open the app and mark houses.
+- `GoogleSignIn.swift`: Google blocks its login page inside WKWebView (`disallowed_useragent`),
+  so the page's popup/redirect flow can't work in the app. In the app, the Google button sends
+  `googleSignIn` to native code. Native runs Google OAuth (PKCE) in `ASWebAuthenticationSession`,
+  exchanges the code for an ID token and calls `KnoxNative.onGoogleCredential(idToken, accessToken)`.
+  The page then calls `signInWithCredential`. **Setup:** Firebase console → Project settings →
+  Add app → iOS, using the same bundle ID as the Xcode target. Download `GoogleService-Info.plist`
+  and paste its `CLIENT_ID` into `AppConfig.googleIOSClientID`. Until that's done, the button
+  shows "isn't set up yet". Both `app.html` and `docs/app.html` have this hook.
 - `BridgeScript.swift`: injected at document start. It replaces `navigator.geolocation` with
   the native one, so there's only one permission prompt and the locate button uses native GPS.
 
 **Bridge contract** (page ↔ native):
 
 - Page → native: `window.webkit.messageHandlers.knox.postMessage({cmd})`, where `cmd` is one of
-  `startTracking`, `stopTracking`, `geoStart`, `geoStop`, `haptic`, or `share` (sent as `{filename, text}`).
+  `startTracking`, `stopTracking`, `geoStart`, `geoStop`, `googleSignIn`, `haptic`, or `share` (sent as `{filename, text}`).
 - Native → page:
   - `window.KnoxNative.onLocations([{lat,lng,acc,spd,t}])`
   - `KnoxNative.onTrackingError(msg)`
   - `KnoxNative.onTrackingOk()`
+  - `KnoxNative.onGoogleCredential(idToken, accessToken)` / `KnoxNative.onGoogleError(msg)`
   - `window.__knoxGeoDeliver(coords)` / `__knoxGeoError(code,msg)`
 - `IS_NATIVE` in `app.html` is true when the `knox` handler exists.
 
 ## Known open issues
 
-- Google login on the web (popup vs. redirect). Inside the iOS app it's hidden on purpose; adding it would need the native Google Sign-In SDK.
+- Google login on the web (popup vs. redirect). The iOS app uses the native flow in `GoogleSignIn.swift` instead.
 - Zip boundary overlays sometimes don't load.
 - The clock-in state lives in `localStorage` only, so it's lost if the device storage is cleared. It should move to Firestore.
 - `docs/app.html` vs. `app.html` divergence (see Deploying).

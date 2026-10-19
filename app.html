@@ -557,7 +557,7 @@ body.is-owner .owner-only{display:flex!important}
 
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, signOut, onAuthStateChanged, sendPasswordResetEmail, updateProfile, deleteUser } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, signInWithRedirect, signInWithCredential, getRedirectResult, GoogleAuthProvider, signOut, onAuthStateChanged, sendPasswordResetEmail, updateProfile, deleteUser } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, getFirestore, doc, setDoc, getDoc, getDocs, addDoc, collection, query, where, onSnapshot, deleteDoc, updateDoc, writeBatch, serverTimestamp, Timestamp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 // Firebase web config is a public identifier, not a secret. Access is enforced by Firestore security rules.
@@ -705,6 +705,7 @@ $('forgot-link').addEventListener('click', async () => {
 
 $('google-btn').addEventListener('click', async () => {
   setAuthErr('');
+  if (IS_NATIVE) { setAuthInfo('Opening Google…'); nativePost({ cmd: 'googleSignIn' }); return; }
   try { await signInWithPopup(auth, googleProvider); }
   catch (e) {
     if (e.code === 'auth/popup-blocked' || e.code === 'auth/operation-not-supported-in-this-environment') {
@@ -714,8 +715,15 @@ $('google-btn').addEventListener('click', async () => {
     }
   }
 });
-// Google blocks its sign-in inside embedded app web views, so the iOS app uses email/password only.
-if (IS_NATIVE) { $('google-btn').style.display = 'none'; document.querySelector('.auth-divider').style.display = 'none'; }
+// iOS app: Google blocks its sign-in page inside app web views, so the native shell runs
+// Google sign-in in the system browser sheet and hands the tokens back here.
+window.KnoxNative = Object.assign(window.KnoxNative || {}, {
+  async onGoogleCredential(idToken, accessToken) {
+    try { await signInWithCredential(auth, GoogleAuthProvider.credential(idToken, accessToken || null)); }
+    catch (e) { setAuthErr(friendlyAuthError(e.code)); }
+  },
+  onGoogleError(msg) { if (msg) setAuthErr(msg); }
+});
 getRedirectResult(auth).catch(e => { if (e?.code) setAuthErr(friendlyAuthError(e.code)); });
 
 onAuthStateChanged(auth, user => loadSession(user));
@@ -1667,11 +1675,11 @@ function sweepShiftSummary(since) {
 }
 
 // Native iOS shell pushes batches of locations here (including ones collected while the screen was locked).
-window.KnoxNative = {
+window.KnoxNative = Object.assign(window.KnoxNative || {}, {
   onLocations(list) { (list || []).forEach(p => sweepAddPoint({ lat: +p.lat, lng: +p.lng, acc: +p.acc, t: +p.t })); },
   onTrackingError(msg) { setGpsPill('warn'); if (msg) showToast(msg); },
   onTrackingOk() { if (sweepOn) setGpsPill('on'); }
-};
+});
 
 // ── Shifts / clock ────────────────────────────────────────
 const clockKey = () => `knoxClock_${myUid()}`;

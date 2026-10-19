@@ -54,6 +54,15 @@ struct KnoxWebView: UIViewRepresentable {
             case "stopTracking":  LocationBridge.shared.pageStoppedTracking()
             case "geoStart":      LocationBridge.shared.geoStart()
             case "geoStop":       LocationBridge.shared.geoStop()
+            case "googleSignIn":
+                GoogleSignIn.shared.signIn { [weak self] result in
+                    switch result {
+                    case .success(let t):
+                        self?.callPage("window.KnoxNative.onGoogleCredential", t.idToken, t.accessToken ?? "")
+                    case .failure(let e):
+                        self?.callPage("window.KnoxNative.onGoogleError", e.errorDescription ?? "")
+                    }
+                }
             case "haptic":        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
             case "share":
                 let name = (body["filename"] as? String) ?? "knoxcanvas.csv"
@@ -142,6 +151,13 @@ struct KnoxWebView: UIViewRepresentable {
         }
 
         // MARK: Helpers
+
+        /// Calls a page function with string arguments, safely JSON-encoded.
+        private func callPage(_ fn: String, _ args: String...) {
+            guard let data = try? JSONSerialization.data(withJSONObject: args),
+                  let json = String(data: data, encoding: .utf8) else { return }
+            webView?.evaluateJavaScript("\(fn) && \(fn).apply(null, \(json)); true", completionHandler: nil)
+        }
 
         private func shareFile(named name: String, text: String) {
             let safeName = name.replacingOccurrences(of: "/", with: "-")

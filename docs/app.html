@@ -11,7 +11,7 @@
 <!-- Firebase -->
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, signInWithRedirect, signInWithCredential, getRedirectResult, GoogleAuthProvider, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import { getFirestore, doc, setDoc, getDoc, collection, addDoc, query, where, getDocs, onSnapshot, deleteDoc, updateDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 const firebaseConfig = {
@@ -63,6 +63,16 @@ getRedirectResult(auth).catch(e => {
     const msg = e.code === 'auth/popup-closed-by-user' ? '' : 'Google sign-in failed. Try again.';
     if (msg) setAuthErr(msg);
   }
+});
+
+// iOS app: Google blocks its sign-in page inside app web views, so the native shell runs
+// Google sign-in in the system browser sheet and hands the tokens back here.
+window.KnoxNative = Object.assign(window.KnoxNative || {}, {
+  async onGoogleCredential(idToken, accessToken) {
+    try { await signInWithCredential(auth, GoogleAuthProvider.credential(idToken, accessToken || null)); }
+    catch (e) { setAuthErr(friendlyAuthError(e.code)); }
+  },
+  onGoogleError(msg) { if (msg) setAuthErr(msg); }
 });
 
 onAuthStateChanged(auth, async (user) => {
@@ -162,6 +172,7 @@ document.getElementById('register-btn').addEventListener('click', async () => {
 
 document.getElementById('google-login-btn').addEventListener('click', async () => {
   setAuthErr('');
+  if (window.webkit?.messageHandlers?.knox) { window.webkit.messageHandlers.knox.postMessage({ cmd: 'googleSignIn' }); return; }
   try {
     // Try popup first, fall back to redirect if blocked
     const result = await signInWithPopup(auth, googleProvider).catch(async (err) => {

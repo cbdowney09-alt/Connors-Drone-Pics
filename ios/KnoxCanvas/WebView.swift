@@ -100,9 +100,9 @@ struct KnoxWebView: UIViewRepresentable {
             // Keep our own site and Firebase auth inside the app; open everything else (Zillow, etc.) in Safari.
             let host = target.host?.lowercased() ?? ""
             let appHost = url.host?.lowercased() ?? ""
-            let internal = scheme == "about" || scheme == "data" || scheme == "blob" || host == appHost
+            let isInternal = scheme == "about" || scheme == "data" || scheme == "blob" || host == appHost
                 || host.hasSuffix(".firebaseapp.com") || host.hasSuffix(".web.app")
-            if action.targetFrame?.isMainFrame == true && !internal {
+            if action.targetFrame?.isMainFrame == true && !isInternal {
                 UIApplication.shared.open(target); return decisionHandler(.cancel)
             }
             decisionHandler(.allow)

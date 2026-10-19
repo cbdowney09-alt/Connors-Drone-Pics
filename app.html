@@ -231,6 +231,28 @@ body.is-owner .owner-only{display:flex!important}
 .mshift-hangers{font-size:18px;font-weight:700;color:var(--c-hanger);text-align:right}
 .mshift-rate{font-size:11px;color:var(--text2);text-align:right}
 
+/* Street sweep (GPS) */
+#gps-pill{display:none;align-items:center;gap:4px;font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;white-space:nowrap;flex-shrink:0;color:#4f6ef7;background:rgba(79,110,247,0.14)}
+#gps-pill::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor}
+#gps-pill.on{display:inline-flex}
+#gps-pill.warn{color:#f59e0b;background:rgba(245,158,11,0.12)}
+#sweep-banner{position:fixed;left:12px;right:12px;bottom:max(env(safe-area-inset-bottom),16px);z-index:1400;background:var(--surface);border:1px solid var(--c-hanger);border-radius:18px;padding:14px;box-shadow:0 8px 32px rgba(0,0,0,0.55);display:none;flex-direction:column;gap:10px}
+#sweep-banner.show{display:flex}
+#sweep-title{font-size:16px;font-weight:700}
+#sweep-sub{font-size:12px;color:var(--text2);margin-top:2px;line-height:1.4}
+#sweep-btns{display:flex;gap:8px}
+#sweep-btns button{border:none;border-radius:12px;padding:14px 10px;font-size:15px;font-weight:700;cursor:pointer}
+#sweep-accept{flex:2;background:var(--c-hanger);color:#111}
+#sweep-review{flex:1;background:var(--surface2);color:var(--text);border:1px solid var(--border)!important}
+#sweep-skip{width:52px;background:transparent;color:var(--text2);border:1px solid var(--border)!important}
+.sweep-street{font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;margin-top:6px}
+.sweep-row{display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;font-size:15px;cursor:pointer}
+.sweep-row .box-check{width:24px;height:24px;border-radius:7px;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:15px;font-weight:800;color:#111}
+.sweep-row.on .box-check{background:var(--c-hanger);border-color:var(--c-hanger)}
+.sweep-row:not(.on){color:var(--text2)}
+.sweep-row .sr-dist{margin-left:auto;font-size:11px;color:var(--text2)}
+#sweep-panel-foot{position:sticky;bottom:0;background:var(--bg);padding:12px 16px max(env(safe-area-inset-bottom),16px);border-top:1px solid var(--border)}
+
 .spinner{width:28px;height:28px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.7s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 #toast{position:fixed;bottom:130px;left:50%;transform:translateX(-50%);background:rgba(20,20,30,0.96);color:#fff;font-size:13px;padding:9px 18px;border-radius:20px;z-index:9999;pointer-events:none;opacity:0;transition:opacity 0.25s;max-width:90vw;text-align:center;border:1px solid var(--border)}
@@ -316,7 +338,7 @@ body.is-owner .owner-only{display:flex!important}
     <div id="header-top">
       <div id="header-inner">
         <h1>Knox<span>Canvas</span></h1>
-        <div id="user-line"><span id="sync-pill" class="ok">Synced</span><span id="user-name-display"></span></div>
+        <div id="user-line"><span id="sync-pill" class="ok">Synced</span><span id="gps-pill">GPS</span><span id="user-name-display"></span></div>
       </div>
       <div id="header-btns">
         <button class="hbtn" id="shifts-btn" aria-label="Shifts"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></button>
@@ -366,6 +388,15 @@ body.is-owner .owner-only{display:flex!important}
   </div>
 
   <div id="roof-mode-banner">Roofing target mode — zones built in or before <span id="roof-cutoff-label">2012</span></div>
+
+  <div id="sweep-banner" role="dialog" aria-live="polite">
+    <div><div id="sweep-title">Houses passed</div><div id="sweep-sub"></div></div>
+    <div id="sweep-btns">
+      <button id="sweep-accept">Mark as hangers</button>
+      <button id="sweep-review">Review</button>
+      <button id="sweep-skip" aria-label="Skip these houses">✕</button>
+    </div>
+  </div>
 
   <div id="zip-widget">
     <div id="zip-header">
@@ -510,6 +541,16 @@ body.is-owner .owner-only{display:flex!important}
       <div id="metrics-shifts" style="display:flex;flex-direction:column;gap:8px"></div>
     </div>
   </div>
+
+  <!-- Street sweep review -->
+  <div id="sweep-panel" class="panel">
+    <div class="panel-header"><button class="panel-back" data-close="sweep-panel" aria-label="Back"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg></button><h2>Houses you passed</h2><button class="panel-action-btn" id="sweep-toggle-all">None</button></div>
+    <div class="panel-body">
+      <div class="hint">Uncheck any house you didn't hang. Checked houses get a door hanger pin. Unchecked ones won't be suggested again this shift.</div>
+      <div id="sweep-list" style="display:flex;flex-direction:column;gap:8px"></div>
+    </div>
+    <div id="sweep-panel-foot"><button class="primary-btn" id="sweep-panel-accept" style="background:var(--c-hanger);color:#111">Place door hangers</button></div>
+  </div>
 </div>
 
 <div id="toast"></div>
@@ -570,7 +611,12 @@ function pointInPolygon(lat, lng, poly) {
   }
   return inside;
 }
+// Running inside the KnoxCanvas iOS app? The native shell injects window.webkit.messageHandlers.knox.
+const IS_NATIVE = !!(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.knox);
+function nativePost(msg) { try { window.webkit.messageHandlers.knox.postMessage(msg); } catch (e) {} }
+function buzz() { if (IS_NATIVE) nativePost({ cmd: 'haptic' }); else if (navigator.vibrate) navigator.vibrate(30); }
 function downloadCsv(lines, name) {
+  if (IS_NATIVE) { nativePost({ cmd: 'share', filename: name, text: lines.join('\n') }); return; }
   const blob = new Blob([lines.join('\n')], { type:'text/csv' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a'); a.href = url; a.download = name; a.click();
@@ -668,6 +714,8 @@ $('google-btn').addEventListener('click', async () => {
     }
   }
 });
+// Google blocks its sign-in inside embedded app web views, so the iOS app uses email/password only.
+if (IS_NATIVE) { $('google-btn').style.display = 'none'; document.querySelector('.auth-divider').style.display = 'none'; }
 getRedirectResult(auth).catch(e => { if (e?.code) setAuthErr(friendlyAuthError(e.code)); });
 
 onAuthStateChanged(auth, user => loadSession(user));
@@ -771,6 +819,7 @@ function leaveApp() {
   clearRoute(true);
   if (drawingMode) stopDrawing();
   stopClockTimer(); clockedIn = false; clockInTime = null;
+  sweepStop({ keepSaved: true });
   closeSheet();
   document.querySelectorAll('.panel.open').forEach(p => p.classList.remove('open'));
   profile = null; companyId = null; company = {}; neighborhoodYears = []; shifts = [];
@@ -1248,6 +1297,382 @@ $('route-go-btn').addEventListener('click', async () => {
   } finally { $('route-loading').style.display = 'none'; $('route-go-btn').style.display = 'flex'; }
 });
 
+// ── Street sweep: GPS trail → houses passed → ask to pin ──
+// While clocked in, the phone's GPS builds a walking trail. Every ~120 m of walking, the
+// new stretch of trail is sent to Overpass (OpenStreetMap) to find addressed houses within
+// ~45 m whose street matches the street actually walked. Those become "candidates": orange
+// rings on the map plus a banner asking to mark them all as door hangers in one tap.
+// If OSM has no addresses there, Google reverse geocoding (via the Worker) is the fallback.
+const SWEEP = {
+  maxAcc: 35,          // ignore GPS fixes worse than this (m)
+  minStep: 6,          // ignore jitter smaller than this (m)
+  maxWalkSpeed: 3.5,   // faster than ~8 mph = driving, not canvassing (m/s)
+  lookupEvery: 120,    // look up houses after this much walking (m)
+  lookupMinMs: 90000,  // ...or this long, if at least 40 m walked
+  houseRadius: 45,     // max distance from trail to a house (m)
+  noStreetRadius: 32,  // tighter radius for houses with no street tag (m)
+  roadRadius: 25,      // streets within this distance count as "walked" (m)
+  dupRadius: 18        // an existing pin this close means the house is already pinned (m)
+};
+let sweepOn = false, sweepWatchId = null, sweepRetryTimer = null, sweepSaveTimer = null;
+let sweepTrail = [], sweepSeg = [], sweepSegDist = 0, sweepSegStart = 0, sweepQueue = [], sweepBusy = false;
+let sweepCands = {}, sweepSeen = new Set(), sweepGhosts = {}, sweepTrailLine = null;
+const trailKey = () => `knoxTrail_${myUid()}`;
+
+const STREET_ABBR = { street:'st', avenue:'ave', road:'rd', drive:'dr', lane:'ln', court:'ct', circle:'cir', boulevard:'blvd', place:'pl', parkway:'pkwy', pike:'pk', highway:'hwy', terrace:'ter', trail:'trl', north:'n', south:'s', east:'e', west:'w', northeast:'ne', northwest:'nw', southeast:'se', southwest:'sw', point:'pt', cove:'cv', hollow:'holw', ridge:'rdg', heights:'hts', crossing:'xing', square:'sq' };
+function normStreet(s) { return String(s || '').toLowerCase().replace(/[.,#']/g, '').split(/\s+/).filter(Boolean).map(w => STREET_ABBR[w] || w).join(' '); }
+
+// Distance (m) from point p to a polyline of {lat,lng}, using a local flat projection.
+function distToLine(p, line) {
+  if (!line.length) return Infinity;
+  if (line.length === 1) return distBetween(p, line[0]);
+  const kx = 111320 * Math.cos(p.lat * Math.PI / 180), ky = 110540;
+  let best = Infinity;
+  for (let i = 1; i < line.length; i++) {
+    const ax = (line[i-1].lng - p.lng) * kx, ay = (line[i-1].lat - p.lat) * ky;
+    const bx = (line[i].lng - p.lng) * kx, by = (line[i].lat - p.lat) * ky;
+    const dx = bx - ax, dy = by - ay, len2 = dx*dx + dy*dy;
+    const t = len2 ? Math.max(0, Math.min(1, -(ax*dx + ay*dy) / len2)) : 0;
+    const x = ax + t*dx, y = ay + t*dy;
+    best = Math.min(best, Math.sqrt(x*x + y*y));
+  }
+  return best;
+}
+function lineLength(line) { let d = 0; for (let i = 1; i < line.length; i++) d += distBetween(line[i-1], line[i]); return d; }
+// Keep at most `max` vertices so Overpass URLs stay short.
+function thinLine(line, max) {
+  if (line.length <= max) return line;
+  const step = (line.length - 1) / (max - 1), out = [];
+  for (let i = 0; i < max; i++) out.push(line[Math.round(i * step)]);
+  return out;
+}
+// Points every `every` metres along a line (for the geocoding fallback).
+function samplesAlong(line, every, maxCount) {
+  const out = [line[0]]; let carry = 0;
+  for (let i = 1; i < line.length && out.length < maxCount; i++) {
+    const a = line[i-1], b = line[i], d = distBetween(a, b);
+    let pos = every - carry;
+    while (pos <= d && out.length < maxCount) { const t = pos / d; out.push({ lat: a.lat + (b.lat - a.lat) * t, lng: a.lng + (b.lng - a.lng) * t }); pos += every; }
+    carry = (carry + d) % every;
+  }
+  return out;
+}
+
+function setGpsPill(state) {
+  const el = $('gps-pill');
+  el.className = state ? 'on' + (state === 'warn' ? ' warn' : '') : '';
+  el.textContent = state === 'warn' ? 'GPS off' : 'GPS';
+}
+
+function sweepStart() {
+  if (sweepOn || !companyId) return;
+  sweepOn = true;
+  // Pick the trail back up if the app was reloaded mid-shift.
+  try {
+    const saved = JSON.parse(localStorage.getItem(trailKey()) || 'null');
+    if (saved && saved.start === clockInTime) {
+      sweepTrail = (saved.pts || []).map(a => ({ lat: a[0], lng: a[1], t: a[2] }));
+      sweepSeen = new Set(saved.seen || []);
+      (saved.cands || []).forEach(c => sweepAddCandidate(c, true));
+    } else { sweepTrail = []; sweepSeen = new Set(); }
+  } catch (e) { sweepTrail = []; sweepSeen = new Set(); }
+  sweepSeg = []; sweepSegDist = 0; sweepSegStart = 0;
+  drawSweepTrail();
+  setGpsPill('on');
+  if (IS_NATIVE) nativePost({ cmd: 'startTracking' });
+  else if (navigator.geolocation) {
+    sweepWatchId = navigator.geolocation.watchPosition(
+      pos => { setGpsPill('on'); sweepAddPoint({ lat: pos.coords.latitude, lng: pos.coords.longitude, acc: pos.coords.accuracy, t: pos.timestamp || Date.now() }); },
+      err => { if (err.code === 1) { setGpsPill('warn'); showToast('Allow location access so houses on your street get marked'); } },
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 30000 });
+  } else setGpsPill('warn');
+  clearInterval(sweepRetryTimer);
+  sweepRetryTimer = setInterval(() => {
+    // Flush a stretch that's been sitting (e.g. stopped to talk at a door) and retry failed lookups.
+    if (sweepSeg.length > 1 && sweepSegDist >= 40 && Date.now() - sweepSegStart >= SWEEP.lookupMinMs) sweepFlushSeg();
+    processSweepQueue();
+  }, 30000);
+  renderSweepBanner();
+}
+
+function sweepStop({ keepSaved }) {
+  const wasOn = sweepOn;
+  sweepOn = false;
+  if (sweepWatchId != null && navigator.geolocation) navigator.geolocation.clearWatch(sweepWatchId);
+  sweepWatchId = null;
+  clearInterval(sweepRetryTimer); sweepRetryTimer = null;
+  if (IS_NATIVE && wasOn && !keepSaved) nativePost({ cmd: 'stopTracking' });
+  setGpsPill(null);
+  if (sweepTrailLine) { map.removeLayer(sweepTrailLine); sweepTrailLine = null; }
+  if (keepSaved) {
+    // Signing out mid-shift: keep the saved trail on this device, clear the screen.
+    clearTimeout(sweepSaveTimer); // already saved as they walked; the user is signed out now
+    Object.keys(sweepGhosts).forEach(removeGhost); sweepCands = {}; sweepQueue = [];
+    sweepTrail = []; sweepSeg = []; sweepSegDist = 0;
+    $('sweep-banner').classList.remove('show'); $('sweep-panel').classList.remove('open');
+  } else {
+    // Clocking out: look up the last stretch so it can still be offered, then forget the trail.
+    if (sweepSeg.length > 1) { sweepQueue.push(sweepSeg.slice()); processSweepQueue(); }
+    sweepSeg = []; sweepSegDist = 0; sweepTrail = [];
+    try { localStorage.removeItem(trailKey()); } catch (e) {}
+  }
+}
+
+function sweepAddPoint(p) {
+  if (!sweepOn || !isFinite(p.lat) || !isFinite(p.lng)) return;
+  if (!(p.acc <= SWEEP.maxAcc)) return;
+  const last = sweepTrail[sweepTrail.length - 1];
+  let d = 0, driving = false;
+  if (last) {
+    d = distBetween(last, p);
+    if (d < SWEEP.minStep) return;
+    const dt = (p.t - last.t) / 1000;
+    driving = d > 25 && dt > 0 && d / dt > SWEEP.maxWalkSpeed;
+  }
+  const pt = { lat: p.lat, lng: p.lng, t: p.t };
+  sweepTrail.push(pt);
+  if (driving) {
+    // Got in the car: close out the walked stretch and start a new one here.
+    sweepFlushSeg();
+    sweepSeg = [pt]; sweepSegDist = 0; sweepSegStart = pt.t;
+  } else {
+    if (!sweepSeg.length) { sweepSeg = last ? [last] : []; sweepSegDist = 0; sweepSegStart = pt.t; }
+    if (sweepSeg.length) sweepSegDist += distBetween(sweepSeg[sweepSeg.length - 1], pt);
+    sweepSeg.push(pt);
+  }
+  drawSweepTrail();
+  saveSweepState();
+  if (sweepSegDist >= SWEEP.lookupEvery || (sweepSegDist >= 40 && pt.t - sweepSegStart >= SWEEP.lookupMinMs)) sweepFlushSeg();
+}
+
+function sweepFlushSeg() {
+  const seg = sweepSeg; sweepSeg = []; sweepSegDist = 0; sweepSegStart = 0;
+  if (seg.length < 2 || lineLength(seg) < 15) return;
+  sweepQueue.push(seg);
+  processSweepQueue();
+}
+
+async function processSweepQueue() {
+  if (sweepBusy || !sweepQueue.length || !companyId) return;
+  if (!navigator.onLine) return; // retried by the 30 s timer / 'online' event
+  sweepBusy = true;
+  let added = 0;
+  try {
+    while (sweepQueue.length) {
+      const seg = sweepQueue[0];
+      let houses;
+      try { houses = await findHousesAlong(seg); }
+      catch (e) { console.warn('sweep lookup', e); break; } // keep it queued and retry later
+      sweepQueue.shift();
+      houses.forEach(h => { if (sweepAddCandidate(h)) added++; });
+    }
+  } finally { sweepBusy = false; }
+  if (added) { renderSweepBanner(); buzz(); saveSweepState(true); }
+}
+window.addEventListener('online', processSweepQueue);
+
+async function overpassJson(q) {
+  for (const ep of OVERPASS) {
+    try {
+      const ctrl = new AbortController(); const timer = setTimeout(() => ctrl.abort(), 15000);
+      const r = await fetch(ep, { method: 'POST', body: 'data=' + encodeURIComponent(q), headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, signal: ctrl.signal });
+      clearTimeout(timer);
+      if (!r.ok) continue;
+      const d = await r.json(); if (d.elements) return d;
+    } catch (e) { continue; }
+  }
+  return null;
+}
+
+async function findHousesAlong(seg) {
+  const line = thinLine(seg, 40);
+  const coords = line.map(p => `${p.lat.toFixed(6)},${p.lng.toFixed(6)}`).join(',');
+  const q = `[out:json][timeout:20];way(around:${SWEEP.roadRadius},${coords})["highway"]["name"];out tags;(node(around:${SWEEP.houseRadius},${coords})["addr:housenumber"];way(around:${SWEEP.houseRadius},${coords})["addr:housenumber"];);out center tags;`;
+  const data = await overpassJson(q);
+  let houses = [];
+  if (data) {
+    const roads = new Set();
+    data.elements.forEach(el => { if (el.tags?.highway && el.tags?.name) roads.add(normStreet(el.tags.name)); });
+    data.elements.forEach(el => {
+      const t = el.tags || {};
+      if (!t['addr:housenumber']) return;
+      const lat = el.lat ?? el.center?.lat, lng = el.lon ?? el.center?.lon;
+      if (lat == null || lng == null) return;
+      const h = { lat, lng, num: t['addr:housenumber'], street: t['addr:street'] || '' };
+      const d = distToLine(h, line);
+      if (d > SWEEP.houseRadius) return;
+      if (h.street) { if (roads.size && !roads.has(normStreet(h.street))) return; } // backs onto a different street
+      else if (d > SWEEP.noStreetRadius) return;
+      const cityLine = [t['addr:city'], [t['addr:state'] || (t['addr:city'] ? 'TN' : ''), t['addr:postcode']].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+      h.addr = [`${h.num} ${h.street}`.trim(), cityLine].filter(Boolean).join(', ');
+      h.dist = Math.round(d);
+      houses.push(h);
+    });
+  }
+  // No OSM addresses here (common outside big cities) → ask Google along the trail.
+  if (!houses.length && lineLength(seg) >= 50 && (!data || data.elements.some(el => el.tags?.highway))) {
+    const fb = await geocodeAlong(line);
+    if (fb === null && !data) throw new Error('offline');
+    houses = fb || [];
+  } else if (!data) return [];
+  return houses;
+}
+
+async function geocodeAlong(line) {
+  const found = {}; let anyOk = false;
+  for (const s of samplesAlong(line, 40, 5)) {
+    try {
+      const r = await fetch(`${GEO_PROXY}?lat=${s.lat}&lng=${s.lng}`);
+      const d = await r.json(); anyOk = true;
+      (d.results || []).forEach(res => {
+        if (res.geometry?.location_type !== 'ROOFTOP') return;
+        if (!(res.types || []).some(t => t === 'street_address' || t === 'premise')) return;
+        const loc = res.geometry.location, h = { lat: loc.lat, lng: loc.lng };
+        const dd = distToLine(h, line); if (dd > SWEEP.houseRadius) return;
+        const comp = type => (res.address_components || []).find(c => c.types.includes(type))?.short_name || '';
+        h.num = comp('street_number'); h.street = comp('route');
+        h.addr = (res.formatted_address || '').replace(/, USA$/, '');
+        h.dist = Math.round(dd);
+        if (h.num && h.addr) found[h.addr] = h;
+      });
+    } catch (e) {}
+  }
+  return anyOk ? Object.values(found) : null;
+}
+
+function sweepKey(h) { return h.lat.toFixed(5) + ',' + h.lng.toFixed(5); }
+function sweepAddCandidate(h, restoring) {
+  const key = h.key || sweepKey(h);
+  if (sweepCands[key] || sweepSeen.has(key)) return false;
+  if (!restoring && nearestPin(h)) { sweepSeen.add(key); return false; } // already pinned
+  // Same house tagged twice (node + building) → keep one.
+  if (Object.values(sweepCands).some(c => (h.addr && c.addr === h.addr) || distBetween(c, h) < 6)) return false;
+  sweepCands[key] = { lat: h.lat, lng: h.lng, num: h.num || '', street: h.street || '', addr: h.addr || '', dist: h.dist || 0, key, on: h.on !== false };
+  addGhost(key);
+  return true;
+}
+function ghostStyle(on) { return on ? { radius: 10, color: '#f59e0b', weight: 3, dashArray: '4,3', fillColor: '#f59e0b', fillOpacity: 0.35 } : { radius: 10, color: '#6b7280', weight: 2, dashArray: '4,3', fillColor: '#6b7280', fillOpacity: 0.1 }; }
+function addGhost(key) {
+  const c = sweepCands[key]; if (!c) return;
+  const g = L.circleMarker([c.lat, c.lng], { ...ghostStyle(c.on), bubblingMouseEvents: false }).addTo(map);
+  g.on('click', () => { c.on = !c.on; g.setStyle(ghostStyle(c.on)); renderSweepBanner(); if ($('sweep-panel').classList.contains('open')) renderSweepList(); });
+  sweepGhosts[key] = g;
+}
+function removeGhost(key) { if (sweepGhosts[key]) { map.removeLayer(sweepGhosts[key]); delete sweepGhosts[key]; } }
+function drawSweepTrail() {
+  const ll = sweepTrail.map(p => [p.lat, p.lng]);
+  if (!sweepTrailLine) sweepTrailLine = L.polyline(ll, { color: '#4f6ef7', weight: 4, opacity: 0.45, interactive: false }).addTo(map);
+  else sweepTrailLine.setLatLngs(ll);
+}
+
+function streetsSummary(list) {
+  const byStreet = {};
+  list.forEach(c => { const s = c.street || 'Nearby'; byStreet[s] = (byStreet[s] || 0) + 1; });
+  const names = Object.entries(byStreet).sort((a, b) => b[1] - a[1]).map(([s]) => s);
+  return names.length <= 2 ? names.join(' & ') : `${names[0]}, ${names[1]} +${names.length - 2} more`;
+}
+function renderSweepBanner() {
+  const all = Object.values(sweepCands), on = all.filter(c => c.on);
+  const banner = $('sweep-banner');
+  if (!all.length) { banner.classList.remove('show'); return; }
+  $('sweep-title').textContent = `🏠 ${all.length} house${all.length === 1 ? '' : 's'} passed · ${streetsSummary(all)}`;
+  $('sweep-sub').textContent = on.length === all.length ? 'Tap an orange ring to leave a house out.' : `${all.length - on.length} left out. Tap a ring to change it.`;
+  $('sweep-accept').textContent = on.length ? `Mark ${on.length} as hangers` : 'Nothing selected';
+  $('sweep-accept').disabled = !on.length;
+  banner.classList.add('show');
+}
+function houseNumSort(a, b) { return (a.street || '').localeCompare(b.street || '') || (parseInt(a.num, 10) || 0) - (parseInt(b.num, 10) || 0); }
+function renderSweepList() {
+  const list = Object.values(sweepCands).sort(houseNumSort);
+  const wrap = $('sweep-list'); wrap.innerHTML = '';
+  let street = null;
+  list.forEach(c => {
+    if ((c.street || 'Nearby') !== street) { street = c.street || 'Nearby'; const h = document.createElement('div'); h.className = 'sweep-street'; h.textContent = street; wrap.appendChild(h); }
+    const row = document.createElement('div'); row.className = 'sweep-row' + (c.on ? ' on' : '');
+    row.innerHTML = `<span class="box-check">${c.on ? '✓' : ''}</span><span>${esc(c.addr || `${c.num} ${c.street}`)}</span><span class="sr-dist">${c.dist ? c.dist + ' m' : ''}</span>`;
+    row.addEventListener('click', () => { c.on = !c.on; sweepGhosts[c.key]?.setStyle(ghostStyle(c.on)); renderSweepList(); renderSweepBanner(); });
+    wrap.appendChild(row);
+  });
+  const n = list.filter(c => c.on).length;
+  $('sweep-panel-accept').textContent = n ? `Place ${n} door hanger${n === 1 ? '' : 's'}` : 'Skip all';
+  $('sweep-toggle-all').textContent = n ? 'None' : 'All';
+}
+
+async function placeSweepPins() {
+  const all = Object.values(sweepCands), chosen = all.filter(c => c.on);
+  if (!companyId) return;
+  const now = Date.now(), ids = [];
+  for (let i = 0; i < chosen.length; i += 400) {
+    const batch = writeBatch(db);
+    chosen.slice(i, i + 400).forEach(c => {
+      const id = c.lat.toFixed(6) + ',' + c.lng.toFixed(6);
+      if (pins[id] || nearestPin(c)) return;
+      const p = { lat: c.lat, lng: c.lng, addr: c.addr || `${c.lat.toFixed(4)}, ${c.lng.toFixed(4)}`, status: 'hanger', note: '', yearBuilt: getNeighborhoodYearForPoint(c.lat, c.lng),
+        ts: now, createdBy: myUid(), createdAt: now, statusBy: myUid(), statusAt: now, hangerBy: myUid(), hangerAt: now, source: 'gps-sweep' };
+      pins[id] = { ...p, id };
+      addOrUpdateMarker(id); ids.push(id);
+      batch.set(doc(db, 'companies', companyId, 'pins', id), { ...p, updatedBy: myUid(), updatedAt: serverTimestamp() }, { merge: true });
+    });
+    batch.commit().catch(e => { console.error(e); setSync('error'); showToast('Couldn’t save street pins (' + (e.code || 'error') + ')'); });
+  }
+  ids.forEach(id => syncToSheets('upsert', pins[id], id));
+  // Everything shown (placed or left out) is done — don't ask about these houses again.
+  all.forEach(c => { sweepSeen.add(c.key); removeGhost(c.key); });
+  sweepCands = {};
+  updateStats(); if (clockedIn) updateLiveHangers();
+  renderSweepBanner(); $('sweep-panel').classList.remove('open');
+  saveSweepState(true);
+  buzz();
+  showToast(ids.length ? `Marked ${ids.length} door hanger${ids.length === 1 ? '' : 's'}` : 'Skipped');
+}
+function skipSweep() {
+  Object.values(sweepCands).forEach(c => { sweepSeen.add(c.key); removeGhost(c.key); });
+  sweepCands = {}; renderSweepBanner(); $('sweep-panel').classList.remove('open'); saveSweepState(true);
+}
+$('sweep-accept').addEventListener('click', placeSweepPins);
+$('sweep-skip').addEventListener('click', skipSweep);
+$('sweep-review').addEventListener('click', () => { renderSweepList(); $('sweep-panel').classList.add('open'); });
+$('sweep-panel-accept').addEventListener('click', placeSweepPins);
+$('sweep-toggle-all').addEventListener('click', () => {
+  const list = Object.values(sweepCands), turnOn = !list.some(c => c.on);
+  list.forEach(c => { c.on = turnOn; sweepGhosts[c.key]?.setStyle(ghostStyle(turnOn)); });
+  renderSweepList(); renderSweepBanner();
+});
+
+function saveSweepState(now) {
+  const write = () => {
+    if (!clockInTime || !myUid()) return;
+    try {
+      localStorage.setItem(trailKey(), JSON.stringify({
+        start: clockInTime,
+        pts: sweepTrail.slice(-5000).map(p => [+p.lat.toFixed(6), +p.lng.toFixed(6), p.t]),
+        seen: [...sweepSeen].slice(-3000),
+        cands: Object.values(sweepCands)
+      }));
+    } catch (e) {}
+  };
+  clearTimeout(sweepSaveTimer);
+  if (now) write(); else sweepSaveTimer = setTimeout(write, 3000);
+}
+
+// Compact trail for the shift record (Firestore can't store nested arrays).
+function sweepShiftSummary(since) {
+  const pts = sweepTrail.length > 4000 ? thinLine(sweepTrail, 4000) : sweepTrail;
+  const gpsHangers = Object.values(pins).filter(p => p.source === 'gps-sweep' && p.hangerBy === myUid() && (p.hangerAt || 0) >= since).length;
+  return {
+    trail: pts.map(p => `${p.lat.toFixed(5)},${p.lng.toFixed(5)},${Math.round((p.t - since) / 1000)}`).join(';'),
+    trailMeters: Math.round(lineLength(sweepTrail)),
+    gpsHangers
+  };
+}
+
+// Native iOS shell pushes batches of locations here (including ones collected while the screen was locked).
+window.KnoxNative = {
+  onLocations(list) { (list || []).forEach(p => sweepAddPoint({ lat: +p.lat, lng: +p.lng, acc: +p.acc, t: +p.t })); },
+  onTrackingError(msg) { setGpsPill('warn'); if (msg) showToast(msg); },
+  onTrackingOk() { if (sweepOn) setGpsPill('on'); }
+};
+
 // ── Shifts / clock ────────────────────────────────────────
 const clockKey = () => `knoxClock_${myUid()}`;
 function myShiftHangers(since) {
@@ -1273,7 +1698,7 @@ function updateClockUI() {
 function restoreClock() {
   try {
     const saved = JSON.parse(localStorage.getItem(clockKey()) || 'null');
-    if (saved && saved.time && Date.now() - saved.time < 16 * 3600000) { clockedIn = true; clockInTime = saved.time; startClockTimer(); }
+    if (saved && saved.time && Date.now() - saved.time < 16 * 3600000) { clockedIn = true; clockInTime = saved.time; startClockTimer(); sweepStart(); }
     else { localStorage.removeItem(clockKey()); clockedIn = false; clockInTime = null; }
   } catch (e) { clockedIn = false; }
   updateClockUI();
@@ -1282,6 +1707,7 @@ function clockIn() {
   clockedIn = true; clockInTime = Date.now();
   try { localStorage.setItem(clockKey(), JSON.stringify({ time: clockInTime })); } catch (e) {}
   updateClockUI(); startClockTimer(); showToast('Clocked in');
+  sweepStart();
 }
 async function clockOut() {
   if (!clockedIn) return;
@@ -1290,7 +1716,8 @@ async function clockOut() {
   const hangers = myShiftHangers(clockInTime);
   const hours = durationMs / 3600000;
   const hangersPerHour = hours > 0 ? parseFloat((hangers / hours).toFixed(1)) : 0;
-  const shift = { clockIn: clockInTime, clockOut: clockOutTime, durationMs, hangers, hangersPerHour, userId: myUid(), userName: profile?.name || '' };
+  const shift = { clockIn: clockInTime, clockOut: clockOutTime, durationMs, hangers, hangersPerHour, userId: myUid(), userName: profile?.name || '', ...sweepShiftSummary(clockInTime) };
+  sweepStop({ keepSaved: false });
   shifts.unshift(shift);
   try { localStorage.removeItem(clockKey()); } catch (e) {}
   clockedIn = false; clockInTime = null;

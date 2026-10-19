@@ -1,0 +1,127 @@
+# KnoxCanvas — notes for Claude Code
+
+KnoxCanvas is a door-to-door canvassing tracker for Jeff Woods Construction & Roofing
+(Tennessee). Canvassers drop color-coded pins on houses, clock in and out of shifts, and owners
+see team metrics. It is also being pitched to other door-to-door companies, so anyone can sign
+up, create a company and invite their team.
+
+## Repo layout
+
+| Path | What it is |
+|---|---|
+| `app.html` | **Current app.** One self-contained HTML file (Leaflet + Firebase v10 from CDN). Newest work happens here. |
+| `docs/` | **What Vercel actually serves** (`vercel.json` → `outputDirectory: docs`). `docs/app.html` is an OLDER version of the app (still has JSONBin migration code). `docs/index.html` is the landing page. |
+| `ios/` | Native iPhone app: SwiftUI + WKWebView wrapper that loads `https://connorsdronepics.com/app.html`, plus native GPS. |
+| `knoxcanvas/` | Abandoned-for-now React/Vite migration (built output in `docs/knoxcanvas/`). Don't touch unless asked. |
+| `test_2.html` | Scratch file. |
+
+**Deploying:** the live site is `connorsdronepics.com` on Vercel, served from `docs/`. Editing
+root `app.html` does NOT change the live site. To ship, copy `app.html` → `docs/app.html`.
+Before the first copy, diff the two and check that nothing in `docs/app.html` that's still
+needed gets lost. It has a JSONBin → Firebase migration that the root file dropped. The iOS app
+loads the live URL, so it only picks up changes once they're deployed.
+
+## Stack
+
+- Map: Leaflet 1.9.4 with Google tiles.
+- Data: Firebase project `knoxcanvas-a7bfe`. Firestore uses an offline persistent cache; auth is
+  email/password plus Google (Google is hidden inside the iOS app because Google blocks
+  embedded web views).
+  - `users/{uid}` → `{ name, email, role: owner|employee, companyId, companyName }`
+  - `companies/{id}` → `{ name, ownerId, roofCutoff, sheetsUrl }`
+  - `companies/{id}/pins/{lat6,lng6}` → `{ lat, lng, addr, status, note, yearBuilt, ts, createdBy, statusBy, statusAt, hangerBy, hangerAt, source? }`
+  - `companies/{id}/shifts/{auto}` → `{ clockIn, clockOut, durationMs, hangers, hangersPerHour, userId, userName, trail?, trailMeters?, gpsHangers? }`
+  - `companies/{id}/settings/neighborhoodYears` → `{ zones: [...] }`
+  - `invites/{code}` → one-time join codes, expire in 7 days
+- Geocoding: Google Geocoding API behind the Cloudflare Worker
+  `https://broken-tree-befb.connorbdowney48.workers.dev` (`?lat=&lng=`). Nominatim is the fallback.
+- Houses / route optimizer: OSM Overpass, with 4 fallback endpoints (`OVERPASS` constant).
+- Zip overlays: Census TIGERweb, with Overpass as the fallback.
+- Google Sheets: an Apps Script webhook (company setting `sheetsUrl`) receives hanger pins and shifts.
+
+Pin statuses (keep these five; exports and Sheets depend on them):
+`none` Not visited · `hanger` Door hanger · `interest` Interested · `no` Not interested · `dnr` Do not return.
+
+## Rules for every change
+
+1. **Single file.** All HTML/CSS/JS stays inline in `app.html`. Libraries come only from a CDN. No build step.
+2. **No secrets in the repo** (it's public). The Firebase web config is public by design. Any
+   other API key goes behind the Cloudflare Worker. If a change needs one, say what Worker route to add.
+3. **Don't break saved data.** Add fields with defaults; never rename or remove them. Upgrade old
+   records in `normalizePin`. Keep the CSV column order
+   (`Address,Status,Date Added,Note,Year Built,Latitude,Longitude`).
+4. **Plan for bad signal.** Firestore's offline cache queues writes. Show sync state in `#sync-pill`.
+   Never silently drop a canvasser's work.
+5. **Built for the field.** One-handed on a phone, outdoors: big tap targets, high contrast, few taps per door.
+6. **The route optimizer must degrade:** Overpass fallbacks plus a timeout, then saved pins, then straight-line nearest neighbor.
+7. After editing, run `node --check` on the extracted `<script type="module">`, confirm that old
+   records without the new fields still load, and check the layout at phone width.
+
+## Street sweep (GPS auto-pinning) — added Oct 2026
+
+While a canvasser is **clocked in**, GPS builds a walking trail. Code is in the
+`// ── Street sweep` section of `app.html`.
+
+- Points with accuracy >35 m or movement <6 m are dropped. Movement faster than 3.5 m/s counts as driving and splits the trail.
+- About every 120 m walked (or 90 s with ≥40 m walked), that stretch goes to Overpass in one query:
+  named `highway` ways within 25 m (the streets actually walked) plus `addr:housenumber` nodes
+  and ways within 45 m. Houses are kept only if their `addr:street` matches a walked street,
+  which filters out houses that back onto the street. Houses with no street tag must be within 32 m.
+- If OSM returns no addresses along a named street, the fallback is Google reverse geocoding
+  through the Worker (5 samples at 40 m apart, ROOFTOP street addresses only).
+- Results become **candidates**: dashed orange rings on the map and a bottom banner,
+  "🏠 N houses passed · Street" → **Mark N as hangers** / **Review** / ✕. Tapping a ring
+  toggles that house. Accepted houses become `hanger` pins with `source: 'gps-sweep'` (one
+  `writeBatch`) and are synced to Sheets. Anything shown and then skipped goes into `sweepSeen`
+  and isn't offered again during that shift.
+- The trail, seen keys and open candidates are saved to `localStorage` under `knoxTrail_<uid>`
+  so a reload mid-shift picks back up. On clock-out, the shift gets `trail`
+  (`"lat,lng,secondsSinceClockIn;..."` string, because Firestore can't store nested arrays),
+  `trailMeters` and `gpsHangers`.
+- Tuning knobs are in the `SWEEP` constant.
+- **Not yet field-tested against real OSM data.** It was tested only with simulated data. First real
+  walks should check how many houses get found in Knoxville and Tennessee Ridge, and whether the
+  Google fallback fills the gaps.
+
+## iOS app (`ios/`)
+
+Open `ios/KnoxCanvas.xcodeproj` in Xcode 15+. Set the Team and change the bundle ID from the
+placeholder `com.knoxcanvas.app`. iOS 16+, iPhone only, portrait. Built but **never compiled
+yet**. Expect to fix small Swift errors on the first build.
+
+- `KnoxCanvasApp.swift`: entry point; `AppConfig.appURL` is the page it loads.
+- `WebView.swift`: WKWebView setup. Handles `alert`/`confirm`/`prompt` (WKWebView ignores them
+  otherwise), sends external links (Zillow) to Safari, shares CSV exports through the iOS share
+  sheet, falls back to the cached page when offline, and reloads if the page process gets killed.
+- `LocationBridge.swift`: the single CLLocationManager. Background location (`UIBackgroundModes: location`,
+  When-In-Use plus the blue pill) keeps recording with the screen locked. Points are buffered in
+  UserDefaults and flushed to the page when it's visible. While the app is in the background, it
+  sends a silent notification about every 250 m walked, reminding the canvasser to open the app and mark houses.
+- `BridgeScript.swift`: injected at document start. It replaces `navigator.geolocation` with
+  the native one, so there's only one permission prompt and the locate button uses native GPS.
+
+**Bridge contract** (page ↔ native):
+
+- Page → native: `window.webkit.messageHandlers.knox.postMessage({cmd})`, where `cmd` is one of
+  `startTracking`, `stopTracking`, `geoStart`, `geoStop`, `haptic`, or `share` (sent as `{filename, text}`).
+- Native → page:
+  - `window.KnoxNative.onLocations([{lat,lng,acc,spd,t}])`
+  - `KnoxNative.onTrackingError(msg)`
+  - `KnoxNative.onTrackingOk()`
+  - `window.__knoxGeoDeliver(coords)` / `__knoxGeoError(code,msg)`
+- `IS_NATIVE` in `app.html` is true when the `knox` handler exists.
+
+## Known open issues
+
+- Google login on the web (popup vs. redirect). Inside the iOS app it's hidden on purpose; adding it would need the native Google Sign-In SDK.
+- Zip boundary overlays sometimes don't load.
+- The clock-in state lives in `localStorage` only, so it's lost if the device storage is cleared. It should move to Firestore.
+- `docs/app.html` vs. `app.html` divergence (see Deploying).
+- Firestore security rules aren't in this repo. Make sure they allow the new pin field `source`
+  and the shift fields `trail`, `trailMeters` and `gpsHangers`.
+
+## Next steps
+
+1. Build the iOS app on a real iPhone and fix any compile errors.
+2. Deploy `app.html` to `docs/app.html` (after the diff check), then do a test walk while clocked in.
+3. Tune `SWEEP` radii from real walks. Then consider a shift-review map for owners that shows `trail` (the planned hanger-verification feature).

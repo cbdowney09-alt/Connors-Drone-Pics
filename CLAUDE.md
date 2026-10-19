@@ -10,16 +10,16 @@ up, create a company and invite their team.
 | Path | What it is |
 |---|---|
 | `app.html` | **Current app.** One self-contained HTML file (Leaflet + Firebase v10 from CDN). Newest work happens here. |
-| `docs/` | **What Vercel actually serves** (`vercel.json` → `outputDirectory: docs`). `docs/app.html` is an OLDER version of the app (still has JSONBin migration code). `docs/index.html` is the landing page. |
+| `docs/` | **What Vercel actually serves** (`vercel.json` → `outputDirectory: docs`). `docs/app.html` is a copy of `app.html` (synced Oct 2026). `docs/index.html` is the landing page. |
 | `ios/` | Native iPhone app: SwiftUI + WKWebView wrapper that loads `https://connorsdronepics.com/app.html`, plus native GPS. |
 | `knoxcanvas/` | Abandoned-for-now React/Vite migration (built output in `docs/knoxcanvas/`). Don't touch unless asked. |
 | `test_2.html` | Scratch file. |
 
 **Deploying:** the live site is `connorsdronepics.com` on Vercel, served from `docs/`. Editing
 root `app.html` does NOT change the live site. To ship, copy `app.html` → `docs/app.html`.
-Before the first copy, diff the two and check that nothing in `docs/app.html` that's still
-needed gets lost. It has a JSONBin → Firebase migration that the root file dropped. The iOS app
-loads the live URL, so it only picks up changes once they're deployed.
+Keep the two identical. They were synced in Oct 2026, after confirming both use the same Firestore
+paths and fields. The old one-time JSONBin migration for the original owner account was dropped;
+it had already run. The iOS app loads the live URL, so it only picks up changes once they're deployed.
 
 ## Stack
 
@@ -128,12 +128,11 @@ yet**. Expect to fix small Swift errors on the first build.
 - Google login on the web (popup vs. redirect). The iOS app uses the native flow in `GoogleSignIn.swift` instead.
 - Zip boundary overlays sometimes don't load.
 - The clock-in state lives in `localStorage` only, so it's lost if the device storage is cleared. It should move to Firestore.
-- `docs/app.html` vs. `app.html` divergence (see Deploying).
 - Firestore security rules aren't in this repo. Make sure they allow the new pin field `source`
   and the shift fields `trail`, `trailMeters` and `gpsHangers`.
 
 ## Next steps
 
 1. Build the iOS app on a real iPhone and fix any compile errors.
-2. Deploy `app.html` to `docs/app.html` (after the diff check), then do a test walk while clocked in.
+2. Push `docs/app.html` live, then do a test walk while clocked in.
 3. Tune `SWEEP` radii from real walks. Then consider a shift-review map for owners that shows `trail` (the planned hanger-verification feature).

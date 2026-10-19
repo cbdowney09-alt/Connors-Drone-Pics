@@ -1126,10 +1126,7 @@ async function doSearch(q) {
 document.addEventListener('click', e => { if (!e.target.closest('#search-bar') && !e.target.closest('#search-results')) searchResults.style.display = 'none'; });
 
 $('locate-btn').addEventListener('click', () => { showToast('Finding your location…'); map.locate({ setView: true, maxZoom: 18, enableHighAccuracy: true }); });
-map.on('locationfound', e => {
-  if (locateMarker) map.removeLayer(locateMarker);
-  locateMarker = L.circleMarker(e.latlng, { radius: 8, color: '#fff', weight: 3, fillColor: '#4f6ef7', fillOpacity: 1 }).addTo(map);
-});
+map.on('locationfound', e => showMeDot(e.latlng.lat, e.latlng.lng));
 map.on('locationerror', () => showToast('Couldn\u2019t get your location — allow location access'));
 
 // ── Roofing mode ──────────────────────────────────────────
@@ -1426,8 +1423,14 @@ function sweepStop({ keepSaved }) {
   }
 }
 
+// Blue "you are here" dot, kept current while tracking.
+function showMeDot(lat, lng) {
+  if (locateMarker) locateMarker.setLatLng([lat, lng]);
+  else locateMarker = L.circleMarker([lat, lng], { radius: 8, color: '#fff', weight: 3, fillColor: '#4f6ef7', fillOpacity: 1, interactive: false }).addTo(map);
+}
 function sweepAddPoint(p) {
   if (!sweepOn || !isFinite(p.lat) || !isFinite(p.lng)) return;
+  if (p.acc <= 100) showMeDot(p.lat, p.lng);
   if (!(p.acc <= SWEEP.maxAcc)) return;
   const last = sweepTrail[sweepTrail.length - 1];
   let d = 0, driving = false;

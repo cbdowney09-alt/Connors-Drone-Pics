@@ -13,23 +13,31 @@
 		2AD4506E97155C3A3466DE6F /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 8A0079B8DA8EDE29E204179B /* PrivacyInfo.xcprivacy */; };
 		34F7D713D4682CA09785971B /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00FE6EC8DB17ADC7EF2117 /* RootView.swift */; };
 		5B3A62A888D87D71C7F760DE /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 694A35896F3EE3E4A59A5873 /* GoogleService-Info.plist */; };
+		5DA187F41574481166D69D3D /* PinSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5C67006CDEFBC9AB870AC40 /* PinSheet.swift */; };
 		657B637B422F5CD3538D653F /* AuthErrors.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8962DB7A40B6E2DFE51CDA6 /* AuthErrors.swift */; };
 		6955243A81B119C797943B5E /* SessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47EA67B56C23BE5902369F16 /* SessionStore.swift */; };
+		7D983EDCEB43C5C9ED0B333E /* Geocoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E28D78B76A4EC20A4777D6D /* Geocoder.swift */; };
+		844F0449788F947A3F65F749 /* PinMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 489A01DBADBA6B07937A6CCF /* PinMapView.swift */; };
 		A4E30CC8F71CA2AFA31C102B /* AuthView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CC3276B1AE1CEAF5A690036 /* AuthView.swift */; };
 		AA5A0C9565F3B6A836849DE2 /* AppConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FA4FA64718E5507789052AD /* AppConfig.swift */; };
 		AC0286B129218BCAD8B299EF /* SetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC52D208B67A73C72FC9D9DA /* SetupView.swift */; };
 		BCDFBBAF1257013439169E61 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD737031080C6F0BC0C1480E /* Theme.swift */; };
 		C38FE65707A4CFA795124DBD /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = EAFBD6606E92E216A805A16E /* Assets.xcassets */; };
 		CEE00903C7223474482C42C9 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82BCEBD41AAFCD83446BC04F /* Models.swift */; };
+		E471695D221B719892DD188D /* AddressSearch.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3741DA6E61790F75020848F /* AddressSearch.swift */; };
+		E59E567AE6F33846F72168F9 /* Pin.swift in Sources */ = {isa = PBXBuildFile; fileRef = D038A49430266F730D519377 /* Pin.swift */; };
 		E5CC5C6DF6C8EE105EC2CD44 /* KnoxCanvasApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D630213640615320DC2AEC84 /* KnoxCanvasApp.swift */; };
 		EA4EE002E8E6090DDE8A37FC /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = EE5AB89A05F4FCECA9804504 /* FirebaseFirestore */; };
 		F8F3988B691E69A87D2A37A0 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 71ECAF4093E94C9DF9124CD3 /* GoogleSignIn */; };
+		F91C28EEC74BAE999D365A4A /* PinStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB7E5F15073BF6AAD5E08458 /* PinStore.swift */; };
 		F985ABBE09B4DBBC477FF3CC /* Controls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C4CAA90E5B11DE14CB3C7E5 /* Controls.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		0E28D78B76A4EC20A4777D6D /* Geocoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Geocoder.swift; sourceTree = "<group>"; };
 		34842738A2986BBA6CFB8722 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		47EA67B56C23BE5902369F16 /* SessionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionStore.swift; sourceTree = "<group>"; };
+		489A01DBADBA6B07937A6CCF /* PinMapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PinMapView.swift; sourceTree = "<group>"; };
 		5C4CAA90E5B11DE14CB3C7E5 /* Controls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Controls.swift; sourceTree = "<group>"; };
 		5E7F8008F673EE2054EA6D67 /* FirebaseBootstrap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseBootstrap.swift; sourceTree = "<group>"; };
 		694A35896F3EE3E4A59A5873 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
@@ -41,9 +49,13 @@
 		92E23A620BE48637AE9C9586 /* KnoxCanvas.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = KnoxCanvas.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AB00FE6EC8DB17ADC7EF2117 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		BC52D208B67A73C72FC9D9DA /* SetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupView.swift; sourceTree = "<group>"; };
+		D038A49430266F730D519377 /* Pin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Pin.swift; sourceTree = "<group>"; };
+		D3741DA6E61790F75020848F /* AddressSearch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddressSearch.swift; sourceTree = "<group>"; };
 		D630213640615320DC2AEC84 /* KnoxCanvasApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KnoxCanvasApp.swift; sourceTree = "<group>"; };
 		D8962DB7A40B6E2DFE51CDA6 /* AuthErrors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthErrors.swift; sourceTree = "<group>"; };
 		EAFBD6606E92E216A805A16E /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		EB7E5F15073BF6AAD5E08458 /* PinStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PinStore.swift; sourceTree = "<group>"; };
+		F5C67006CDEFBC9AB870AC40 /* PinSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PinSheet.swift; sourceTree = "<group>"; };
 		FD737031080C6F0BC0C1480E /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -61,6 +73,18 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		0D80555BC23819CE25EDBDFA /* Pins */ = {
+			isa = PBXGroup;
+			children = (
+				D3741DA6E61790F75020848F /* AddressSearch.swift */,
+				0E28D78B76A4EC20A4777D6D /* Geocoder.swift */,
+				D038A49430266F730D519377 /* Pin.swift */,
+				489A01DBADBA6B07937A6CCF /* PinMapView.swift */,
+				EB7E5F15073BF6AAD5E08458 /* PinStore.swift */,
+			);
+			path = Pins;
+			sourceTree = "<group>";
+		};
 		1F182F60E6BF7692D53A4715 /* Components */ = {
 			isa = PBXGroup;
 			children = (
@@ -95,6 +119,7 @@
 			children = (
 				7CC3276B1AE1CEAF5A690036 /* AuthView.swift */,
 				34842738A2986BBA6CFB8722 /* HomeView.swift */,
+				F5C67006CDEFBC9AB870AC40 /* PinSheet.swift */,
 				AB00FE6EC8DB17ADC7EF2117 /* RootView.swift */,
 				BC52D208B67A73C72FC9D9DA /* SetupView.swift */,
 			);
@@ -115,6 +140,7 @@
 				903FEC186323142B56EA0C47 /* Info.plist */,
 				8C2E1F9A2F8DC01003A2D930 /* App */,
 				1F182F60E6BF7692D53A4715 /* Components */,
+				0D80555BC23819CE25EDBDFA /* Pins */,
 				3174DCC9367B8B84B480B5C1 /* Resources */,
 				3B3D2E04B925CDBE94C8F3F6 /* Session */,
 				462D000D426C9F47B25E4446 /* Views */,
@@ -221,14 +247,20 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E471695D221B719892DD188D /* AddressSearch.swift in Sources */,
 				AA5A0C9565F3B6A836849DE2 /* AppConfig.swift in Sources */,
 				657B637B422F5CD3538D653F /* AuthErrors.swift in Sources */,
 				A4E30CC8F71CA2AFA31C102B /* AuthView.swift in Sources */,
 				F985ABBE09B4DBBC477FF3CC /* Controls.swift in Sources */,
 				24DAEE85184CE5FDE6E58E3A /* FirebaseBootstrap.swift in Sources */,
+				7D983EDCEB43C5C9ED0B333E /* Geocoder.swift in Sources */,
 				02FD54D51714BCAC5BB89A49 /* HomeView.swift in Sources */,
 				E5CC5C6DF6C8EE105EC2CD44 /* KnoxCanvasApp.swift in Sources */,
 				CEE00903C7223474482C42C9 /* Models.swift in Sources */,
+				E59E567AE6F33846F72168F9 /* Pin.swift in Sources */,
+				844F0449788F947A3F65F749 /* PinMapView.swift in Sources */,
+				5DA187F41574481166D69D3D /* PinSheet.swift in Sources */,
+				F91C28EEC74BAE999D365A4A /* PinStore.swift in Sources */,
 				34F7D713D4682CA09785971B /* RootView.swift in Sources */,
 				6955243A81B119C797943B5E /* SessionStore.swift in Sources */,
 				AC0286B129218BCAD8B299EF /* SetupView.swift in Sources */,

@@ -1,36 +1,348 @@
 import SwiftUI
 import MapKit
 
-/// Phase 1 placeholder for the map screen: an empty map plus the account basics.
-/// Pins, filters and the tab bar arrive in Phase 2.
+/// The map screen: floating search, filter chips with counts, sync status and the bottom
+/// tab bar, laid out like the redesigned web app.
 struct HomeView: View {
     @Environment(SessionStore.self) private var session
-    @State private var showAccount = false
+    @State private var store: PinStore?
+
+    var body: some View {
+        Group {
+            if let store { MapScreen(store: store) } else { Theme.bg.ignoresSafeArea() }
+        }
+        .task(id: session.companyId) {
+            guard let cid = session.companyId, let uid = session.user?.uid else { return }
+            store?.stop()
+            let s = PinStore(companyId: cid, uid: uid, sheetsUrl: session.company?.sheetsUrl ?? "")
+            s.start()
+            store = s
+        }
+        .onDisappear { store?.stop(); store = nil }
+    }
+}
+
+private struct SelectedPin: Identifiable { let id: String }
+
+struct MapScreen: View {
+    @Bindable var store: PinStore
+    @State private var controller = MapController()
+    @State private var search = AddressSearch()
+    @State private var query = ""
+    @FocusState private var searchFocused: Bool
+    @State private var selected: SelectedPin?
+    @State private var panel: Panel?
+    @State private var toastText: String?
+    @AppStorage("knoxBasemap") private var basemapRaw = Basemap.street.rawValue
+
+    enum Panel: String, Identifiable { case layers, account; var id: String { rawValue } }
+
+    private var basemap: Basemap { Basemap(rawValue: basemapRaw) ?? .street }
 
     var body: some View {
         ZStack(alignment: .top) {
-            CanvasMapView().ignoresSafeArea()
+            PinMapView(store: store, controller: controller, basemap: basemap,
+                       version: store.version, hidden: store.hidden, hasFrame: store.initialFrame != nil,
+                       onTapPin: { open($0) }, onTapMap: tapMap)
+                .ignoresSafeArea()
 
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(session.profile?.name.isEmpty == false ? session.profile!.name : (session.user?.email ?? ""))
-                        .font(.system(size: 17, weight: .semibold)).foregroundStyle(Theme.text)
-                    Text(session.company?.name ?? "").font(.system(size: 14)).foregroundStyle(Theme.muted)
+            LinearGradient(colors: [Theme.bg.opacity(0.55), .clear], startPoint: .top, endPoint: .bottom)
+                .frame(height: 140).ignoresSafeArea().allowsHitTesting(false)
+
+            VStack(spacing: 8) {
+                searchCard
+                if searchFocused && !search.results.isEmpty { suggestions } else { chips; statusRow }
+                Spacer(minLength: 0)
+                if let toastText {
+                    Toast(text: toastText)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .padding(.bottom, 10)
                 }
-                Spacer()
-                Button { showAccount = true } label: {
-                    Image(systemName: "person.crop.circle").font(.system(size: 26)).foregroundStyle(Theme.text)
-                        .frame(width: 48, height: 48)
-                }
-                .accessibilityLabel("Account")
+                TabBar(select: tab)
             }
-            .padding(.leading, 16).padding(.trailing, 6).padding(.vertical, 6)
-            .background(Theme.card.opacity(0.95), in: RoundedRectangle(cornerRadius: 16))
-            .overlay(RoundedRectangle(cornerRadius: 16).stroke(Theme.border))
-            .padding(.horizontal, 16)
-            .padding(.top, 8)
         }
-        .sheet(isPresented: $showAccount) { AccountSheet().presentationDetents([.medium]) }
+        .animation(.easeInOut(duration: 0.2), value: toastText)
+        .onAppear {
+            controller.onMessage = { showToast($0) }
+            store.toast = { showToast($0) }
+        }
+        .sheet(item: $selected) { sel in
+            PinSheet(store: store, pinId: sel.id, toast: showToast) { selected = nil }
+                .presentationDetents([.fraction(0.62), .large])
+                .presentationDragIndicator(.visible)
+                .presentationBackground(Theme.bg)
+        }
+        .sheet(item: $panel) { p in
+            switch p {
+            case .layers:
+                LayersSheet(basemap: $basemapRaw).presentationDetents([.height(250)])
+            case .account:
+                AccountSheet().presentationDetents([.medium])
+            }
+        }
+    }
+
+    // MARK: Search
+
+    private var searchCard: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass").font(.system(size: 18, weight: .semibold)).foregroundStyle(Theme.muted)
+            TextField("", text: $query, prompt: Text("Search an address").foregroundStyle(Theme.muted))
+                .focused($searchFocused)
+                .font(.system(size: 17)).foregroundStyle(Theme.text)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+                .submitLabel(.search)
+                .onSubmit { if let first = search.results.first { pick(first) } }
+                .onChange(of: query) { _, q in search.update(q, region: controller.map?.region) }
+            if !query.isEmpty {
+                Button { query = ""; search.clear() } label: {
+                    Image(systemName: "xmark.circle.fill").font(.system(size: 18)).foregroundStyle(Theme.muted)
+                        .frame(width: 36, height: 44)
+                }
+                .accessibilityLabel("Clear search")
+            }
+            Button { controller.locate() } label: {
+                Image(systemName: "location.fill").font(.system(size: 18)).foregroundStyle(.white)
+                    .frame(width: 44, height: 44)
+                    .background(Theme.accent, in: RoundedRectangle(cornerRadius: 12))
+            }
+            .accessibilityLabel("My location")
+        }
+        .padding(.leading, 14).padding(.trailing, 4)
+        .frame(height: 52)
+        .background(Theme.card, in: RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(.white.opacity(0.1)))
+        .shadow(color: .black.opacity(0.4), radius: 10, y: 4)
+        .padding(.horizontal, 12)
+        .padding(.top, 6)
+    }
+
+    private var suggestions: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(search.results.enumerated()), id: \.offset) { i, r in
+                Button { pick(r) } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(r.title).font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.text)
+                        if !r.subtitle.isEmpty {
+                            Text(r.subtitle).font(.system(size: 14)).foregroundStyle(Theme.muted)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
+                    .padding(.horizontal, 16)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                if i < search.results.count - 1 { Divider().overlay(Theme.border) }
+            }
+        }
+        .background(Theme.card, in: RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(Theme.border))
+        .padding(.horizontal, 12)
+    }
+
+    private func pick(_ r: MKLocalSearchCompletion) {
+        searchFocused = false
+        query = ""
+        search.clear()
+        Task {
+            guard let (c, label) = await search.resolve(r) else { showToast("No matches"); return }
+            controller.center(on: c, meters: 120)
+            let id = store.createPin(at: c, addr: label)
+            try? await Task.sleep(for: .milliseconds(250))
+            open(id)
+        }
+    }
+
+    // MARK: Filters and status
+
+    private var chips: some View {
+        let counts = store.counts
+        let total = counts.values.reduce(0, +)
+        return ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                Chip(label: "All", count: total, color: nil, active: store.hidden.isEmpty) { store.hidden = [] }
+                ForEach([PinStatus.hanger, .interest, .no, .dnr, .none]) { s in
+                    Chip(label: s.chipLabel, count: counts[s] ?? 0, color: s.color, active: !store.hidden.contains(s)) {
+                        if store.hidden.contains(s) { store.hidden.remove(s) } else { store.hidden.insert(s) }
+                    }
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 2)
+        }
+    }
+
+    @ViewBuilder private var statusRow: some View {
+        if store.sync != .ok {
+            HStack {
+                StatusPill(text: syncText, color: store.sync == .error ? PinStatus.no.color : PinStatus.hanger.color)
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+        }
+    }
+
+    private var syncText: String {
+        switch store.sync {
+        case .ok: "Synced"
+        case .pending: "Saving\u{2026}"
+        case .offline: "Offline \u{00B7} saved on device"
+        case .error: "Sync error"
+        }
+    }
+
+    // MARK: Actions
+
+    private func tapMap(_ c: CLLocationCoordinate2D) {
+        if searchFocused { searchFocused = false; return }
+        open(store.createPin(at: c))
+    }
+
+    private func open(_ id: String) {
+        searchFocused = false
+        selected = SelectedPin(id: id)
+    }
+
+    private func tab(_ t: TabBar.Tab) {
+        switch t {
+        case .shift: showToast("Clock in/out arrives in the next update")
+        case .route: showToast("Route optimizer is coming soon")
+        case .zone: showToast("Zone drawing is coming soon")
+        case .layers: panel = .layers
+        case .account: panel = .account
+        }
+    }
+
+    private func showToast(_ text: String) {
+        toastText = text
+        let current = text
+        Task {
+            try? await Task.sleep(for: .seconds(2.6))
+            if toastText == current { toastText = nil }
+        }
+    }
+}
+
+extension PinStatus {
+    /// Short names for the filter chips.
+    var chipLabel: String {
+        switch self {
+        case .none: "Not visited"
+        case .hanger: "Hanger"
+        case .interest: "Interested"
+        case .no: "Not interested"
+        case .dnr: "Do not return"
+        }
+    }
+}
+
+private struct Chip: View {
+    let label: String
+    let count: Int
+    let color: Color?
+    let active: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                if let color { Circle().fill(color).frame(width: 10, height: 10) }
+                Text(label).foregroundStyle(Theme.text)
+                Text("\(count)").monospacedDigit()
+                    .foregroundStyle(color == nil && active ? .white.opacity(0.8) : Theme.muted)
+            }
+            .font(.system(size: 14, weight: .semibold))
+            .padding(.horizontal, 13)
+            .frame(height: 38)
+            .background(color == nil && active ? Theme.accent : Theme.card, in: Capsule())
+            .overlay(Capsule().stroke(.white.opacity(0.08)))
+            .opacity(color != nil && !active ? 0.4 : 1)
+            .shadow(color: .black.opacity(0.3), radius: 6, y: 2)
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(active ? .isSelected : [])
+    }
+}
+
+private struct StatusPill: View {
+    let text: String
+    let color: Color
+    var body: some View {
+        HStack(spacing: 6) {
+            Circle().fill(color).frame(width: 8, height: 8)
+            Text(text).font(.system(size: 13, weight: .bold)).foregroundStyle(color)
+        }
+        .padding(.horizontal, 11).padding(.vertical, 6)
+        .background(Theme.card, in: Capsule())
+        .shadow(color: .black.opacity(0.3), radius: 6, y: 2)
+    }
+}
+
+struct TabBar: View {
+    enum Tab: CaseIterable { case shift, route, zone, layers, account }
+    let select: (Tab) -> Void
+
+    var body: some View {
+        HStack(spacing: 0) {
+            item(.shift, "Clock in", "timer")
+            item(.route, "Route", "point.topleft.down.to.point.bottomright.curvepath")
+            item(.zone, "Zone", "pentagon")
+            item(.layers, "Layers", "square.3.layers.3d")
+            item(.account, "Account", "person.crop.circle")
+        }
+        .padding(.horizontal, 4)
+        .frame(height: 58)
+        .background(Color(hex: 0x151720).ignoresSafeArea(edges: .bottom))
+        .overlay(alignment: .top) { Rectangle().fill(Theme.border).frame(height: 1) }
+    }
+
+    private func item(_ t: Tab, _ label: String, _ icon: String) -> some View {
+        Button { select(t) } label: {
+            VStack(spacing: 4) {
+                Image(systemName: icon).font(.system(size: 21, weight: .medium))
+                Text(label).font(.system(size: 11, weight: .semibold)).lineLimit(1)
+            }
+            .foregroundStyle(Theme.muted)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+    }
+}
+
+struct LayersSheet: View {
+    @Binding var basemap: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Map layers").font(.title2.bold()).foregroundStyle(Theme.text)
+            Text("MAP STYLE").font(.system(size: 13, weight: .bold)).foregroundStyle(Theme.muted)
+            HStack(spacing: 8) {
+                seg("Street", Basemap.street)
+                seg("Satellite", Basemap.sat)
+            }
+            Text("Roofing target mode and zip code boundaries are coming soon.")
+                .font(.system(size: 14)).foregroundStyle(Theme.muted)
+            Spacer(minLength: 0)
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(Theme.bg)
+    }
+
+    private func seg(_ title: String, _ b: Basemap) -> some View {
+        let on = basemap == b.rawValue
+        return Button { basemap = b.rawValue } label: {
+            Text(title).font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(on ? .white : Theme.muted)
+                .frame(maxWidth: .infinity, minHeight: 48)
+                .background(on ? Theme.accent : Theme.card, in: RoundedRectangle(cornerRadius: Theme.radius))
+                .overlay(RoundedRectangle(cornerRadius: Theme.radius).stroke(on ? .clear : Theme.border))
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -60,21 +372,4 @@ struct AccountSheet: View {
         }
         .font(.system(size: 17))
     }
-}
-
-/// MKMapView wrapper. SwiftUI's Map can't cluster thousands of pins, so Phase 2 builds on this.
-struct CanvasMapView: UIViewRepresentable {
-    static let knoxville = CLLocationCoordinate2D(latitude: 35.9606, longitude: -83.9207)
-
-    func makeUIView(context: Context) -> MKMapView {
-        let map = MKMapView()
-        let config = MKStandardMapConfiguration()
-        config.pointOfInterestFilter = .excludingAll
-        map.preferredConfiguration = config
-        map.overrideUserInterfaceStyle = .dark
-        map.setRegion(MKCoordinateRegion(center: Self.knoxville, latitudinalMeters: 8000, longitudinalMeters: 8000), animated: false)
-        return map
-    }
-
-    func updateUIView(_ map: MKMapView, context: Context) {}
 }

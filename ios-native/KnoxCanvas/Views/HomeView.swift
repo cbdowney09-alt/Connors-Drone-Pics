@@ -6,19 +6,24 @@ import MapKit
 struct HomeView: View {
     @Environment(SessionStore.self) private var session
     @State private var store: PinStore?
+    @State private var shifts: ShiftStore?
 
     var body: some View {
         Group {
-            if let store { MapScreen(store: store) } else { Theme.bg.ignoresSafeArea() }
+            if let store, let shifts { MapScreen(store: store, shifts: shifts) } else { Theme.bg.ignoresSafeArea() }
         }
         .task(id: session.companyId) {
             guard let cid = session.companyId, let uid = session.user?.uid else { return }
             store?.stop()
-            let s = PinStore(companyId: cid, uid: uid, sheetsUrl: session.company?.sheetsUrl ?? "")
+            let sheets = session.company?.sheetsUrl ?? ""
+            let s = PinStore(companyId: cid, uid: uid, sheetsUrl: sheets)
             s.start()
+            let sh = ShiftStore(companyId: cid, uid: uid, userName: session.profile?.name ?? "", sheetsUrl: sheets, pins: s)
             store = s
+            shifts = sh
+            await sh.start()
         }
-        .onDisappear { store?.stop(); store = nil }
+        .onDisappear { store?.stop(); store = nil; shifts = nil }
     }
 }
 
@@ -26,6 +31,7 @@ private struct SelectedPin: Identifiable { let id: String }
 
 struct MapScreen: View {
     @Bindable var store: PinStore
+    let shifts: ShiftStore
     @State private var controller = MapController()
     @State private var search = AddressSearch()
     @State private var query = ""
@@ -35,7 +41,7 @@ struct MapScreen: View {
     @State private var toastText: String?
     @AppStorage("knoxBasemap") private var basemapRaw = Basemap.street.rawValue
 
-    enum Panel: String, Identifiable { case layers, account; var id: String { rawValue } }
+    enum Panel: String, Identifiable { case shift, layers, account; var id: String { rawValue } }
 
     private var basemap: Basemap { Basemap(rawValue: basemapRaw) ?? .street }
 
@@ -58,13 +64,14 @@ struct MapScreen: View {
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                         .padding(.bottom, 10)
                 }
-                TabBar(select: tab)
+                TabBar(clockInTime: shifts.clockInTime, select: tab)
             }
         }
         .animation(.easeInOut(duration: 0.2), value: toastText)
         .onAppear {
             controller.onMessage = { showToast($0) }
             store.toast = { showToast($0) }
+            shifts.toast = { showToast($0) }
         }
         .sheet(item: $selected) { sel in
             PinSheet(store: store, pinId: sel.id, toast: showToast) { selected = nil }
@@ -74,10 +81,12 @@ struct MapScreen: View {
         }
         .sheet(item: $panel) { p in
             switch p {
+            case .shift:
+                ShiftSheet(shifts: shifts).presentationDetents([.large])
             case .layers:
                 LayersSheet(basemap: $basemapRaw).presentationDetents([.height(250)])
             case .account:
-                AccountSheet().presentationDetents([.medium])
+                AccountSheet(clockedIn: shifts.clockedIn).presentationDetents([.medium])
             }
         }
     }
@@ -174,9 +183,22 @@ struct MapScreen: View {
     }
 
     @ViewBuilder private var statusRow: some View {
-        if store.sync != .ok {
-            HStack {
-                StatusPill(text: syncText, color: store.sync == .error ? PinStatus.no.color : PinStatus.hanger.color)
+        if store.sync != .ok || shifts.clockedIn {
+            HStack(spacing: 6) {
+                if store.sync != .ok {
+                    StatusPill(text: syncText, color: store.sync == .error ? PinStatus.no.color : PinStatus.hanger.color)
+                }
+                if let start = shifts.clockInTime {
+                    Button { panel = .shift } label: {
+                        TimelineView(.periodic(from: .now, by: 15)) { ctx in
+                            let ms = Int64(ctx.date.timeIntervalSince1970 * 1000) - start
+                            StatusPill(text: "On shift \(ShiftFormat.short(ms)) \u{00B7} \(shifts.hangersSince(start)) hangers",
+                                       color: PinStatus.interest.color)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Open shift")
+                }
                 Spacer()
             }
             .padding(.horizontal, 12)
@@ -206,7 +228,7 @@ struct MapScreen: View {
 
     private func tab(_ t: TabBar.Tab) {
         switch t {
-        case .shift: showToast("Clock in/out arrives in the next update")
+        case .shift: panel = .shift
         case .route: showToast("Route optimizer is coming soon")
         case .zone: showToast("Zone drawing is coming soon")
         case .layers: panel = .layers
@@ -282,11 +304,16 @@ private struct StatusPill: View {
 
 struct TabBar: View {
     enum Tab: CaseIterable { case shift, route, zone, layers, account }
+    let clockInTime: Int64?
     let select: (Tab) -> Void
 
     var body: some View {
         HStack(spacing: 0) {
-            item(.shift, "Clock in", "timer")
+            // While on shift the tab shows the running time, like the web.
+            TimelineView(.periodic(from: .now, by: 15)) { ctx in
+                let label = clockInTime.map { ShiftFormat.short(Int64(ctx.date.timeIntervalSince1970 * 1000) - $0) } ?? "Clock in"
+                item(.shift, label, "timer", active: clockInTime != nil)
+            }
             item(.route, "Route", "point.topleft.down.to.point.bottomright.curvepath")
             item(.zone, "Zone", "pentagon")
             item(.layers, "Layers", "square.3.layers.3d")
@@ -298,13 +325,13 @@ struct TabBar: View {
         .overlay(alignment: .top) { Rectangle().fill(Theme.border).frame(height: 1) }
     }
 
-    private func item(_ t: Tab, _ label: String, _ icon: String) -> some View {
+    private func item(_ t: Tab, _ label: String, _ icon: String, active: Bool = false) -> some View {
         Button { select(t) } label: {
             VStack(spacing: 4) {
                 Image(systemName: icon).font(.system(size: 21, weight: .medium))
-                Text(label).font(.system(size: 11, weight: .semibold)).lineLimit(1)
+                Text(label).font(.system(size: 11, weight: .semibold)).lineLimit(1).monospacedDigit()
             }
-            .foregroundStyle(Theme.muted)
+            .foregroundStyle(active ? Theme.accent : Theme.muted)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .contentShape(Rectangle())
         }
@@ -348,6 +375,8 @@ struct LayersSheet: View {
 
 struct AccountSheet: View {
     @Environment(SessionStore.self) private var session
+    var clockedIn = false
+    @State private var confirmSignOut = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -357,7 +386,14 @@ struct AccountSheet: View {
             row("Company", session.company?.name)
             row("Role", session.profile?.role)
             Spacer()
-            KnoxButton(title: "Sign out", style: .ghost) { session.signOut() }
+            KnoxButton(title: "Sign out", style: .ghost) {
+                if clockedIn { confirmSignOut = true } else { session.signOut() }
+            }
+        }
+        .confirmationDialog("You\u{2019}re still clocked in. Sign out anyway?", isPresented: $confirmSignOut, titleVisibility: .visible) {
+            Button("Sign out", role: .destructive) { session.signOut() }
+        } message: {
+            Text("Your shift keeps running and picks back up when you sign in again.")
         }
         .padding(20)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)

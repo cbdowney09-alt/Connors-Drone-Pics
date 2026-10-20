@@ -10,7 +10,9 @@
 		02FD54D51714BCAC5BB89A49 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34842738A2986BBA6CFB8722 /* HomeView.swift */; };
 		16B8E61ECC7CF40628EE51D8 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 18C4243D9907702CAD6DFA53 /* FirebaseAuth */; };
 		24DAEE85184CE5FDE6E58E3A /* FirebaseBootstrap.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E7F8008F673EE2054EA6D67 /* FirebaseBootstrap.swift */; };
+		27879E1D0F85EA1066B9FFB7 /* ShiftSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = C65CD8D3FEECC01CFE601B69 /* ShiftSheet.swift */; };
 		2AD4506E97155C3A3466DE6F /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 8A0079B8DA8EDE29E204179B /* PrivacyInfo.xcprivacy */; };
+		32AA16FBB81F5FC898E83E04 /* ShiftStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F65CFFBDF2551E51434ECF0F /* ShiftStore.swift */; };
 		34F7D713D4682CA09785971B /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00FE6EC8DB17ADC7EF2117 /* RootView.swift */; };
 		5B3A62A888D87D71C7F760DE /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 694A35896F3EE3E4A59A5873 /* GoogleService-Info.plist */; };
 		5DA187F41574481166D69D3D /* PinSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5C67006CDEFBC9AB870AC40 /* PinSheet.swift */; };
@@ -49,6 +51,7 @@
 		92E23A620BE48637AE9C9586 /* KnoxCanvas.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = KnoxCanvas.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AB00FE6EC8DB17ADC7EF2117 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		BC52D208B67A73C72FC9D9DA /* SetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupView.swift; sourceTree = "<group>"; };
+		C65CD8D3FEECC01CFE601B69 /* ShiftSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShiftSheet.swift; sourceTree = "<group>"; };
 		D038A49430266F730D519377 /* Pin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Pin.swift; sourceTree = "<group>"; };
 		D3741DA6E61790F75020848F /* AddressSearch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddressSearch.swift; sourceTree = "<group>"; };
 		D630213640615320DC2AEC84 /* KnoxCanvasApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KnoxCanvasApp.swift; sourceTree = "<group>"; };
@@ -56,6 +59,7 @@
 		EAFBD6606E92E216A805A16E /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		EB7E5F15073BF6AAD5E08458 /* PinStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PinStore.swift; sourceTree = "<group>"; };
 		F5C67006CDEFBC9AB870AC40 /* PinSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PinSheet.swift; sourceTree = "<group>"; };
+		F65CFFBDF2551E51434ECF0F /* ShiftStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShiftStore.swift; sourceTree = "<group>"; };
 		FD737031080C6F0BC0C1480E /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -126,6 +130,15 @@
 			path = Views;
 			sourceTree = "<group>";
 		};
+		510BB40724DEB2A95E7D3104 /* Shifts */ = {
+			isa = PBXGroup;
+			children = (
+				C65CD8D3FEECC01CFE601B69 /* ShiftSheet.swift */,
+				F65CFFBDF2551E51434ECF0F /* ShiftStore.swift */,
+			);
+			path = Shifts;
+			sourceTree = "<group>";
+		};
 		71DF58F381E85F5F9F514AF2 = {
 			isa = PBXGroup;
 			children = (
@@ -143,6 +156,7 @@
 				0D80555BC23819CE25EDBDFA /* Pins */,
 				3174DCC9367B8B84B480B5C1 /* Resources */,
 				3B3D2E04B925CDBE94C8F3F6 /* Session */,
+				510BB40724DEB2A95E7D3104 /* Shifts */,
 				462D000D426C9F47B25E4446 /* Views */,
 			);
 			path = KnoxCanvas;
@@ -264,6 +278,8 @@
 				34F7D713D4682CA09785971B /* RootView.swift in Sources */,
 				6955243A81B119C797943B5E /* SessionStore.swift in Sources */,
 				AC0286B129218BCAD8B299EF /* SetupView.swift in Sources */,
+				27879E1D0F85EA1066B9FFB7 /* ShiftSheet.swift in Sources */,
+				32AA16FBB81F5FC898E83E04 /* ShiftStore.swift in Sources */,
 				BCDFBBAF1257013439169E61 /* Theme.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

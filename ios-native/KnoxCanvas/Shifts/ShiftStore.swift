@@ -34,6 +34,8 @@ final class ShiftStore {
     var userName: String
     var sheetsUrl: String
     private let pins: PinStore
+    /// Street sweep runs exactly while clocked in.
+    let sweep: SweepTracker
     private let db = Firestore.firestore()
 
     /// Same limit as the web: a shift left open longer than this is dropped on restore.
@@ -45,6 +47,7 @@ final class ShiftStore {
         self.userName = userName
         self.sheetsUrl = sheetsUrl
         self.pins = pins
+        sweep = SweepTracker(uid: uid, pins: pins)
     }
 
     var clockedIn: Bool { clockInTime != nil }
@@ -54,8 +57,12 @@ final class ShiftStore {
 
     func start() async {
         await restore()
+        if let t = clockInTime { sweep.start(clockIn: t) }
         await loadShifts()
     }
+
+    /// Signing out mid-shift: stop GPS but keep the trail on this device.
+    func pause() { sweep.stop(keepSaved: true) }
 
     // MARK: Clock
 
@@ -63,6 +70,7 @@ final class ShiftStore {
     private func restore() async {
         let local = (UserDefaults.standard.object(forKey: localKey) as? NSNumber)?.int64Value
         clockInTime = local.flatMap(fresh)
+        if let t = clockInTime { sweep.start(clockIn: t) } // don't wait on the network to resume GPS
         let remote: Int64?
         do {
             let snap = try await userDoc.getDocument()
@@ -92,6 +100,7 @@ final class ShiftStore {
         clockInTime = now
         UserDefaults.standard.set(NSNumber(value: now), forKey: localKey)
         writeRemote(now)
+        sweep.start(clockIn: now)
         toast?("Clocked in")
     }
 
@@ -101,14 +110,15 @@ final class ShiftStore {
         let hangers = hangersSince(start)
         let hours = Double(duration) / 3_600_000
         let perHour = hours > 0 ? (Double(hangers) / hours * 10).rounded() / 10 : 0
+        let summary = sweep.shiftSummary(since: start)
         let data: [String: Any] = [
             "clockIn": start, "clockOut": end, "durationMs": duration, "hangers": hangers,
             // JS stores whole numbers as integers; match it so both apps write the same type.
             "hangersPerHour": perHour == perHour.rounded() ? NSNumber(value: Int(perHour)) : NSNumber(value: perHour),
             "userId": uid, "userName": userName,
-            // Street sweep fields (Phase 4 fills in the trail).
-            "trail": "", "trailMeters": 0, "gpsHangers": gpsHangersSince(start),
+            "trail": summary.trail, "trailMeters": summary.meters, "gpsHangers": gpsHangersSince(start),
         ]
+        sweep.stop(keepSaved: false)
         let ref = shiftsCol.document()
         shifts.insert(Shift(id: ref.documentID, data: data), at: 0)
         clockInTime = nil

@@ -23,7 +23,7 @@ struct HomeView: View {
             shifts = sh
             await sh.start()
         }
-        .onDisappear { store?.stop(); store = nil; shifts = nil }
+        .onDisappear { shifts?.pause(); store?.stop(); store = nil; shifts = nil }
     }
 }
 
@@ -41,7 +41,7 @@ struct MapScreen: View {
     @State private var toastText: String?
     @AppStorage("knoxBasemap") private var basemapRaw = Basemap.street.rawValue
 
-    enum Panel: String, Identifiable { case shift, layers, account; var id: String { rawValue } }
+    enum Panel: String, Identifiable { case shift, layers, account, sweep; var id: String { rawValue } }
 
     private var basemap: Basemap { Basemap(rawValue: basemapRaw) ?? .street }
 
@@ -49,7 +49,8 @@ struct MapScreen: View {
         ZStack(alignment: .top) {
             PinMapView(store: store, controller: controller, basemap: basemap,
                        version: store.version, hidden: store.hidden, hasFrame: store.initialFrame != nil,
-                       onTapPin: { open($0) }, onTapMap: tapMap)
+                       sweep: shifts.sweep, sweepVersion: shifts.sweep.version,
+                       onTapPin: { open($0) }, onTapCandidate: { shifts.sweep.toggle($0) }, onTapMap: tapMap)
                 .ignoresSafeArea()
 
             LinearGradient(colors: [Theme.bg.opacity(0.55), .clear], startPoint: .top, endPoint: .bottom)
@@ -59,6 +60,11 @@ struct MapScreen: View {
                 searchCard
                 if searchFocused && !search.results.isEmpty { suggestions } else { chips; statusRow }
                 Spacer(minLength: 0)
+                if !shifts.sweep.candidates.isEmpty {
+                    SweepBanner(sweep: shifts.sweep) { panel = .sweep }
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .padding(.bottom, 8)
+                }
                 if let toastText {
                     Toast(text: toastText)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -68,10 +74,12 @@ struct MapScreen: View {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: toastText)
+        .animation(.easeInOut(duration: 0.25), value: shifts.sweep.candidates.isEmpty)
         .onAppear {
             controller.onMessage = { showToast($0) }
             store.toast = { showToast($0) }
             shifts.toast = { showToast($0) }
+            shifts.sweep.toast = { showToast($0) }
         }
         .sheet(item: $selected) { sel in
             PinSheet(store: store, pinId: sel.id, toast: showToast) { selected = nil }
@@ -83,6 +91,8 @@ struct MapScreen: View {
             switch p {
             case .shift:
                 ShiftSheet(shifts: shifts).presentationDetents([.large])
+            case .sweep:
+                SweepReviewSheet(sweep: shifts.sweep).presentationDetents([.medium, .large])
             case .layers:
                 LayersSheet(basemap: $basemapRaw).presentationDetents([.height(250)])
             case .account:
@@ -187,6 +197,11 @@ struct MapScreen: View {
             HStack(spacing: 6) {
                 if store.sync != .ok {
                     StatusPill(text: syncText, color: store.sync == .error ? PinStatus.no.color : PinStatus.hanger.color)
+                }
+                switch shifts.sweep.gps {
+                case .on: StatusPill(text: "GPS", color: PinStatus.interest.color)
+                case .warn: StatusPill(text: "GPS off", color: PinStatus.no.color)
+                case .off: EmptyView()
                 }
                 if let start = shifts.clockInTime {
                     Button { panel = .shift } label: {

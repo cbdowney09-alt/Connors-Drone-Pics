@@ -9,14 +9,18 @@
 /* Begin PBXBuildFile section */
 		02FD54D51714BCAC5BB89A49 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34842738A2986BBA6CFB8722 /* HomeView.swift */; };
 		16B8E61ECC7CF40628EE51D8 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 18C4243D9907702CAD6DFA53 /* FirebaseAuth */; };
+		21C7779B29379A4588DBCD6D /* HouseFinder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A435CF5F3E24DDA69B3D805 /* HouseFinder.swift */; };
 		24DAEE85184CE5FDE6E58E3A /* FirebaseBootstrap.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E7F8008F673EE2054EA6D67 /* FirebaseBootstrap.swift */; };
 		27879E1D0F85EA1066B9FFB7 /* ShiftSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = C65CD8D3FEECC01CFE601B69 /* ShiftSheet.swift */; };
+		2988DF9B9909F4BEE94AEEBE /* SweepTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CA34442D5296D72EDAB2BFB /* SweepTracker.swift */; };
 		2AD4506E97155C3A3466DE6F /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 8A0079B8DA8EDE29E204179B /* PrivacyInfo.xcprivacy */; };
 		32AA16FBB81F5FC898E83E04 /* ShiftStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F65CFFBDF2551E51434ECF0F /* ShiftStore.swift */; };
 		34F7D713D4682CA09785971B /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00FE6EC8DB17ADC7EF2117 /* RootView.swift */; };
 		5B3A62A888D87D71C7F760DE /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 694A35896F3EE3E4A59A5873 /* GoogleService-Info.plist */; };
 		5DA187F41574481166D69D3D /* PinSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5C67006CDEFBC9AB870AC40 /* PinSheet.swift */; };
 		657B637B422F5CD3538D653F /* AuthErrors.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8962DB7A40B6E2DFE51CDA6 /* AuthErrors.swift */; };
+		659D018150CAA79EED8045B2 /* SweepGeo.swift in Sources */ = {isa = PBXBuildFile; fileRef = E89213A64DD7AE33FF689E13 /* SweepGeo.swift */; };
+		667AFCD27B117AD2BB1F2473 /* SweepViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89F24E5135B8072E265CE868 /* SweepViews.swift */; };
 		6955243A81B119C797943B5E /* SessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47EA67B56C23BE5902369F16 /* SessionStore.swift */; };
 		7D983EDCEB43C5C9ED0B333E /* Geocoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E28D78B76A4EC20A4777D6D /* Geocoder.swift */; };
 		844F0449788F947A3F65F749 /* PinMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 489A01DBADBA6B07937A6CCF /* PinMapView.swift */; };
@@ -37,6 +41,7 @@
 
 /* Begin PBXFileReference section */
 		0E28D78B76A4EC20A4777D6D /* Geocoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Geocoder.swift; sourceTree = "<group>"; };
+		2A435CF5F3E24DDA69B3D805 /* HouseFinder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseFinder.swift; sourceTree = "<group>"; };
 		34842738A2986BBA6CFB8722 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		47EA67B56C23BE5902369F16 /* SessionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionStore.swift; sourceTree = "<group>"; };
 		489A01DBADBA6B07937A6CCF /* PinMapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PinMapView.swift; sourceTree = "<group>"; };
@@ -46,9 +51,12 @@
 		7CC3276B1AE1CEAF5A690036 /* AuthView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthView.swift; sourceTree = "<group>"; };
 		7FA4FA64718E5507789052AD /* AppConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfig.swift; sourceTree = "<group>"; };
 		82BCEBD41AAFCD83446BC04F /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		89F24E5135B8072E265CE868 /* SweepViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SweepViews.swift; sourceTree = "<group>"; };
 		8A0079B8DA8EDE29E204179B /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		903FEC186323142B56EA0C47 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		92E23A620BE48637AE9C9586 /* KnoxCanvas.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = KnoxCanvas.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		95A5EAB60048A4142854E3BE /* KnoxvilleWalk.gpx */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = KnoxvilleWalk.gpx; sourceTree = "<group>"; };
+		9CA34442D5296D72EDAB2BFB /* SweepTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SweepTracker.swift; sourceTree = "<group>"; };
 		AB00FE6EC8DB17ADC7EF2117 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		BC52D208B67A73C72FC9D9DA /* SetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupView.swift; sourceTree = "<group>"; };
 		C65CD8D3FEECC01CFE601B69 /* ShiftSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShiftSheet.swift; sourceTree = "<group>"; };
@@ -56,6 +64,7 @@
 		D3741DA6E61790F75020848F /* AddressSearch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddressSearch.swift; sourceTree = "<group>"; };
 		D630213640615320DC2AEC84 /* KnoxCanvasApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KnoxCanvasApp.swift; sourceTree = "<group>"; };
 		D8962DB7A40B6E2DFE51CDA6 /* AuthErrors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthErrors.swift; sourceTree = "<group>"; };
+		E89213A64DD7AE33FF689E13 /* SweepGeo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SweepGeo.swift; sourceTree = "<group>"; };
 		EAFBD6606E92E216A805A16E /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		EB7E5F15073BF6AAD5E08458 /* PinStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PinStore.swift; sourceTree = "<group>"; };
 		F5C67006CDEFBC9AB870AC40 /* PinSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PinSheet.swift; sourceTree = "<group>"; };
@@ -77,6 +86,17 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		0490E28CF78DFDA1F086884E /* Sweep */ = {
+			isa = PBXGroup;
+			children = (
+				2A435CF5F3E24DDA69B3D805 /* HouseFinder.swift */,
+				E89213A64DD7AE33FF689E13 /* SweepGeo.swift */,
+				9CA34442D5296D72EDAB2BFB /* SweepTracker.swift */,
+				89F24E5135B8072E265CE868 /* SweepViews.swift */,
+			);
+			path = Sweep;
+			sourceTree = "<group>";
+		};
 		0D80555BC23819CE25EDBDFA /* Pins */ = {
 			isa = PBXGroup;
 			children = (
@@ -95,6 +115,14 @@
 				5C4CAA90E5B11DE14CB3C7E5 /* Controls.swift */,
 			);
 			path = Components;
+			sourceTree = "<group>";
+		};
+		3044D36E5E8D889EF9FC0D76 /* Simulated Walks */ = {
+			isa = PBXGroup;
+			children = (
+				95A5EAB60048A4142854E3BE /* KnoxvilleWalk.gpx */,
+			);
+			path = "Simulated Walks";
 			sourceTree = "<group>";
 		};
 		3174DCC9367B8B84B480B5C1 /* Resources */ = {
@@ -143,6 +171,7 @@
 			isa = PBXGroup;
 			children = (
 				88166EDDF761C068EC05753D /* KnoxCanvas */,
+				3044D36E5E8D889EF9FC0D76 /* Simulated Walks */,
 				EB7347D80EA83BDEE313F898 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -157,6 +186,7 @@
 				3174DCC9367B8B84B480B5C1 /* Resources */,
 				3B3D2E04B925CDBE94C8F3F6 /* Session */,
 				510BB40724DEB2A95E7D3104 /* Shifts */,
+				0490E28CF78DFDA1F086884E /* Sweep */,
 				462D000D426C9F47B25E4446 /* Views */,
 			);
 			path = KnoxCanvas;
@@ -269,6 +299,7 @@
 				24DAEE85184CE5FDE6E58E3A /* FirebaseBootstrap.swift in Sources */,
 				7D983EDCEB43C5C9ED0B333E /* Geocoder.swift in Sources */,
 				02FD54D51714BCAC5BB89A49 /* HomeView.swift in Sources */,
+				21C7779B29379A4588DBCD6D /* HouseFinder.swift in Sources */,
 				E5CC5C6DF6C8EE105EC2CD44 /* KnoxCanvasApp.swift in Sources */,
 				CEE00903C7223474482C42C9 /* Models.swift in Sources */,
 				E59E567AE6F33846F72168F9 /* Pin.swift in Sources */,
@@ -280,6 +311,9 @@
 				AC0286B129218BCAD8B299EF /* SetupView.swift in Sources */,
 				27879E1D0F85EA1066B9FFB7 /* ShiftSheet.swift in Sources */,
 				32AA16FBB81F5FC898E83E04 /* ShiftStore.swift in Sources */,
+				659D018150CAA79EED8045B2 /* SweepGeo.swift in Sources */,
+				2988DF9B9909F4BEE94AEEBE /* SweepTracker.swift in Sources */,
+				667AFCD27B117AD2BB1F2473 /* SweepViews.swift in Sources */,
 				BCDFBBAF1257013439169E61 /* Theme.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

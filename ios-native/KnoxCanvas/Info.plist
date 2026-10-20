@@ -18,8 +18,6 @@
 	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
 	<key>CFBundleShortVersionString</key>
 	<string>$(MARKETING_VERSION)</string>
-	<key>CFBundleVersion</key>
-	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -27,30 +25,31 @@
 			<string>google-signin</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<!-- Reversed iOS OAuth client ID (AppConfig.googleIOSClientID) -->
 				<string>com.googleusercontent.apps.526600169975-dvs2b01apf96c4ae7roste08rd0d17sv</string>
 			</array>
 		</dict>
 	</array>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>GIDClientID</key>
 	<string>526600169975-dvs2b01apf96c4ae7roste08rd0d17sv.apps.googleusercontent.com</string>
-	<key>LSRequiresIPhoneOS</key>
-	<true/>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>KnoxCanvas uses your location while you're clocked in to find the houses on the streets you walk, so you can mark them as door hangers in one tap.</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>KnoxCanvas uses your location while you're clocked in, including with your screen locked, to find the houses on the streets you walk.</string>
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>location</string>
-	</array>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>KnoxCanvas uses your location while you're clocked in to find the houses on the streets you walk, so you can mark them as door hangers in one tap.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
 		<false/>
 	</dict>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+	</array>
 	<key>UILaunchScreen</key>
 	<dict>
 		<key>UIColorName</key>
@@ -62,11 +61,11 @@
 	</array>
 	<key>UIStatusBarStyle</key>
 	<string>UIStatusBarStyleLightContent</string>
-	<key>UIUserInterfaceStyle</key>
-	<string>Dark</string>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
 	</array>
+	<key>UIUserInterfaceStyle</key>
+	<string>Dark</string>
 </dict>
 </plist>

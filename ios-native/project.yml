@@ -17,6 +17,9 @@ packages:
   GoogleSignIn:
     url: https://github.com/google/GoogleSignIn-iOS
     from: "9.0.0"
+# GPX walks for Debug → Simulate Location (in the project, not the app).
+fileGroups:
+  - Simulated Walks
 targets:
   KnoxCanvas:
     type: application

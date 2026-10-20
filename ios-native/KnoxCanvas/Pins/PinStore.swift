@@ -171,6 +171,53 @@ final class PinStore {
         postToSheets(["action": "delete", "id": id])
     }
 
+    /// True if a pin is within `within` meters (the web's nearestPin check).
+    func hasPin(near lat: Double, _ lng: Double, within: Double) -> Bool {
+        let c = CLLocationCoordinate2D(latitude: lat, longitude: lng)
+        return pins.values.contains { Geo.distance(c, $0.coordinate) < within }
+    }
+
+    /// Street sweep: writes the accepted houses as hanger pins with `source: 'gps-sweep'`
+    /// in batches (like the web's placeSweepPins). Returns how many were placed.
+    func createSweepPins(_ houses: [Candidate]) -> Int {
+        let now = nowMs()
+        var placed: [Pin] = []
+        for chunkStart in stride(from: 0, to: houses.count, by: 400) {
+            let batch = db.batch()
+            var any = false
+            for c in houses[chunkStart..<min(chunkStart + 400, houses.count)] {
+                let id = Pin.makeId(lat: c.lat, lng: c.lng)
+                if pins[id] != nil || hasPin(near: c.lat, c.lng, within: SWEEP.dupRadius) { continue }
+                let coord = CLLocationCoordinate2D(latitude: c.lat, longitude: c.lng)
+                let data: [String: Any] = [
+                    "lat": c.lat, "lng": c.lng,
+                    "addr": c.addr.isEmpty ? String(format: "%.4f, %.4f", c.lat, c.lng) : c.addr,
+                    "status": PinStatus.hanger.rawValue, "note": "", "yearBuilt": yearForPoint(coord),
+                    "ts": now, "createdBy": uid, "createdAt": now, "statusBy": uid, "statusAt": now,
+                    "hangerBy": uid, "hangerAt": now, "source": "gps-sweep",
+                ]
+                guard let p = Pin(id: id, data: data) else { continue }
+                pins[id] = p
+                placed.append(p)
+                var d = data
+                d["updatedBy"] = uid
+                d["updatedAt"] = FieldValue.serverTimestamp()
+                batch.setData(d, forDocument: pinsCol.document(id), merge: true)
+                any = true
+            }
+            guard any else { continue }
+            batch.commit { [weak self] error in
+                guard let error, let self else { return }
+                print("sweep pins:", error)
+                sync = .error
+                toast?("Couldn\u{2019}t save street pins (\(error.localizedDescription))")
+            }
+        }
+        version &+= 1
+        placed.forEach(syncUpsert)
+        return placed.count
+    }
+
     // MARK: - Neighborhood years
 
     func yearForPoint(_ c: CLLocationCoordinate2D) -> String {

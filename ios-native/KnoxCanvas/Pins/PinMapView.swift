@@ -162,6 +162,53 @@ final class PinClusterView: MKAnnotationView {
     }
 }
 
+/// A house the street sweep found: a dashed ring, orange when it will be marked.
+final class CandidateAnnotation: NSObject, MKAnnotation {
+    let key: String
+    let coordinate: CLLocationCoordinate2D
+    var on: Bool
+
+    init(_ c: Candidate) {
+        key = c.key
+        coordinate = CLLocationCoordinate2D(latitude: c.lat, longitude: c.lng)
+        on = c.on
+    }
+}
+
+final class CandidateRingView: MKAnnotationView {
+    static let reuseID = "candidate"
+    private let ring = CAShapeLayer()
+
+    override init(annotation: MKAnnotation?, reuseIdentifier: String?) {
+        super.init(annotation: annotation, reuseIdentifier: reuseIdentifier)
+        frame = CGRect(x: 0, y: 0, width: 24, height: 24)
+        ring.path = UIBezierPath(ovalIn: bounds.insetBy(dx: 2, dy: 2)).cgPath
+        ring.lineDashPattern = [4, 3]
+        layer.addSublayer(ring)
+        displayPriority = .required // never hidden or clustered
+        zPriority = .max
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func prepareForDisplay() {
+        super.prepareForDisplay()
+        refresh()
+    }
+
+    func refresh() {
+        let on = (annotation as? CandidateAnnotation)?.on ?? true
+        let color = on ? UIColor(PinStatus.hanger.color) : UIColor(PinStatus.none.color)
+        ring.strokeColor = color.cgColor
+        ring.fillColor = color.withAlphaComponent(on ? 0.35 : 0.1).cgColor
+        ring.lineWidth = on ? 3 : 2
+    }
+
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        bounds.insetBy(dx: -10, dy: -10).contains(point)
+    }
+}
+
 struct PinMapView: UIViewRepresentable {
     let store: PinStore
     let controller: MapController
@@ -170,7 +217,10 @@ struct PinMapView: UIViewRepresentable {
     let version: Int
     let hidden: Set<PinStatus>
     let hasFrame: Bool
+    let sweep: SweepTracker
+    let sweepVersion: Int
     var onTapPin: (String) -> Void
+    var onTapCandidate: (String) -> Void
     var onTapMap: (CLLocationCoordinate2D) -> Void
 
     static let knoxville = CLLocationCoordinate2D(latitude: 35.9606, longitude: -83.9207)
@@ -184,6 +234,7 @@ struct PinMapView: UIViewRepresentable {
         map.showsCompass = false
         map.register(PinDotView.self, forAnnotationViewWithReuseIdentifier: PinDotView.reuseID)
         map.register(PinClusterView.self, forAnnotationViewWithReuseIdentifier: PinClusterView.reuseID)
+        map.register(CandidateRingView.self, forAnnotationViewWithReuseIdentifier: CandidateRingView.reuseID)
         map.setRegion(MKCoordinateRegion(center: Self.knoxville, latitudinalMeters: 3000, longitudinalMeters: 3000), animated: false)
 
         // Single tap drops a pin. A do-nothing double tap that it waits on keeps
@@ -207,6 +258,7 @@ struct PinMapView: UIViewRepresentable {
         context.coordinator.parent = self
         context.coordinator.applyBasemap(basemap, to: map)
         context.coordinator.syncAnnotations(map)
+        context.coordinator.syncSweep(map)
         if let frame = store.initialFrame {
             DispatchQueue.main.async { [store, controller] in
                 guard store.initialFrame != nil else { return }
@@ -223,6 +275,10 @@ struct PinMapView: UIViewRepresentable {
         private var lastVersion = -1
         private var lastHidden: Set<PinStatus> = []
         private var basemap: Basemap?
+        private var candidates: [String: CandidateAnnotation] = [:]
+        private var trailLine: MKPolyline?
+        private var trailCount = 0
+        private var lastSweepVersion = -1
 
         init(_ parent: PinMapView) { self.parent = parent }
 
@@ -271,8 +327,56 @@ struct PinMapView: UIViewRepresentable {
             if !add.isEmpty { map.addAnnotations(add) }
         }
 
+        /// Candidate rings and the walked trail.
+        func syncSweep(_ map: MKMapView) {
+            let sweep = parent.sweep
+            guard sweep.version != lastSweepVersion else { return }
+            lastSweepVersion = sweep.version
+
+            var keep = Set<String>()
+            var add: [CandidateAnnotation] = []
+            for c in sweep.candidates {
+                keep.insert(c.key)
+                if let a = candidates[c.key] {
+                    if a.on != c.on { a.on = c.on; (map.view(for: a) as? CandidateRingView)?.refresh() }
+                } else {
+                    let a = CandidateAnnotation(c)
+                    candidates[c.key] = a
+                    add.append(a)
+                }
+            }
+            let remove = candidates.filter { !keep.contains($0.key) }
+            for k in remove.keys { candidates[k] = nil }
+            if !remove.isEmpty { map.removeAnnotations(Array(remove.values)) }
+            if !add.isEmpty { map.addAnnotations(add) }
+
+            if sweep.trail.count != trailCount {
+                trailCount = sweep.trail.count
+                if let trailLine { map.removeOverlay(trailLine) }
+                trailLine = nil
+                if sweep.trail.count > 1 {
+                    let coords = sweep.trail.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lng) }
+                    let line = MKPolyline(coordinates: coords, count: coords.count)
+                    map.addOverlay(line, level: .aboveRoads)
+                    trailLine = line
+                }
+            }
+        }
+
+        func mapView(_ map: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
+            guard let line = overlay as? MKPolyline else { return MKOverlayRenderer(overlay: overlay) }
+            let r = MKPolylineRenderer(polyline: line)
+            r.strokeColor = UIColor(Theme.accent).withAlphaComponent(0.45)
+            r.lineWidth = 4
+            r.lineCap = .round
+            r.lineJoin = .round
+            return r
+        }
+
         func mapView(_ map: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
             switch annotation {
+            case is CandidateAnnotation:
+                map.dequeueReusableAnnotationView(withIdentifier: CandidateRingView.reuseID, for: annotation)
             case is PinAnnotation:
                 map.dequeueReusableAnnotationView(withIdentifier: PinDotView.reuseID, for: annotation)
             case is MKClusterAnnotation:
@@ -284,7 +388,9 @@ struct PinMapView: UIViewRepresentable {
 
         func mapView(_ map: MKMapView, didSelect annotation: MKAnnotation) {
             map.deselectAnnotation(annotation, animated: false)
-            if let a = annotation as? PinAnnotation {
+            if let a = annotation as? CandidateAnnotation {
+                parent.onTapCandidate(a.key)
+            } else if let a = annotation as? PinAnnotation {
                 parent.onTapPin(a.id)
             } else if let c = annotation as? MKClusterAnnotation {
                 map.showAnnotations(c.memberAnnotations, animated: true)

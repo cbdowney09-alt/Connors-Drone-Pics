@@ -1,14 +1,22 @@
 import SwiftUI
+import GoogleSignIn
 
 @main
 struct KnoxCanvasApp: App {
+    @State private var session: SessionStore
+
+    init() {
+        FirebaseBootstrap.configure()
+        _session = State(initialValue: SessionStore())
+    }
+
     var body: some Scene {
         WindowGroup {
-            ZStack {
-                Color(red: 0.059, green: 0.067, blue: 0.090).ignoresSafeArea()
-                Text("KnoxCanvas").font(.largeTitle.bold()).foregroundStyle(.white)
-            }
-            .preferredColorScheme(.dark)
+            RootView()
+                .environment(session)
+                .preferredColorScheme(.dark)
+                .tint(Theme.accent)
+                .onOpenURL { GIDSignIn.sharedInstance.handle($0) }
         }
     }
 }

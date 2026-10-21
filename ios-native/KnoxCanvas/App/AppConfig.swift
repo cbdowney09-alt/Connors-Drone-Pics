@@ -17,6 +17,11 @@ enum AppConfig {
     }
 
     static let geocodeWorker = URL(string: "https://broken-tree-befb.connorbdowney48.workers.dev")!
+    /// Who to contact about company approval or a paused account (also on the privacy policy).
+    static let supportEmail = "connorbdowney48@gmail.com"
+    /// Google Apps Script web app that emails the admin when a company requests access.
+    /// Empty = no email (requests still show in the Admin screen). See admin/request-email.gs.
+    static let requestWebhook = ""
     /// The web app; invite messages point new members here.
     static let webAppURL = "https://connorsdronepics.com/app.html"
     static let inviteDays = 7

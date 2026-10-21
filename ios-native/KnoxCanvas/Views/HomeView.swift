@@ -58,7 +58,7 @@ struct MapScreen: View {
     @AppStorage("knoxBasemap") private var basemapRaw = Basemap.street.rawValue
     @AppStorage("knoxColorBy") private var colorByRaw = ColorBy.status.rawValue
 
-    enum Panel: String, Identifiable { case shift, layers, account, sweep, team, metrics, route, export; var id: String { rawValue } }
+    enum Panel: String, Identifiable { case shift, layers, account, sweep, team, metrics, route, export, admin; var id: String { rawValue } }
 
     private var basemap: Basemap { Basemap(rawValue: basemapRaw) ?? .street }
     private var colorBy: ColorBy { ColorBy(rawValue: colorByRaw) ?? .status }
@@ -143,6 +143,8 @@ struct MapScreen: View {
                 .presentationDetents([.medium, .large])
             case .export:
                 ExportSheet(pins: store).presentationDetents([.large])
+            case .admin:
+                AdminSheet(uid: store.uid).presentationDetents([.large])
             case .team:
                 TeamSheet(companyId: store.companyId, uid: store.uid).presentationDetents([.large])
             case .metrics:
@@ -487,6 +489,10 @@ struct AccountSheet: View {
                     Text("OWNER TOOLS").font(.system(size: 13, weight: .bold)).foregroundStyle(Theme.muted).padding(.top, 8)
                     menuItem("Team and company settings", "person.2.fill") { open(.team) }
                     menuItem("Team metrics", "chart.bar.fill") { open(.metrics) }
+                }
+                if session.isAdmin {
+                    Text("KNOXCANVAS").font(.system(size: 13, weight: .bold)).foregroundStyle(Theme.muted).padding(.top, 8)
+                    menuItem("Admin: companies", "building.2.fill") { open(.admin) }
                 }
                 Text("DATA").font(.system(size: 13, weight: .bold)).foregroundStyle(Theme.muted).padding(.top, 8)
                 menuItem("Export pins (CSV)", "square.and.arrow.up") { open(.export) }

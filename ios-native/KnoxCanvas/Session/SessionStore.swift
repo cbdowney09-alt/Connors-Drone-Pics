@@ -11,6 +11,8 @@ final class SessionStore {
         case loadError(String)
         case signedOut
         case setup
+        /// The company is pending approval, paused or declined.
+        case locked(Company.Status)
         case ready
     }
 
@@ -22,9 +24,12 @@ final class SessionStore {
     /// Name typed on the register form, used to prefill setup.
     var pendingName = ""
     var toast: String?
+    /// Has an `admins/{uid}` doc: sees the Admin screen (approve, pause, resume companies).
+    var isAdmin = false
 
     private let db = Firestore.firestore()
     private var authHandle: AuthStateDidChangeListenerHandle?
+    private var companyListener: ListenerRegistration?
 
     func start() {
         guard authHandle == nil else { return }
@@ -51,7 +56,9 @@ final class SessionStore {
             } catch {
                 company = Company([:], fallbackName: p.companyName.isEmpty ? "Your company" : p.companyName)
             }
-            phase = .ready
+            phase = company?.status == .active ? .ready : .locked(company?.status ?? .pending)
+            watchCompany(cid)
+            Task { await checkAdmin(user.uid) }
         } catch {
             switch firestoreCode(error) {
             case .permissionDenied:
@@ -64,7 +71,34 @@ final class SessionStore {
         }
     }
 
+    /// Approval, pause and resume take effect right away: an approved request opens the map,
+    /// a paused company drops back to the locked screen.
+    private func watchCompany(_ cid: String) {
+        companyListener?.remove()
+        companyListener = db.collection("companies").document(cid).addSnapshotListener { [weak self] snap, _ in
+            guard let self, let data = snap?.data(), cid == companyId else { return }
+            let fallback = company?.name ?? "Your company"
+            company = Company(data, fallbackName: fallback)
+            let status = company?.status ?? .active
+            switch (phase, status) {
+            case (.ready, .active): break
+            case (_, .active): phase = .ready
+            case (.locked(let s), _) where s == status: break
+            case (.ready, _), (.locked, _): phase = .locked(status)
+            default: break
+            }
+        }
+    }
+
+    private func checkAdmin(_ uid: String) async {
+        let snap = try? await db.collection("admins").document(uid).getDocument()
+        isAdmin = snap?.exists == true
+    }
+
     private func leave() {
+        companyListener?.remove()
+        companyListener = nil
+        isAdmin = false
         profile = nil
         companyId = nil
         company = nil
@@ -161,12 +195,16 @@ final class SessionStore {
 
     // MARK: - Setup (create or join a company)
 
-    func createCompany(name: String, companyName: String) async throws {
+    /// Requests a new company. It starts `pending`; the admin approves it in the Admin screen
+    /// (and gets an email if `AppConfig.requestWebhook` is set).
+    func createCompany(name: String, companyName: String, phone: String) async throws {
         guard let user else { return }
         let companyRef = db.collection("companies").document()
         let batch = db.batch()
         batch.setData(["name": companyName, "ownerId": user.uid, "roofCutoff": AppConfig.defaultRoofCutoff,
-                       "sheetsUrl": "", "createdAt": FieldValue.serverTimestamp()], forDocument: companyRef)
+                       "sheetsUrl": "", "createdAt": FieldValue.serverTimestamp(),
+                       "status": Company.Status.pending.rawValue, "ownerName": name, "ownerEmail": user.email ?? "",
+                       "phone": phone, "requestedAt": FieldValue.serverTimestamp()], forDocument: companyRef)
         batch.setData(["name": name, "email": user.email ?? "", "role": "owner", "companyId": companyRef.documentID,
                        "companyName": companyName, "createdAt": FieldValue.serverTimestamp()],
                       forDocument: db.collection("users").document(user.uid))
@@ -174,11 +212,20 @@ final class SessionStore {
         catch {
             throw Friendly(firestoreCode(error) == .permissionDenied
                 ? "Permission denied \u{2014} the Firestore security rules need to be published."
-                : "Couldn\u{2019}t create the company (\(error.localizedDescription)).")
+                : "Couldn\u{2019}t send the request (\(error.localizedDescription)).")
         }
         pendingName = ""
+        RequestNotifier.send(company: companyName, companyId: companyRef.documentID, owner: name,
+                             email: user.email ?? "", phone: phone)
         await loadSession(user)
-        toast = "Welcome! \(companyName) is set up."
+    }
+
+    /// After a declined request: clears the profile so the owner can request again or join a team.
+    func startOver() async throws {
+        guard let user else { return }
+        do { try await db.collection("users").document(user.uid).delete() }
+        catch { throw Friendly("Couldn\u{2019}t start over (\(error.localizedDescription))") }
+        await loadSession(user)
     }
 
     func joinCompany(name: String, code: String) async throws {

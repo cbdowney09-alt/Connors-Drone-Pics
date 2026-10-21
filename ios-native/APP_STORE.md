@@ -11,14 +11,12 @@ Everything Phase 7 needs that only you can do: your iPhone, your Apple account a
    `project.yml`, and register a new iOS app with that ID in Firebase (Project settings → Add app → iOS).
    Then replace `Resources/GoogleService-Info.plist` and update `AppConfig.googleIOSClientID` and the
    reversed client ID URL scheme in `Info.plist`.
-3. **Firestore rules** must allow:
-   - `users/{uid}.activeClockIn` (the user writing their own doc)
-   - the pin field `source`
-   - the shift fields `trail`, `trailMeters` and `gpsHangers`
-   - owners deleting `users/{uid}` docs in their company (removing members)
-   - users deleting their own `users/{uid}` doc, and owners deleting their `companies/{id}` doc (delete account)
-
-   Without the `activeClockIn` rule, clock-in silently stays on the phone only.
+3. **Firestore rules:** publish `firestore.rules` from this repo (Firebase console → Firestore Database
+   → Rules → paste → Publish). They cover everything both apps do, including company approval.
+   54 emulator tests in `rules-test/` check them.
+4. **Make yourself admin:** in the Firebase console, go to Authentication and copy your account's User UID. Then go to
+   Firestore → Start collection `admins` → Document ID = that UID → add any field (for example `name: Connor`).
+   Reopen the app, and Account shows **Admin: companies**.
 
 ## 2. Real-iPhone test pass
 
@@ -76,13 +74,16 @@ Everything else: not collected. There's no analytics, no ads and no tracking.
 
 **App Review notes** (they need a working login):
 
-> KnoxCanvas is a work tool for door-to-door sales teams. Demo account: <email> / <password>,
-> owner of a demo company with sample pins. Background location is used only while the user is
+> KnoxCanvas is a work tool for door-to-door sales teams. Companies sign a service agreement with
+> us directly and are billed outside the app (enterprise service, guideline 3.1.3(c)); new companies
+> are approved by us before their team can use the map. Demo account: <email> / <password>,
+> owner of an approved demo company with sample pins. Background location is used only while the user is
 > clocked in for a shift (Shift tab → Clock in). It records the walking route, so the app can list
 > the houses the canvasser walked past, and attaches the route to the shift record. It stops at clock-out.
 > Account deletion: Account tab → Delete account.
 
-Create that demo account and company on the website, with a few dozen pins, before submitting.
+Create that demo account and company on the website, approve it in your Admin screen, and add a few dozen
+pins before submitting.
 
 **Screenshots:** you need 6.9" iPhone screenshots (1320 × 2868). Take them in the iPhone 17 Pro Max / 18 Pro
 Max simulator while signed in to the demo company, so no real customer addresses appear. Good shots: map with pins, the pin

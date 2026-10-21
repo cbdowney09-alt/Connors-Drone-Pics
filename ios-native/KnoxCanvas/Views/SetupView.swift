@@ -6,6 +6,7 @@ struct SetupView: View {
     @State private var name = ""
     @State private var companyName = ""
     @State private var code = ""
+    @State private var phone = ""
     @State private var error = ""
     @State private var busy = false
 
@@ -37,8 +38,9 @@ struct SetupView: View {
                         KnoxButton(title: "Join team", busyTitle: "Joining…", busy: busy, action: join)
                     } else {
                         KnoxField(placeholder: "Company name", text: $companyName, capitalization: .words)
-                        hint("You'll be the owner. You can invite your canvassers from the menu.")
-                        KnoxButton(title: "Create company", busyTitle: "Creating…", busy: busy, action: create)
+                        KnoxField(placeholder: "Your phone number", text: $phone, content: .telephoneNumber, keyboard: .phonePad)
+                        hint("New companies are approved by KnoxCanvas. We\u{2019}ll call or text you to get set up. Once you\u{2019}re approved, you can invite your canvassers.")
+                        KnoxButton(title: "Request access", busyTitle: "Sending…", busy: busy, action: create)
                     }
 
                     MessageText(error: error, info: "")
@@ -63,8 +65,10 @@ struct SetupView: View {
 
     private func create() {
         let c = companyName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let p = phone.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty, !c.isEmpty else { error = "Enter your name and your company name."; return }
-        run { try await session.createCompany(name: trimmedName, companyName: c) }
+        guard p.filter(\.isNumber).count >= 10 else { error = "Enter a phone number so we can reach you."; return }
+        run { try await session.createCompany(name: trimmedName, companyName: c, phone: p) }
     }
 
     private func join() {

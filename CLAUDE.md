@@ -27,7 +27,10 @@ it had already run. The iOS app loads the live URL, so it only picks up changes 
 - Data: Firebase project `knoxcanvas-a7bfe`. Firestore uses an offline persistent cache; auth is
   email/password plus Google (in the iOS app, Google sign-in runs natively; see GoogleSignIn.swift).
   - `users/{uid}` → `{ name, email, role: owner|employee, companyId, companyName }`
-  - `companies/{id}` → `{ name, ownerId, roofCutoff, sheetsUrl }`
+  - `companies/{id}` → `{ name, ownerId, roofCutoff, sheetsUrl, status?, ownerName?, ownerEmail?, phone?, requestedAt?, statusAt?, statusBy? }`
+    - `status`: `pending` (new request) · `active` · `paused` · `declined`. **Missing means active**
+      (companies made before approvals). Only an admin can change it.
+  - `admins/{uid}` → exists = KnoxCanvas admin (approves, pauses, resumes companies). Added by hand in the console.
   - `companies/{id}/pins/{lat6,lng6}` → `{ lat, lng, addr, status, note, yearBuilt, ts, createdBy, statusBy, statusAt, hangerBy, hangerAt, source? }`
   - `companies/{id}/shifts/{auto}` → `{ clockIn, clockOut, durationMs, hangers, hangersPerHour, userId, userName, trail?, trailMeters?, gpsHangers? }`
   - `companies/{id}/settings/neighborhoodYears` → `{ zones: [...] }`
@@ -137,13 +140,24 @@ yet**. Expect to fix small Swift errors on the first build.
   - `window.__knoxGeoDeliver(coords)` / `__knoxGeoError(code,msg)`
 - `IS_NATIVE` in `app.html` is true when the `knox` handler exists.
 
+## Company approval (added Oct 2026)
+
+Anyone can download the app and make a login, but **new companies are requests**:
+- Setup's owner path saves the company with `status: 'pending'` and the owner's name, email and phone, then
+  shows a "Request sent" screen. `REQUEST_WEBHOOK` (`admin/request-email.gs`, a Google Apps Script) emails the admin.
+- The admin approves, declines, pauses or resumes companies in the iPhone app (Account → Admin: companies).
+  Payment happens outside the app: no prices or payment links in the app (App Store guideline 3.1.3(c)).
+- Both apps watch the company doc. Approval opens the map right away, and a pause drops the team to the locked screen.
+  Paused data stays. The rules block pins, shifts and settings unless the company is active.
+
 ## Known open issues
 
 - Google login on the web (popup vs. redirect). The iOS app uses the native flow in `GoogleSignIn.swift` instead.
 - Zip boundary overlays sometimes don't load.
 - The clock-in state lives in `localStorage` only, so it's lost if the device storage is cleared. It should move to Firestore.
-- Firestore security rules aren't in this repo. Make sure they allow the new pin field `source`
-  and the shift fields `trail`, `trailMeters` and `gpsHangers`.
+- Firestore rules live in `firestore.rules` (publish them in the Firebase console). After editing,
+  run the emulator tests: `cd rules-test && npm install && npm test` (needs Java 11+). Never use a bare
+  `{sub=**}` under `companies/{cid}`: it also matches the company doc and lets members edit `status`.
 
 ## Native rewrite
 

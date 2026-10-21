@@ -27,6 +27,7 @@
 		667AFCD27B117AD2BB1F2473 /* SweepViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89F24E5135B8072E265CE868 /* SweepViews.swift */; };
 		67706CD752DD5BE279F52547 /* RequestNotifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D77ABBBE900040ADAAF29C7 /* RequestNotifier.swift */; };
 		6955243A81B119C797943B5E /* SessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47EA67B56C23BE5902369F16 /* SessionStore.swift */; };
+		6CA2A983DE37E87A85A5FD77 /* AddressTiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = 812EBBEDAEA19186CC6A654B /* AddressTiles.swift */; };
 		7D983EDCEB43C5C9ED0B333E /* Geocoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E28D78B76A4EC20A4777D6D /* Geocoder.swift */; };
 		844F0449788F947A3F65F749 /* PinMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 489A01DBADBA6B07937A6CCF /* PinMapView.swift */; };
 		8E22A915FAE86E1FEB423B1D /* LockedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43B93F41B83D9A3D45F5E469 /* LockedView.swift */; };
@@ -67,6 +68,7 @@
 		694A35896F3EE3E4A59A5873 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 		7CC3276B1AE1CEAF5A690036 /* AuthView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthView.swift; sourceTree = "<group>"; };
 		7FA4FA64718E5507789052AD /* AppConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfig.swift; sourceTree = "<group>"; };
+		812EBBEDAEA19186CC6A654B /* AddressTiles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddressTiles.swift; sourceTree = "<group>"; };
 		82BCEBD41AAFCD83446BC04F /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		8340C869CB1819B9E281E12F /* MetricsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetricsSheet.swift; sourceTree = "<group>"; };
 		89F24E5135B8072E265CE868 /* SweepViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SweepViews.swift; sourceTree = "<group>"; };
@@ -124,6 +126,7 @@
 			isa = PBXGroup;
 			children = (
 				D3741DA6E61790F75020848F /* AddressSearch.swift */,
+				812EBBEDAEA19186CC6A654B /* AddressTiles.swift */,
 				0E28D78B76A4EC20A4777D6D /* Geocoder.swift */,
 				399B958BCA0676701DF70323 /* People.swift */,
 				D038A49430266F730D519377 /* Pin.swift */,
@@ -351,6 +354,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				E471695D221B719892DD188D /* AddressSearch.swift in Sources */,
+				6CA2A983DE37E87A85A5FD77 /* AddressTiles.swift in Sources */,
 				3644C8B6BFD9FB390896574B /* AdminSheet.swift in Sources */,
 				4DAF584694B210BDC0B644A1 /* AdminStore.swift in Sources */,
 				AA5A0C9565F3B6A836849DE2 /* AppConfig.swift in Sources */,

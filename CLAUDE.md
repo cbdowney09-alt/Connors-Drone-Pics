@@ -147,8 +147,20 @@ yet**. Expect to fix small Swift errors on the first build.
 
 ## Native rewrite
 
-A full SwiftUI rewrite is planned in `NATIVE_PLAN.md` (phases, rules and a kickoff prompt). It
-goes in `ios-native/`, and `ios/` stays as the fallback until the rewrite reaches parity.
+A full SwiftUI rewrite following `NATIVE_PLAN.md` lives in `ios-native/`. Phases 0–6 are done
+(feature parity with `app.html`). Phase 7 (real-iPhone testing, App Store, TestFlight) is
+described in `ios-native/APP_STORE.md` and needs the owner's device and Apple account. `ios/` stays
+as the fallback until that passes.
+
+- Project file is generated: edit `ios-native/project.yml`, then run `xcodegen generate`. Never hand-edit the pbxproj.
+- Build: `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project ios-native/KnoxCanvas.xcodeproj -scheme KnoxCanvas -destination 'platform=iOS Simulator,name=<sim>' build`
+- Code by area: `Session/` (auth, setup), `Pins/` (store, map, sheet), `Shifts/`, `Sweep/` (GPS street
+  sweep, Overpass), `Owner/` (team, invites, settings, metrics), `MapTools/` (route, zones, roofing, zips, pin CSV).
+- Differences from the web:
+  - The active shift is also stored in `users/{uid}.activeClockIn`.
+  - Drawn zone polygons are saved as `[{lat,lng}]`. The web's `[[lat,lng]]` form is rejected by Firestore, and the web's `pointInPolygon` doesn't read the object form yet.
+  - A Google geocode refusal is treated as a failure, not "no houses".
+- Privacy policy for the App Store: `docs/privacy.html` (fill in `CONTACT_EMAIL` before deploying).
 
 ## Next steps
 

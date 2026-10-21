@@ -55,7 +55,8 @@ final class TeamStore {
 
     /// Deleting the user doc is all the web does; they land on setup next time they open the app.
     func remove(_ m: Member) async throws {
-        do { try await db.collection("users").document(m.uid).delete() }
+        do { try await Self.serverWrite { try await self.db.collection("users").document(m.uid).delete() } }
+        catch let e as Friendly { throw e }
         catch { throw Friendly("Couldn\u{2019}t remove (\(Self.describe(error)))") }
         members.removeAll { $0.uid == m.uid }
     }
@@ -76,12 +77,14 @@ final class TeamStore {
     func createInvite(companyName: String) async throws -> (code: String, expires: Date) {
         let code = Self.makeInviteCode()
         let expires = Date().addingTimeInterval(TimeInterval(AppConfig.inviteDays) * 86_400)
+        let data: [String: Any] = [
+            "companyId": companyId, "companyName": companyName, "createdBy": uid,
+            "createdAt": FieldValue.serverTimestamp(), "expiresAt": Timestamp(date: expires),
+        ]
         do {
-            try await db.collection("invites").document(code).setData([
-                "companyId": companyId, "companyName": companyName, "createdBy": uid,
-                "createdAt": FieldValue.serverTimestamp(), "expiresAt": Timestamp(date: expires),
-            ])
-        } catch { throw Friendly("Couldn\u{2019}t create invite (\(Self.describe(error)))") }
+            try await Self.serverWrite { try await self.db.collection("invites").document(code).setData(data) }
+        } catch let e as Friendly { throw e }
+        catch { throw Friendly("Couldn\u{2019}t create invite (\(Self.describe(error)))") }
         return (code, expires)
     }
 
@@ -102,7 +105,8 @@ final class TeamStore {
         if !sheetsUrl.isEmpty && !sheetsUrl.hasPrefix("https://") {
             throw Friendly("The Sheets URL must start with https://")
         }
-        do { try await companyDoc.updateData(["name": name, "roofCutoff": cutoff, "sheetsUrl": sheetsUrl]) }
+        do { try await Self.serverWrite { try await self.companyDoc.updateData(["name": name, "roofCutoff": cutoff, "sheetsUrl": sheetsUrl]) } }
+        catch let e as Friendly { throw e }
         catch { throw Friendly("Couldn\u{2019}t save (\(Self.describe(error)))") }
         return (name, cutoff, sheetsUrl)
     }
@@ -118,6 +122,20 @@ final class TeamStore {
             shifts = snap.documents.map { Shift(id: $0.documentID, data: $0.data()) }.sorted { $0.clockIn > $1.clockIn }
             loadError = nil
         } catch { loadError = "Couldn\u{2019}t load metrics (\(Self.describe(error)))" }
+    }
+
+    /// Firestore's awaited writes only return once the server confirms, so with no signal
+    /// they wait forever. Give up waiting after 12 s; the write stays queued on the device.
+    static func serverWrite(_ write: @escaping @Sendable () async throws -> Void) async throws {
+        try await withThrowingTaskGroup(of: Bool.self) { group in
+            group.addTask { try await write(); return true }
+            group.addTask { try await Task.sleep(for: .seconds(12)); return false }
+            let finished = try await group.next() ?? false
+            group.cancelAll()
+            if !finished {
+                throw Friendly("No connection. This is saved on the phone and will finish when you\u{2019}re back online.")
+            }
+        }
     }
 
     static func describe(_ error: Error) -> String {

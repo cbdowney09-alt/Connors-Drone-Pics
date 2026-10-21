@@ -91,9 +91,12 @@ final class SessionStore {
         if let last = user.metadata.lastSignInDate, Date().timeIntervalSince(last) > 4 * 60 {
             throw Friendly("For security, sign out, sign back in, and then delete your account.")
         }
+        // Deleting needs the server: queued deletes could land later and leave half an account.
+        do { _ = try await db.collection("users").document(uid).getDocument(source: .server) }
+        catch { throw Friendly("You need a connection to delete your account.") }
         do {
             if profile?.isOwner == true, let cid = companyId {
-                let members = try await TeamStore.fetchMembers(companyId: cid)
+                let members = try await db.collection("users").whereField("companyId", isEqualTo: cid).getDocuments(source: .server).documents
                 if members.count > 1 {
                     throw Friendly("Remove your team members first (Account \u{2192} Team and company settings), then delete your account.")
                 }

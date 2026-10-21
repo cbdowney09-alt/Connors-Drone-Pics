@@ -5,6 +5,7 @@ struct ShiftSheet: View {
     let shifts: ShiftStore
     @State private var confirmClockOut = false
     @State private var exportURL: URL?
+    @AppStorage("knoxDoorRadius") private var doorRadius = 20.0
 
     private static let green = PinStatus.interest.color
     private static let red = PinStatus.no.color
@@ -24,6 +25,7 @@ struct ShiftSheet: View {
                     }
                 }
                 clockCard
+                sweepSetting
                 Text("SHIFT HISTORY").font(.system(size: 13, weight: .bold)).foregroundStyle(Theme.muted)
                 if shifts.shifts.isEmpty {
                     Text("No shifts yet").foregroundStyle(Theme.muted).frame(maxWidth: .infinity).padding(.vertical, 24)
@@ -41,6 +43,33 @@ struct ShiftSheet: View {
                 UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                 shifts.clockOut()
             }
+        }
+    }
+
+    /// How close counts as "walked up to the house" for the street sweep.
+    private var sweepSetting: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("HOUSE DETECTION").font(.system(size: 13, weight: .bold)).foregroundStyle(Theme.muted)
+            Text("While you\u{2019}re clocked in, a house lights up when you get this close to it:")
+                .font(.system(size: 14)).foregroundStyle(Theme.muted)
+            HStack(spacing: 8) {
+                ForEach(SWEEP.doorRadiusChoices, id: \.self) { r in
+                    let on = doorRadius == r
+                    Button { doorRadius = r } label: {
+                        Text("\(Int(r)) m").font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(on ? .white : Theme.muted)
+                            .frame(maxWidth: .infinity, minHeight: 46)
+                            .background(on ? Theme.accent : Theme.card, in: RoundedRectangle(cornerRadius: 10))
+                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(on ? .clear : Theme.border))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            Text(doorRadius <= 15 ? "Only when you\u{2019}re right at the house." :
+                 doorRadius <= 20 ? "When you walk up to the house (recommended)." :
+                 doorRadius <= 30 ? "Also catches houses you pass on the sidewalk." :
+                 "Every house along the street, even set back from the road.")
+                .font(.system(size: 13)).foregroundStyle(Theme.muted)
         }
     }
 

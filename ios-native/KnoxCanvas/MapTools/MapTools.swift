@@ -102,7 +102,7 @@ final class MapTools {
             return true
         }
         guard !stops.isEmpty else {
-            return fallback ? "Map data unavailable and no saved pins here" : "No houses found in this area"
+            return fallback ? "Map data unavailable and no unvisited saved pins here" : "No houses found in this area"
         }
         let from = Stop(coordinate: start.coordinate, addr: start.addr)
         route = RouteFinder.nearestNeighbor(from: from.coordinate, stops)
@@ -182,18 +182,31 @@ final class MapTools {
 
 /// Overpass lookups and the nearest-neighbor ordering for the route optimizer.
 enum RouteFinder {
-    /// Houses with an address inside the zone (or within 800 m of the start). Nil if every
-    /// Overpass endpoint failed, so the caller can fall back to saved pins.
+    /// Houses with an address inside the zone (or within 800 m of the start): our address
+    /// tiles first, then Overpass. Nil if neither answered, so the caller can fall back to
+    /// saved pins.
     static func houses(around c: CLLocationCoordinate2D, in zone: [CLLocationCoordinate2D]?) async -> [MapTools.Stop]? {
-        let area: String
-        if let zone, zone.count >= 3 {
-            let b = MapTools.bounds(zone)
-            area = "(\(b.minLat),\(b.minLng),\(b.maxLat),\(b.maxLng))"
+        let hasZone = (zone?.count ?? 0) >= 3
+        let b: (minLat: Double, minLng: Double, maxLat: Double, maxLng: Double)
+        if hasZone, let zone {
+            b = MapTools.bounds(zone)
         } else {
-            area = "(around:800,\(c.latitude),\(c.longitude))"
+            let dLat = 800 / 111_000.0, dLng = 800 / (111_000.0 * cos(c.latitude * .pi / 180))
+            b = (c.latitude - dLat, c.longitude - dLng, c.latitude + dLat, c.longitude + dLng)
         }
+        if let tiles = await AddressTiles.shared.addresses(minLat: b.minLat, minLng: b.minLng, maxLat: b.maxLat, maxLng: b.maxLng) {
+            return tiles.compactMap { h in
+                let p = CLLocationCoordinate2D(latitude: h.lat, longitude: h.lng)
+                if hasZone, let zone, !Geo.pointInPolygon(p, zone) { return nil }
+                if !hasZone, Geo.distance(c, p) > 800 { return nil }
+                return MapTools.Stop(coordinate: p, addr: h.addr)
+            }
+        }
+        let area = hasZone
+            ? "(\(b.minLat),\(b.minLng),\(b.maxLat),\(b.maxLng))"
+            : "(around:800,\(c.latitude),\(c.longitude))"
         let q = "[out:json][timeout:20];(node[\"addr:housenumber\"]\(area);way[\"addr:housenumber\"]\(area););out center;"
-        guard let els = await HouseFinder.overpassElements(q, timeout: 12) else { return nil }
+        guard let els = await HouseFinder.overpassRace(q, deadline: 12) else { return nil }
         return els.compactMap { el in
             guard let la = el.lat, let lo = el.lon else { return nil }
             let p = CLLocationCoordinate2D(latitude: la, longitude: lo)

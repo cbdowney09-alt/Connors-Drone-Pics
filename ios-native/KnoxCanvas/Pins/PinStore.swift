@@ -14,6 +14,8 @@ final class PinStore {
     private(set) var version = 0
     private(set) var sync: Sync = .ok
     private(set) var zones: [YearZone] = []
+    /// Bumped when zones change so the map redraws roofing-mode polygons.
+    private(set) var zonesVersion = 0
     /// The most recent pins, set once after the first snapshot so the map can frame them.
     var initialFrame: [CLLocationCoordinate2D]?
     var hidden: Set<PinStatus> = []
@@ -228,6 +230,7 @@ final class PinStore {
         do {
             let d = try await zonesDoc.getDocument()
             zones = ((d.data()?["zones"] as? [[String: Any]]) ?? []).map(YearZone.init)
+            zonesVersion &+= 1
         } catch { print("zones:", error) }
     }
 
@@ -244,10 +247,31 @@ final class PinStore {
         version &+= 1
         zones.removeAll { $0.polygon == nil && $0.center.map { Geo.distance(p.coordinate, $0) <= 200 } ?? false }
         zones.append(YearZone(["lat": p.lat, "lng": p.lng, "year": year, "radius": radius]))
+        saveZones()
+        return count
+    }
+
+    /// A drawn neighborhood: every pin inside gets the year. Points are stored as
+    /// `{lat, lng}` maps because Firestore rejects nested arrays (the web's `[[lat, lng]]`
+    /// form fails to save). Returns the number of pins updated.
+    func addPolygonZone(name: String, year: String, polygon: [CLLocationCoordinate2D]) -> Int {
+        var count = 0
+        for (pid, p) in pins where Geo.pointInPolygon(p.coordinate, polygon) {
+            setYear(pid, year)
+            count += 1
+        }
+        version &+= 1
+        zones.append(YearZone(["name": name, "year": year,
+                               "polygon": polygon.map { ["lat": $0.latitude, "lng": $0.longitude] }]))
+        saveZones()
+        return count
+    }
+
+    private func saveZones() {
+        zonesVersion &+= 1
         zonesDoc.setData(["zones": zones.map(\.raw)]) { [weak self] error in
             if let error { self?.toast?("Couldn\u{2019}t save zones (\(error.localizedDescription))") }
         }
-        return count
     }
 
     // MARK: - Google Sheets

@@ -45,9 +45,12 @@ struct MapScreen: View {
     @State private var selected: SelectedPin?
     @State private var panel: Panel?
     @State private var toastText: String?
+    @State private var tools = MapTools()
+    @State private var zoneName = ""
+    @State private var zoneYear = ""
     @AppStorage("knoxBasemap") private var basemapRaw = Basemap.street.rawValue
 
-    enum Panel: String, Identifiable { case shift, layers, account, sweep, team, metrics; var id: String { rawValue } }
+    enum Panel: String, Identifiable { case shift, layers, account, sweep, team, metrics, route, export; var id: String { rawValue } }
 
     private var basemap: Basemap { Basemap(rawValue: basemapRaw) ?? .street }
 
@@ -56,6 +59,7 @@ struct MapScreen: View {
             PinMapView(store: store, controller: controller, basemap: basemap,
                        version: store.version, hidden: store.hidden, hasFrame: store.initialFrame != nil,
                        sweep: shifts.sweep, sweepVersion: shifts.sweep.version,
+                       tools: tools, toolsKey: toolsKey, roofCutoff: roofCutoff,
                        onTapPin: { open($0) }, onTapCandidate: { shifts.sweep.toggle($0) }, onTapMap: tapMap)
                 .ignoresSafeArea()
 
@@ -63,9 +67,16 @@ struct MapScreen: View {
                 .frame(height: 140).ignoresSafeArea().allowsHitTesting(false)
 
             VStack(spacing: 8) {
-                searchCard
-                if searchFocused && !search.results.isEmpty { suggestions } else { chips; statusRow }
+                if tools.drawing != .off {
+                    DrawToolbar(tools: tools, name: $zoneName, year: $zoneYear, cancel: tools.stopDrawing, finish: finishDrawing)
+                } else {
+                    searchCard
+                    if searchFocused && !search.results.isEmpty { suggestions } else { chips; statusRow }
+                }
                 Spacer(minLength: 0)
+                if tools.roofing && shifts.sweep.candidates.isEmpty {
+                    RoofBanner(cutoff: roofCutoff).padding(.bottom, 4)
+                }
                 if !shifts.sweep.candidates.isEmpty {
                     SweepBanner(sweep: shifts.sweep) { panel = .sweep }
                         .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -76,7 +87,7 @@ struct MapScreen: View {
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                         .padding(.bottom, 10)
                 }
-                TabBar(clockInTime: shifts.clockInTime, select: tab)
+                TabBar(clockInTime: shifts.clockInTime, drawing: tools.drawing == .zone, select: tab)
             }
         }
         .animation(.easeInOut(duration: 0.2), value: toastText)
@@ -100,9 +111,25 @@ struct MapScreen: View {
             case .sweep:
                 SweepReviewSheet(sweep: shifts.sweep).presentationDetents([.medium, .large])
             case .layers:
-                LayersSheet(basemap: $basemapRaw).presentationDetents([.height(250)])
+                LayersSheet(basemap: $basemapRaw, tools: tools, cutoff: roofCutoff, zipAdded: { rect in
+                    panel = nil
+                    controller.show(rect)
+                }, toast: showToast)
+                .presentationDetents([.medium, .large])
             case .account:
                 AccountSheet(clockedIn: shifts.clockedIn) { panel = $0 }.presentationDetents([.medium, .large])
+            case .route:
+                RouteSheet(tools: tools, pins: store, drawZone: {
+                    panel = nil
+                    startDrawing(forRoute: true)
+                }, viewOnMap: {
+                    panel = nil
+                    let pts = (tools.routeFrom.map { [$0.coordinate] } ?? []) + tools.route.map(\.coordinate)
+                    controller.frame(pts, animated: true)
+                }, toast: showToast)
+                .presentationDetents([.medium, .large])
+            case .export:
+                ExportSheet(pins: store).presentationDetents([.large])
             case .team:
                 TeamSheet(companyId: store.companyId, uid: store.uid).presentationDetents([.large])
             case .metrics:
@@ -241,12 +268,52 @@ struct MapScreen: View {
 
     // MARK: Actions
 
+    private var roofCutoff: Int { session.company?.roofCutoff ?? AppConfig.defaultRoofCutoff }
+
+    /// Read here so SwiftUI updates the map when any tool layer changes.
+    private var toolsKey: String {
+        "\(tools.drawVersion)-\(tools.routeVersion)-\(tools.zipVersion)-\(tools.roofing)-\(store.zonesVersion)-\(roofCutoff)"
+    }
+
+    private func startDrawing(forRoute: Bool) {
+        selected = nil
+        searchFocused = false
+        zoneName = ""
+        zoneYear = ""
+        tools.startDrawing(forRoute: forRoute)
+    }
+
+    private func finishDrawing() {
+        let poly = tools.drawn
+        guard poly.count >= 3 else { showToast("Tap at least 3 points"); return }
+        if tools.drawing == .route {
+            tools.setRouteZone(poly, pins: store)
+            tools.stopDrawing()
+            panel = .route
+            showToast("Route zone set")
+            return
+        }
+        let year = zoneYear.trimmingCharacters(in: .whitespaces)
+        guard !year.isEmpty else { showToast("Enter the year built first"); return }
+        let trimmed = zoneName.trimmingCharacters(in: .whitespaces)
+        let name = trimmed.isEmpty ? "Zone \(store.zones.count + 1)" : trimmed
+        let count = store.addPolygonZone(name: name, year: year, polygon: poly)
+        tools.stopDrawing()
+        showToast("\u{201C}\(name)\u{201D} saved \u{00B7} \(count) pins updated")
+    }
+
     private func tapMap(_ c: CLLocationCoordinate2D) {
         if searchFocused { searchFocused = false; return }
+        if tools.drawing != .off { tools.addPoint(c); return }
         open(store.createPin(at: c))
     }
 
     private func open(_ id: String) {
+        // While outlining, tapping a pin uses it as a corner.
+        if tools.drawing != .off {
+            if let p = store.pins[id] { tools.addPoint(p.coordinate) }
+            return
+        }
         searchFocused = false
         selected = SelectedPin(id: id)
     }
@@ -254,8 +321,8 @@ struct MapScreen: View {
     private func tab(_ t: TabBar.Tab) {
         switch t {
         case .shift: panel = .shift
-        case .route: showToast("Route optimizer is coming soon")
-        case .zone: showToast("Zone drawing is coming soon")
+        case .route: panel = .route
+        case .zone: if tools.drawing == .off { startDrawing(forRoute: false) } else { tools.stopDrawing() }
         case .layers: panel = .layers
         case .account: panel = .account
         }
@@ -330,6 +397,7 @@ private struct StatusPill: View {
 struct TabBar: View {
     enum Tab: CaseIterable { case shift, route, zone, layers, account }
     let clockInTime: Int64?
+    var drawing = false
     let select: (Tab) -> Void
 
     var body: some View {
@@ -340,7 +408,7 @@ struct TabBar: View {
                 item(.shift, label, "timer", active: clockInTime != nil)
             }
             item(.route, "Route", "point.topleft.down.to.point.bottomright.curvepath")
-            item(.zone, "Zone", "pentagon")
+            item(.zone, "Zone", "pentagon", active: drawing)
             item(.layers, "Layers", "square.3.layers.3d")
             item(.account, "Account", "person.crop.circle")
         }
@@ -362,39 +430,6 @@ struct TabBar: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)
-    }
-}
-
-struct LayersSheet: View {
-    @Binding var basemap: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Map layers").font(.title2.bold()).foregroundStyle(Theme.text)
-            Text("MAP STYLE").font(.system(size: 13, weight: .bold)).foregroundStyle(Theme.muted)
-            HStack(spacing: 8) {
-                seg("Street", Basemap.street)
-                seg("Satellite", Basemap.sat)
-            }
-            Text("Roofing target mode and zip code boundaries are coming soon.")
-                .font(.system(size: 14)).foregroundStyle(Theme.muted)
-            Spacer(minLength: 0)
-        }
-        .padding(20)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(Theme.bg)
-    }
-
-    private func seg(_ title: String, _ b: Basemap) -> some View {
-        let on = basemap == b.rawValue
-        return Button { basemap = b.rawValue } label: {
-            Text(title).font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(on ? .white : Theme.muted)
-                .frame(maxWidth: .infinity, minHeight: 48)
-                .background(on ? Theme.accent : Theme.card, in: RoundedRectangle(cornerRadius: Theme.radius))
-                .overlay(RoundedRectangle(cornerRadius: Theme.radius).stroke(on ? .clear : Theme.border))
-        }
-        .buttonStyle(.plain)
     }
 }
 
@@ -420,6 +455,8 @@ struct AccountSheet: View {
                     menuItem("Team and company settings", "person.2.fill") { open(.team) }
                     menuItem("Team metrics", "chart.bar.fill") { open(.metrics) }
                 }
+                Text("DATA").font(.system(size: 13, weight: .bold)).foregroundStyle(Theme.muted).padding(.top, 8)
+                menuItem("Export pins (CSV)", "square.and.arrow.up") { open(.export) }
                 KnoxButton(title: "Sign out", style: .ghost) {
                     if clockedIn { confirmSignOut = true } else { session.signOut() }
                 }

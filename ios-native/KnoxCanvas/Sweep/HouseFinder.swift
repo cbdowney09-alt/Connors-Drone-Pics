@@ -95,14 +95,14 @@ enum HouseFinder {
 
     /// Tries each endpoint in turn. Nil if none answered. The web uses 15 s, but a busy
     /// overpass-api.de often needs longer, and this runs off the main thread anyway.
-    static func overpassElements(_ query: String) async -> [Element]? {
+    static func overpassElements(_ query: String, timeout: TimeInterval = 30) async -> [Element]? {
         var allowed = CharacterSet.alphanumerics
         allowed.insert(charactersIn: "-_.!~*'()")
         let body = "data=" + (query.addingPercentEncoding(withAllowedCharacters: allowed) ?? "")
         for ep in overpass {
             var req = URLRequest(url: URL(string: ep)!)
             req.httpMethod = "POST"
-            req.timeoutInterval = 30
+            req.timeoutInterval = timeout
             req.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
             req.setValue("KnoxCanvas/2.0 (iOS door-to-door canvassing app)", forHTTPHeaderField: "User-Agent")
             req.httpBody = Data(body.utf8)

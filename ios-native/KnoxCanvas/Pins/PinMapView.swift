@@ -32,6 +32,11 @@ final class MapController: NSObject, CLLocationManagerDelegate {
         map.setVisibleMapRect(rect, edgePadding: UIEdgeInsets(top: 190, left: 40, bottom: 120, right: 40), animated: animated)
     }
 
+    func show(_ rect: MKMapRect) {
+        guard let map, !rect.isNull else { return }
+        map.setVisibleMapRect(rect, edgePadding: UIEdgeInsets(top: 190, left: 30, bottom: 120, right: 30), animated: true)
+    }
+
     func locate() {
         switch location.authorizationStatus {
         case .notDetermined:
@@ -209,6 +214,86 @@ final class CandidateRingView: MKAnnotationView {
     }
 }
 
+/// Labels and markers for the map tools: zone names, zip codes, route stops, drawn corners.
+/// They never take taps, so tapping on one still reaches the map.
+final class BadgeAnnotation: NSObject, MKAnnotation {
+    enum Kind { case label(String, UIColor), start, stop(Int), vertex }
+    let coordinate: CLLocationCoordinate2D
+    let kind: Kind
+    init(_ c: CLLocationCoordinate2D, _ kind: Kind) {
+        coordinate = c
+        self.kind = kind
+    }
+}
+
+final class BadgeView: MKAnnotationView {
+    static let reuseID = "badge"
+    private let label = UILabel()
+
+    override init(annotation: MKAnnotation?, reuseIdentifier: String?) {
+        super.init(annotation: annotation, reuseIdentifier: reuseIdentifier)
+        isEnabled = false
+        isUserInteractionEnabled = false
+        canShowCallout = false
+        label.textAlignment = .center
+        label.textColor = .white
+        addSubview(label)
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func prepareForDisplay() {
+        super.prepareForDisplay()
+        guard let a = annotation as? BadgeAnnotation else { return }
+        layer.borderWidth = 0
+        label.isHidden = false
+        collisionMode = .rectangle
+        switch a.kind {
+        case let .label(text, color):
+            label.text = text
+            label.font = .systemFont(ofSize: 12, weight: .bold)
+            label.textColor = .white
+            let w = min(220, label.intrinsicContentSize.width + 16)
+            frame = CGRect(x: 0, y: 0, width: w, height: 22)
+            layer.cornerRadius = 11
+            backgroundColor = color
+            displayPriority = .defaultHigh
+            zPriority = .defaultUnselected
+        case .start:
+            label.text = "S"
+            label.font = .systemFont(ofSize: 12, weight: .heavy)
+            label.textColor = UIColor(Theme.accent)
+            frame = CGRect(x: 0, y: 0, width: 26, height: 26)
+            layer.cornerRadius = 13
+            layer.borderWidth = 3
+            layer.borderColor = UIColor(Theme.accent).cgColor
+            backgroundColor = .white
+            displayPriority = .required
+            zPriority = .max
+        case let .stop(n):
+            label.text = "\(n)"
+            label.font = .systemFont(ofSize: n > 99 ? 10 : 12, weight: .bold)
+            label.textColor = .white
+            frame = CGRect(x: 0, y: 0, width: 26, height: 26)
+            layer.cornerRadius = 13
+            backgroundColor = UIColor(PinStatus.hanger.color)
+            // Stops often sit right on a saved pin; the number has to win.
+            displayPriority = .required
+            zPriority = .defaultSelected
+        case .vertex:
+            label.isHidden = true
+            frame = CGRect(x: 0, y: 0, width: 14, height: 14)
+            layer.cornerRadius = 7
+            layer.borderWidth = 2
+            layer.borderColor = UIColor.white.cgColor
+            backgroundColor = UIColor(Theme.accent)
+            displayPriority = .required
+            zPriority = .max
+        }
+        label.frame = bounds
+    }
+}
+
 struct PinMapView: UIViewRepresentable {
     let store: PinStore
     let controller: MapController
@@ -219,6 +304,10 @@ struct PinMapView: UIViewRepresentable {
     let hasFrame: Bool
     let sweep: SweepTracker
     let sweepVersion: Int
+    let tools: MapTools
+    /// Changes whenever any tool layer, the saved zones or the roofing cutoff change.
+    let toolsKey: String
+    let roofCutoff: Int
     var onTapPin: (String) -> Void
     var onTapCandidate: (String) -> Void
     var onTapMap: (CLLocationCoordinate2D) -> Void
@@ -235,6 +324,7 @@ struct PinMapView: UIViewRepresentable {
         map.register(PinDotView.self, forAnnotationViewWithReuseIdentifier: PinDotView.reuseID)
         map.register(PinClusterView.self, forAnnotationViewWithReuseIdentifier: PinClusterView.reuseID)
         map.register(CandidateRingView.self, forAnnotationViewWithReuseIdentifier: CandidateRingView.reuseID)
+        map.register(BadgeView.self, forAnnotationViewWithReuseIdentifier: BadgeView.reuseID)
         map.setRegion(MKCoordinateRegion(center: Self.knoxville, latitudinalMeters: 3000, longitudinalMeters: 3000), animated: false)
 
         // Single tap drops a pin. A do-nothing double tap that it waits on keeps
@@ -259,6 +349,7 @@ struct PinMapView: UIViewRepresentable {
         context.coordinator.applyBasemap(basemap, to: map)
         context.coordinator.syncAnnotations(map)
         context.coordinator.syncSweep(map)
+        context.coordinator.syncTools(map)
         if let frame = store.initialFrame {
             DispatchQueue.main.async { [store, controller] in
                 guard store.initialFrame != nil else { return }
@@ -279,6 +370,17 @@ struct PinMapView: UIViewRepresentable {
         private var trailLine: MKPolyline?
         private var trailCount = 0
         private var lastSweepVersion = -1
+
+        /// Overlays and badges for one tool, swapped out as a group.
+        private struct Layer {
+            var overlays: [MKOverlay] = []
+            var badges: [BadgeAnnotation] = []
+        }
+        private enum Style { case draw, drawLine, routeZone, routeLine, roofTarget, roofOther, zip(UIColor) }
+        private var styles: [ObjectIdentifier: Style] = [:]
+        private var drawLayer = Layer(), routeLayer = Layer(), roofLayer = Layer(), zipLayer = Layer()
+        private var lastDraw = -1, lastRoute = -1, lastZip = -1
+        private var lastRoof = ""
 
         init(_ parent: PinMapView) { self.parent = parent }
 
@@ -363,7 +465,81 @@ struct PinMapView: UIViewRepresentable {
             }
         }
 
+        func syncTools(_ map: MKMapView) {
+            let t = parent.tools
+            if t.drawVersion != lastDraw {
+                lastDraw = t.drawVersion
+                var l = Layer()
+                let pts = t.drawn
+                if pts.count >= 3 { l.overlays.append(styled(MKPolygon(coordinates: pts, count: pts.count), .draw)) }
+                if pts.count >= 2 { l.overlays.append(styled(MKPolyline(coordinates: pts, count: pts.count), .drawLine)) }
+                l.badges = pts.map { BadgeAnnotation($0, .vertex) }
+                replace(&drawLayer, with: l, on: map)
+            }
+            if t.routeVersion != lastRoute {
+                lastRoute = t.routeVersion
+                var l = Layer()
+                if let z = t.routeZone { l.overlays.append(styled(MKPolygon(coordinates: z, count: z.count), .routeZone)) }
+                if let from = t.routeFrom, !t.route.isEmpty {
+                    let line = [from.coordinate] + t.route.map(\.coordinate)
+                    l.overlays.append(styled(MKPolyline(coordinates: line, count: line.count), .routeLine))
+                    l.badges.append(BadgeAnnotation(from.coordinate, .start))
+                    l.badges += t.route.enumerated().map { BadgeAnnotation($1.coordinate, .stop($0 + 1)) }
+                }
+                replace(&routeLayer, with: l, on: map)
+            }
+            let roofKey = "\(t.roofing)-\(parent.store.zonesVersion)-\(parent.roofCutoff)"
+            if roofKey != lastRoof {
+                lastRoof = roofKey
+                var l = Layer()
+                if t.roofing {
+                    for z in parent.store.zones {
+                        guard let poly = z.polygon else { continue }
+                        let target = (Int(z.year) ?? .max) <= parent.roofCutoff
+                        let p = MKPolygon(coordinates: poly, count: poly.count)
+                        l.overlays.append(styled(p, target ? .roofTarget : .roofOther))
+                        let color = UIColor(Color(hex: target ? 0x10b981 : 0x6b7280))
+                        l.badges.append(BadgeAnnotation(Self.center(of: p.boundingMapRect),
+                                                        .label("\(z.name.isEmpty ? "Zone" : z.name) \u{00B7} \(z.year)", color)))
+                    }
+                }
+                replace(&roofLayer, with: l, on: map)
+            }
+            if t.zipVersion != lastZip {
+                lastZip = t.zipVersion
+                var l = Layer()
+                for z in t.zips where z.visible {
+                    var rect = MKMapRect.null
+                    for p in z.polygons {
+                        l.overlays.append(styled(p, .zip(z.color)))
+                        rect = rect.union(p.boundingMapRect)
+                    }
+                    l.badges.append(BadgeAnnotation(Self.center(of: rect), .label(z.code, z.color)))
+                }
+                replace(&zipLayer, with: l, on: map)
+            }
+        }
+
+        private func styled<O: MKOverlay>(_ o: O, _ s: Style) -> O {
+            styles[ObjectIdentifier(o)] = s
+            return o
+        }
+
+        private func replace(_ old: inout Layer, with new: Layer, on map: MKMapView) {
+            map.removeOverlays(old.overlays)
+            map.removeAnnotations(old.badges)
+            for o in old.overlays where !new.overlays.contains(where: { $0 === o }) { styles[ObjectIdentifier(o)] = nil }
+            map.addOverlays(new.overlays, level: .aboveRoads)
+            map.addAnnotations(new.badges)
+            old = new
+        }
+
+        private static func center(of r: MKMapRect) -> CLLocationCoordinate2D {
+            MKMapPoint(x: r.midX, y: r.midY).coordinate
+        }
+
         func mapView(_ map: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
+            if let style = styles[ObjectIdentifier(overlay)] { return renderer(overlay, style) }
             guard let line = overlay as? MKPolyline else { return MKOverlayRenderer(overlay: overlay) }
             let r = MKPolylineRenderer(polyline: line)
             r.strokeColor = UIColor(Theme.accent).withAlphaComponent(0.45)
@@ -373,8 +549,37 @@ struct PinMapView: UIViewRepresentable {
             return r
         }
 
+        private func renderer(_ o: MKOverlay, _ s: Style) -> MKOverlayRenderer {
+            let r: MKOverlayPathRenderer
+            if let p = o as? MKPolygon { r = MKPolygonRenderer(polygon: p) }
+            else if let l = o as? MKPolyline { r = MKPolylineRenderer(polyline: l) }
+            else { return MKOverlayRenderer(overlay: o) }
+            let accent = UIColor(Theme.accent), orange = UIColor(PinStatus.hanger.color)
+            func set(_ c: UIColor, width: CGFloat, fill: CGFloat, dashed: Bool) {
+                r.strokeColor = c
+                r.fillColor = c.withAlphaComponent(fill)
+                r.lineWidth = width
+                r.lineDashPattern = dashed ? [6, 4] : nil
+                r.lineJoin = .round
+            }
+            switch s {
+            case .draw: set(accent, width: 2, fill: 0.1, dashed: false)
+            case .drawLine: set(accent, width: 2, fill: 0, dashed: true)
+            case .routeZone: set(orange, width: 2, fill: 0.1, dashed: true)
+            case .routeLine:
+                set(orange, width: 2.5, fill: 0, dashed: true)
+                r.strokeColor = orange.withAlphaComponent(0.75)
+            case .roofTarget: set(UIColor(Color(hex: 0x10b981)), width: 2.5, fill: 0.18, dashed: false)
+            case .roofOther: set(UIColor(Color(hex: 0x6b7280)), width: 2.5, fill: 0.06, dashed: true)
+            case let .zip(c): set(c, width: 2, fill: 0.08, dashed: true)
+            }
+            return r
+        }
+
         func mapView(_ map: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
             switch annotation {
+            case is BadgeAnnotation:
+                map.dequeueReusableAnnotationView(withIdentifier: BadgeView.reuseID, for: annotation)
             case is CandidateAnnotation:
                 map.dequeueReusableAnnotationView(withIdentifier: CandidateRingView.reuseID, for: annotation)
             case is PinAnnotation:
@@ -388,6 +593,7 @@ struct PinMapView: UIViewRepresentable {
 
         func mapView(_ map: MKMapView, didSelect annotation: MKAnnotation) {
             map.deselectAnnotation(annotation, animated: false)
+            if annotation is BadgeAnnotation { return }
             if let a = annotation as? CandidateAnnotation {
                 parent.onTapCandidate(a.key)
             } else if let a = annotation as? PinAnnotation {

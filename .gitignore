@@ -1,0 +1,3 @@
+ios/**/xcuserdata/
+ios/**/*.xcworkspace/xcuserdata/
+.DS_Store

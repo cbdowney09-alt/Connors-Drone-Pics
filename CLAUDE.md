@@ -99,6 +99,10 @@ While a canvasser is **clocked in**, GPS builds a walking trail. Code is in the
   (`"lat,lng,secondsSinceClockIn;..."` string, because Firestore can't store nested arrays),
   `trailMeters` and `gpsHangers`.
 - Tuning knobs are in the `SWEEP` constant.
+- **iPhone app, with address tiles (Tennessee):** detection is by distance instead. On every GPS step, any tile house
+  within `SWEEP.doorRadius` (default 20 m, set in the Shift screen: 15/20/30/45 m) becomes a candidate right away.
+  The 120 m stretch lookups still run and catch anything missed offline. The first field test (Oct 2026) found
+  nothing with the old method, because Overpass was down and the tiles weren't deployed yet.
 - **Not yet field-tested against real OSM data.** It was tested only with simulated data. First real
   walks should check how many houses get found in Knoxville and Tennessee Ridge, and whether the
   Google fallback fills the gaps.

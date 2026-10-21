@@ -43,6 +43,9 @@ final class SweepTracker: NSObject, CLLocationManagerDelegate {
     private var segStart: Int64 = 0
     private var queue: [[TrailPoint]] = []
     private var busy = false
+    /// Live "walked up to a house" check: one lookup at a time; the newest step waits its turn.
+    private var nearBusy = false
+    private var nearNext: [LatLng]?
     private var retryTimer: Timer?
     private var saveTask: Task<Void, Never>?
 
@@ -210,6 +213,7 @@ final class SweepTracker: NSObject, CLLocationManagerDelegate {
         }
         version &+= 1
         save(now: false)
+        if !driving { checkNear(last.map { [$0.ll, pt.ll] } ?? [pt.ll]) }
         if segDist >= SWEEP.lookupEvery || (segDist >= 40 && pt.t - segStart >= SWEEP.lookupMinMs) { flushSeg() }
     }
 
@@ -241,6 +245,28 @@ final class SweepTracker: NSObject, CLLocationManagerDelegate {
                     UINotificationFeedbackGenerator().notificationOccurred(.success)
                 }
             }
+        }
+    }
+
+    /// Lights up houses as soon as the walker comes within `SWEEP.doorRadius` of them, using
+    /// the address tiles. The 120 m stretch lookups still run afterwards and catch anything
+    /// missed (no signal, tile not loaded yet) and cover areas without tiles.
+    private func checkNear(_ step: [LatLng]) {
+        guard !nearBusy else { nearNext = step; return }
+        nearBusy = true
+        Task {
+            let houses = await HouseFinder.tileHousesNear(step) ?? []
+            var added = 0
+            for h in houses where addCandidate(h, on: true, restoring: false) { added += 1 }
+            if added > 0 {
+                version &+= 1
+                save(now: true)
+                if UIApplication.shared.applicationState == .active {
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                }
+            }
+            nearBusy = false
+            if let next = nearNext { nearNext = nil; checkNear(next) }
         }
     }
 
@@ -294,7 +320,7 @@ final class SweepTracker: NSObject, CLLocationManagerDelegate {
 
     var title: String {
         let n = candidates.count
-        return "\u{1F3E0} \(n) house\(n == 1 ? "" : "s") passed \u{00B7} \(Self.streetsSummary(candidates))"
+        return "\u{1F3E0} \(n) house\(n == 1 ? "" : "s") visited \u{00B7} \(Self.streetsSummary(candidates))"
     }
 
     var subtitle: String {

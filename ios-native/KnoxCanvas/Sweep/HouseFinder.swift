@@ -1,5 +1,4 @@
 import Foundation
-import CoreLocation
 
 /// A house the canvasser walked past.
 struct House: Codable, Equatable {
@@ -13,10 +12,9 @@ struct House: Codable, Equatable {
     var ll: LatLng { LatLng(lat: lat, lng: lng) }
 }
 
-/// Finds addressed houses along a walked stretch, keeping only houses whose street is one
-/// actually walked (so houses backing onto the trail are skipped). Sources in order: our
-/// address tiles (with Apple naming the walked streets), OSM Overpass, then Google reverse
-/// geocoding through the Worker. The Overpass and Google parts match app.html.
+/// Finds the houses for a walked stretch. Where we have address tiles: every house the walker
+/// came within `SWEEP.doorRadius` of. Elsewhere (like app.html): OSM Overpass houses near the
+/// line whose street is one actually walked, then Google reverse geocoding through the Worker.
 enum HouseFinder {
     static let overpass = [
         "https://overpass-api.de/api/interpreter",
@@ -30,7 +28,7 @@ enum HouseFinder {
     /// Throws `Offline` when nothing could be reached, so the stretch stays queued for a retry.
     static func housesAlong(_ seg: [LatLng]) async throws -> [House] {
         let line = SweepGeo.thin(seg, 40)
-        if let houses = await tileHousesAlong(line) { return houses }
+        if let houses = await tileHousesNear(seg) { return houses }
         let coords = line.map { String(format: "%.6f,%.6f", $0.lat, $0.lng) }.joined(separator: ",")
         let r = Int(SWEEP.roadRadius), h = Int(SWEEP.houseRadius)
         let q = "[out:json][timeout:20];way(around:\(r),\(coords))[\"highway\"][\"name\"];out tags;"
@@ -48,41 +46,20 @@ enum HouseFinder {
         return elements == nil ? [] : houses
     }
 
-    /// Houses from our address tiles within `houseRadius` of the line, on a walked street.
+    /// Houses from our address tiles that the walker came within `SWEEP.doorRadius` of.
     /// Nil when the area has no tiles (or they can't be loaded), so Overpass gets a turn.
-    static func tileHousesAlong(_ line: [LatLng]) async -> [House]? {
-        guard !line.isEmpty else { return [] }
-        let pad = SWEEP.houseRadius + 10
-        let lat0 = line[0].lat
-        let dLat = pad / 111_000, dLng = pad / (111_000 * cos(lat0 * .pi / 180))
+    static func tileHousesNear(_ line: [LatLng]) async -> [House]? {
+        guard let first = line.first else { return [] }
+        let r = SWEEP.doorRadius
+        let dLat = (r + 5) / 111_000, dLng = (r + 5) / (111_000 * cos(first.lat * .pi / 180))
         guard let all = await AddressTiles.shared.addresses(
             minLat: line.map(\.lat).min()! - dLat, minLng: line.map(\.lng).min()! - dLng,
             maxLat: line.map(\.lat).max()! + dLat, maxLng: line.map(\.lng).max()! + dLng) else { return nil }
-        let near = all.map { ($0, SweepGeo.distToLine($0.ll, line)) }.filter { $0.1 <= SWEEP.houseRadius }
-        if near.isEmpty { return [] }
-
-        let walked = await walkedStreets(line, near: near)
-        return near.filter { walked.contains(SweepGeo.normStreet($0.0.street)) }.map { h, d in
-            House(lat: h.lat, lng: h.lng, num: h.number, street: h.street, addr: h.addr, dist: Int(d.rounded()))
+        return all.compactMap { h in
+            let d = line.count == 1 ? SweepGeo.dist(h.ll, first) : SweepGeo.distToLine(h.ll, line)
+            guard d <= r else { return nil }
+            return House(lat: h.lat, lng: h.lng, num: h.number, street: h.street, addr: h.addr, dist: Int(d.rounded()))
         }
-    }
-
-    /// The streets walked: Apple's street name at a few points on the trail. Without an
-    /// answer (no signal), the street of the house nearest the trail, plus any street with
-    /// two or more houses close to it; houses facing the walked street sit closest.
-    private static func walkedStreets(_ line: [LatLng], near: [(TileAddress, Double)]) async -> Set<String> {
-        var names = Set<String>()
-        let geocoder = CLGeocoder()
-        for p in SweepGeo.samplesAlong(line, every: 60, maxCount: 3) {
-            let marks = try? await geocoder.reverseGeocodeLocation(CLLocation(latitude: p.lat, longitude: p.lng))
-            if let t = marks?.first?.thoroughfare, !t.isEmpty { names.insert(SweepGeo.normStreet(t)) }
-        }
-        if !names.isEmpty { return names }
-        if let closest = near.min(by: { $0.1 < $1.1 }) { names.insert(SweepGeo.normStreet(closest.0.street)) }
-        var close: [String: Int] = [:]
-        for (h, d) in near where d <= SWEEP.noStreetRadius { close[SweepGeo.normStreet(h.street), default: 0] += 1 }
-        for (street, n) in close where n >= 2 { names.insert(street) }
-        return names
     }
 
     /// Keeps addressed houses near the line whose street is one actually walked.

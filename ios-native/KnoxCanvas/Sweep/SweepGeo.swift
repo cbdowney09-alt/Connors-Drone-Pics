@@ -11,6 +11,14 @@ enum SWEEP {
     static let noStreetRadius = 32.0  // tighter radius for houses with no street tag (m)
     static let roadRadius = 25.0      // streets within this distance count as "walked" (m)
     static let dupRadius = 18.0       // an existing pin this close means the house is already pinned (m)
+
+    /// iPhone app, areas with address tiles: a house counts once the walker comes within this
+    /// distance of it (its address point, roughly the middle of the house). Set in the Shift screen.
+    static let doorRadiusChoices: [Double] = [15, 20, 30, 45]
+    static var doorRadius: Double {
+        let v = UserDefaults.standard.double(forKey: "knoxDoorRadius")
+        return v > 0 ? v : 20
+    }
 }
 
 /// One GPS fix on the trail. `t` is epoch ms.

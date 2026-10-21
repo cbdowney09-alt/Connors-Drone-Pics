@@ -18,11 +18,24 @@ Everything Phase 7 needs that only you can do: your iPhone, your Apple account a
    Firestore → Start collection `admins` → Document ID = that UID → add any field (for example `name: Connor`).
    Reopen the app, and Account shows **Admin: companies**.
 
+5. **Sign in with Apple** (the app offers it next to Google; App Review guideline 4.8):
+   - Firebase console → Authentication → Sign-in method → Add new provider → **Apple** → Enable.
+   - For account deletion, which revokes the Apple login as Apple requires, fill in **OAuth code flow configuration**:
+     - Apple Team ID `3372UW6PA4`.
+     - Key ID and private key: at developer.apple.com → Keys → **+**, name it "KnoxCanvas Apple sign-in", tick
+       **Sign in with Apple** → Configure → primary App ID `com.knoxcanvas.app` → Register.
+       Download the `.p8` (you only get one chance) and paste its contents plus the Key ID into Firebase.
+   - The App ID already has the capability (Xcode turned it on).
+   - People who sign up with Apple can only sign in through the iPhone app. The website has no Apple button.
+     Their email may be an `@privaterelay.appleid.com` address in team lists.
+
 ## 2. Real-iPhone test pass
 
 Use a **test company**, not the real one. Plug the phone in, pick it in Xcode, then Run.
 
-- [ ] Sign in with email, then with Google. Sign out and back in.
+- [ ] Sign in with email, then with Google, then with Apple. Sign out and back in.
+- [ ] Delete a throwaway Apple-sign-in account. It should ask Apple to confirm, and the app should then
+      disappear from Settings → Apple ID → Sign in with Apple.
 - [ ] Drop pins and change statuses. Check that they appear on the website within seconds, and the reverse.
 - [ ] Airplane mode: drop 5 pins and change statuses. The pill should say "Offline · saved on device". Turn airplane mode off and check they sync.
 - [ ] Clock in, lock the phone and walk 2–3 blocks. The blue location pill should show, and a reminder notification should arrive about every 250 m.
@@ -97,13 +110,10 @@ sheet, the clock card, the street sweep banner, team metrics.
    can install about 15 minutes after processing.
 4. Each new upload needs a higher build number (`CURRENT_PROJECT_VERSION` in `project.yml`).
 
-## 5. Known App Review risk: Sign in with Apple
+## 5. Sign in with Apple
 
-Guideline 4.8 says an app that offers a third-party login (Google) must also offer a login that keeps
-the user's email private. Sign in with Apple is the usual answer. KnoxCanvas's own email/password
-login may be accepted instead, but reviewers sometimes reject it. If that happens, add Sign in with Apple.
-That means enabling the Apple provider in Firebase, adding the capability, and adding a button on the sign-in
-screen. Accounts made that way can't sign in on the website until the website adds Apple sign-in too.
+Added for guideline 4.8 (any app with Google login must also offer a private login like Apple's).
+The setup steps are in section 1, step 5.
 
 ## 6. After launch
 

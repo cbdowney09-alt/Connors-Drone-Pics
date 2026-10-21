@@ -39,6 +39,7 @@
 		C38FE65707A4CFA795124DBD /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = EAFBD6606E92E216A805A16E /* Assets.xcassets */; };
 		CEE00903C7223474482C42C9 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82BCEBD41AAFCD83446BC04F /* Models.swift */; };
 		DA3290C64738C36B699D6622 /* MapTools.swift in Sources */ = {isa = PBXBuildFile; fileRef = C436421A2E104B64612077A9 /* MapTools.swift */; };
+		E0BA389510B79089A8692FC0 /* AppleSignIn.swift in Sources */ = {isa = PBXBuildFile; fileRef = 060E8A653587B23A7540D5AA /* AppleSignIn.swift */; };
 		E471695D221B719892DD188D /* AddressSearch.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3741DA6E61790F75020848F /* AddressSearch.swift */; };
 		E59E567AE6F33846F72168F9 /* Pin.swift in Sources */ = {isa = PBXBuildFile; fileRef = D038A49430266F730D519377 /* Pin.swift */; };
 		E5CC5C6DF6C8EE105EC2CD44 /* KnoxCanvasApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D630213640615320DC2AEC84 /* KnoxCanvasApp.swift */; };
@@ -51,6 +52,8 @@
 
 /* Begin PBXFileReference section */
 		012CD8FACAE9715CA5B7D1BC /* TeamSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TeamSheet.swift; sourceTree = "<group>"; };
+		060E8A653587B23A7540D5AA /* AppleSignIn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleSignIn.swift; sourceTree = "<group>"; };
+		07D56F17631EC9A681E02C28 /* KnoxCanvas.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = KnoxCanvas.entitlements; sourceTree = "<group>"; };
 		0E28D78B76A4EC20A4777D6D /* Geocoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Geocoder.swift; sourceTree = "<group>"; };
 		2A435CF5F3E24DDA69B3D805 /* HouseFinder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseFinder.swift; sourceTree = "<group>"; };
 		2EA111A0C170B5467FF4FA79 /* TeamStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TeamStore.swift; sourceTree = "<group>"; };
@@ -169,6 +172,7 @@
 		3B3D2E04B925CDBE94C8F3F6 /* Session */ = {
 			isa = PBXGroup;
 			children = (
+				060E8A653587B23A7540D5AA /* AppleSignIn.swift */,
 				D8962DB7A40B6E2DFE51CDA6 /* AuthErrors.swift */,
 				5E7F8008F673EE2054EA6D67 /* FirebaseBootstrap.swift */,
 				82BCEBD41AAFCD83446BC04F /* Models.swift */,
@@ -212,6 +216,7 @@
 			isa = PBXGroup;
 			children = (
 				903FEC186323142B56EA0C47 /* Info.plist */,
+				07D56F17631EC9A681E02C28 /* KnoxCanvas.entitlements */,
 				BDBAAA3647D243707434C82F /* Admin */,
 				8C2E1F9A2F8DC01003A2D930 /* App */,
 				1F182F60E6BF7692D53A4715 /* Components */,
@@ -349,6 +354,7 @@
 				3644C8B6BFD9FB390896574B /* AdminSheet.swift in Sources */,
 				4DAF584694B210BDC0B644A1 /* AdminStore.swift in Sources */,
 				AA5A0C9565F3B6A836849DE2 /* AppConfig.swift in Sources */,
+				E0BA389510B79089A8692FC0 /* AppleSignIn.swift in Sources */,
 				657B637B422F5CD3538D653F /* AuthErrors.swift in Sources */,
 				A4E30CC8F71CA2AFA31C102B /* AuthView.swift in Sources */,
 				F985ABBE09B4DBBC477FF3CC /* Controls.swift in Sources */,
@@ -456,6 +462,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = KnoxCanvas/KnoxCanvas.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				ENABLE_PREVIEWS = YES;
@@ -475,6 +482,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = KnoxCanvas/KnoxCanvas.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				ENABLE_PREVIEWS = YES;

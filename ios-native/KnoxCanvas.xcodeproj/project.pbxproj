@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		02FD54D51714BCAC5BB89A49 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34842738A2986BBA6CFB8722 /* HomeView.swift */; };
+		091F09996CCE53DA1E233ADF /* addresses.knxa in Resources */ = {isa = PBXBuildFile; fileRef = 773250708DFC8D80A9A1C736 /* addresses.knxa */; };
 		16B8E61ECC7CF40628EE51D8 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 18C4243D9907702CAD6DFA53 /* FirebaseAuth */; };
 		20A1F803D4F4A7B05E5855CA /* TeamSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 012CD8FACAE9715CA5B7D1BC /* TeamSheet.swift */; };
 		21C7779B29379A4588DBCD6D /* HouseFinder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A435CF5F3E24DDA69B3D805 /* HouseFinder.swift */; };
@@ -66,6 +67,7 @@
 		5C4CAA90E5B11DE14CB3C7E5 /* Controls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Controls.swift; sourceTree = "<group>"; };
 		5E7F8008F673EE2054EA6D67 /* FirebaseBootstrap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseBootstrap.swift; sourceTree = "<group>"; };
 		694A35896F3EE3E4A59A5873 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
+		773250708DFC8D80A9A1C736 /* addresses.knxa */ = {isa = PBXFileReference; path = addresses.knxa; sourceTree = "<group>"; };
 		7CC3276B1AE1CEAF5A690036 /* AuthView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthView.swift; sourceTree = "<group>"; };
 		7FA4FA64718E5507789052AD /* AppConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfig.swift; sourceTree = "<group>"; };
 		812EBBEDAEA19186CC6A654B /* AddressTiles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddressTiles.swift; sourceTree = "<group>"; };
@@ -165,6 +167,7 @@
 		3174DCC9367B8B84B480B5C1 /* Resources */ = {
 			isa = PBXGroup;
 			children = (
+				773250708DFC8D80A9A1C736 /* addresses.knxa */,
 				EAFBD6606E92E216A805A16E /* Assets.xcassets */,
 				694A35896F3EE3E4A59A5873 /* GoogleService-Info.plist */,
 				8A0079B8DA8EDE29E204179B /* PrivacyInfo.xcprivacy */,
@@ -343,6 +346,7 @@
 				C38FE65707A4CFA795124DBD /* Assets.xcassets in Resources */,
 				5B3A62A888D87D71C7F760DE /* GoogleService-Info.plist in Resources */,
 				2AD4506E97155C3A3466DE6F /* PrivacyInfo.xcprivacy in Resources */,
+				091F09996CCE53DA1E233ADF /* addresses.knxa in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

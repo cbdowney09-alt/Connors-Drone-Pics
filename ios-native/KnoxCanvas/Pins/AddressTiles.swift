@@ -23,8 +23,10 @@ struct TileAddress {
     }
 }
 
-/// Loads address tiles on demand and keeps them on the phone (they rarely change), so the
-/// route optimizer and the street sweep don't depend on the public Overpass servers.
+/// House addresses for the route optimizer and the street sweep, so they don't depend on the
+/// public Overpass servers. Tennessee ships inside the app (Resources/addresses.knxa, made by
+/// tools/address-tiles/pack.py) and works with no signal. Other states can be served from the
+/// website (/addr/v1/) and are kept on the phone once downloaded.
 actor AddressTiles {
     static let shared = AddressTiles()
     /// The `knoxAddrBase` default overrides it for testing against a local copy.
@@ -52,6 +54,10 @@ actor AddressTiles {
 
     private var index: (deg: Double, tiles: Set<String>)?
     private var indexLoadedAt: Date?
+    private var indexFailedAt: Date?
+    /// The bundled pack: tile key -> (offset, length) of its compressed JSON.
+    private var pack: (deg: Double, data: Data, tiles: [String: (Int, Int)])?
+    private var packLoaded = false
     private var memory: [String: [TileAddress]] = [:]
     private let dir: URL = {
         let d = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("addr-v1")
@@ -62,14 +68,18 @@ actor AddressTiles {
     /// Houses inside the box, or nil when this area has no tiles (or the tiles couldn't be
     /// reached and aren't cached), so the caller can fall back to Overpass.
     func addresses(minLat: Double, minLng: Double, maxLat: Double, maxLng: Double) async -> [TileAddress]? {
-        guard let idx = await loadIndex() else { return nil }
-        let d = idx.deg
+        let bundled = loadPack()
+        let d = bundled?.deg ?? 0.05
         var keys: [String] = []
         for ty in Int(floor(minLat / d))...Int(floor(maxLat / d)) {
             for tx in Int(floor(minLng / d))...Int(floor(maxLng / d)) { keys.append("\(ty)/\(tx)") }
         }
         guard keys.count <= 16 else { return nil } // a huge zone; not worth hundreds of tiles
-        let covered = keys.filter { idx.tiles.contains($0) }
+        var covered = keys.filter { bundled?.tiles[$0] != nil }
+        // Only ask the website about tiles the app doesn't ship with.
+        if covered.count < keys.count, let idx = await loadIndex() {
+            covered += keys.filter { bundled?.tiles[$0] == nil && idx.tiles.contains($0) }
+        }
         guard !covered.isEmpty else { return nil }
         var out: [TileAddress] = []
         for k in covered {
@@ -79,10 +89,35 @@ actor AddressTiles {
         return out
     }
 
+    /// Reads the table of the bundled pack once; tile bodies are read on demand.
+    private func loadPack() -> (deg: Double, data: Data, tiles: [String: (Int, Int)])? {
+        if packLoaded { return pack }
+        packLoaded = true
+        guard let url = Bundle.main.url(forResource: "addresses", withExtension: "knxa"),
+              let data = try? Data(contentsOf: url, options: .alwaysMapped), data.count > 16,
+              data.prefix(4) == Data("KNXA".utf8) else { return nil }
+        func u32(_ o: Int) -> Int { Int(data[o..<o + 4].withUnsafeBytes { $0.loadUnaligned(as: UInt32.self) }.littleEndian) }
+        func i32(_ o: Int) -> Int { Int(data[o..<o + 4].withUnsafeBytes { $0.loadUnaligned(as: Int32.self) }.littleEndian) }
+        func u64(_ o: Int) -> Int { Int(data[o..<o + 8].withUnsafeBytes { $0.loadUnaligned(as: UInt64.self) }.littleEndian) }
+        let count = u32(8), metaLen = u32(12)
+        struct Meta: Decodable { let tileDeg: Double }
+        guard let meta = try? JSONDecoder().decode(Meta.self, from: data[16..<16 + metaLen]) else { return nil }
+        var tiles: [String: (Int, Int)] = [:]
+        var o = 16 + metaLen
+        for _ in 0..<count {
+            tiles["\(i32(o))/\(i32(o + 4))"] = (u64(o + 8), u32(o + 16))
+            o += 20
+        }
+        pack = (meta.tileDeg, data, tiles)
+        return pack
+    }
+
     private func loadIndex() async -> (deg: Double, tiles: Set<String>)? {
         let file = dir.appendingPathComponent("index.json")
-        // Refresh about weekly; use the saved copy when offline.
+        // Refresh about weekly; use the saved copy when offline. After a failed fetch, wait
+        // before asking again so walks with no signal don't keep stalling on it.
         if let index, let at = indexLoadedAt, Date().timeIntervalSince(at) < 7 * 86_400 { return index }
+        if let failed = indexFailedAt, Date().timeIntervalSince(failed) < 600 { return index }
         if let data = await fetch(Self.base.appendingPathComponent("index.json"), timeout: 10),
            let i = try? JSONDecoder().decode(Index.self, from: data) {
             try? data.write(to: file)
@@ -91,6 +126,9 @@ actor AddressTiles {
         } else if index == nil, let data = try? Data(contentsOf: file),
                   let i = try? JSONDecoder().decode(Index.self, from: data) {
             index = (i.tileDeg, Set(i.tiles))
+            indexFailedAt = Date()
+        } else {
+            indexFailedAt = Date()
         }
         return index
     }
@@ -98,7 +136,11 @@ actor AddressTiles {
     private func tile(_ key: String) async -> [TileAddress]? {
         if let m = memory[key] { return m }
         let file = dir.appendingPathComponent(key.replacingOccurrences(of: "/", with: "_") + ".json")
-        var data = try? Data(contentsOf: file)
+        var data: Data?
+        if let p = pack, let (off, len) = p.tiles[key] {
+            data = try? (p.data.subdata(in: off..<off + len) as NSData).decompressed(using: .zlib) as Data
+        }
+        if data == nil { data = try? Data(contentsOf: file) }
         if data == nil, let fresh = await fetch(Self.base.appendingPathComponent(key + ".json"), timeout: 15) {
             try? fresh.write(to: file)
             data = fresh

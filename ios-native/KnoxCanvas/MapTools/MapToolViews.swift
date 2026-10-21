@@ -62,18 +62,6 @@ struct DrawToolbar: View {
     }
 }
 
-/// Green pill above the tab bar while roofing target mode is on.
-struct RoofBanner: View {
-    let cutoff: Int
-    var body: some View {
-        Text("Roofing target mode \u{2014} zones built in or before \(String(cutoff))")
-            .font(.system(size: 13, weight: .bold)).foregroundStyle(.white)
-            .padding(.horizontal, 16).padding(.vertical, 8)
-            .background(Color(hex: 0x10b981), in: Capsule())
-            .shadow(color: Color(hex: 0x10b981).opacity(0.4), radius: 8, y: 4)
-    }
-}
-
 /// The web's Route optimizer panel.
 struct RouteSheet: View {
     let tools: MapTools
@@ -163,11 +151,11 @@ struct RouteSheet: View {
     }
 }
 
-/// Layers: basemap, roofing target mode and zip code boundaries.
+/// Layers: basemap, pin colors, saved zones and zip code boundaries.
 struct LayersSheet: View {
     @Binding var basemap: String
+    @Binding var colorBy: String
     let tools: MapTools
-    let cutoff: Int
     var zipAdded: (MKMapRect) -> Void
     var toast: (String) -> Void
     @State private var zip = ""
@@ -184,15 +172,25 @@ struct LayersSheet: View {
                     seg("Satellite", Basemap.sat)
                 }
 
-                heading("Roofing target mode")
-                Toggle(isOn: $tools.roofing) {
+                heading("Pin colors")
+                HStack(spacing: 8) {
+                    option("Status", on: colorBy == ColorBy.status.rawValue) { colorBy = ColorBy.status.rawValue }
+                    option("Person", on: colorBy == ColorBy.person.rawValue) { colorBy = ColorBy.person.rawValue }
+                }
+                Text(colorBy == ColorBy.person.rawValue
+                     ? "Each person has a color. Pins show who hung the hanger or marked the door; tap a pin for its status."
+                     : "Pins show their status: door hanger, interested, not interested and so on.")
+                    .font(.system(size: 14)).foregroundStyle(Theme.muted)
+
+                heading("Neighborhood zones")
+                Toggle(isOn: $tools.showZones) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Highlight target zones").font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.text)
-                        Text("Neighborhoods built in or before \(String(cutoff)) turn green")
+                        Text("Show drawn zones").font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.text)
+                        Text("Outlines from the Zone tab, labeled with name and year")
                             .font(.system(size: 14)).foregroundStyle(Theme.muted)
                     }
                 }
-                .tint(Color(hex: 0x10b981))
+                .tint(Theme.accent)
                 .padding(14)
                 .background(Theme.card, in: RoundedRectangle(cornerRadius: 14))
 
@@ -269,8 +267,11 @@ struct LayersSheet: View {
     }
 
     private func seg(_ title: String, _ b: Basemap) -> some View {
-        let on = basemap == b.rawValue
-        return Button { basemap = b.rawValue } label: {
+        option(title, on: basemap == b.rawValue) { basemap = b.rawValue }
+    }
+
+    private func option(_ title: String, on: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
             Text(title).font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(on ? .white : Theme.muted)
                 .frame(maxWidth: .infinity, minHeight: 48)

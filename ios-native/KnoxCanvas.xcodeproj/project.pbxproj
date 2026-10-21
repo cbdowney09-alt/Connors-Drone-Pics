@@ -31,6 +31,7 @@
 		AC0286B129218BCAD8B299EF /* SetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC52D208B67A73C72FC9D9DA /* SetupView.swift */; };
 		AC5D6D2A5DA94CE89A04E77E /* TeamStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2EA111A0C170B5467FF4FA79 /* TeamStore.swift */; };
 		BCDFBBAF1257013439169E61 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD737031080C6F0BC0C1480E /* Theme.swift */; };
+		C280E9E7A1327A8D178B2E7D /* People.swift in Sources */ = {isa = PBXBuildFile; fileRef = 399B958BCA0676701DF70323 /* People.swift */; };
 		C38FE65707A4CFA795124DBD /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = EAFBD6606E92E216A805A16E /* Assets.xcassets */; };
 		CEE00903C7223474482C42C9 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82BCEBD41AAFCD83446BC04F /* Models.swift */; };
 		DA3290C64738C36B699D6622 /* MapTools.swift in Sources */ = {isa = PBXBuildFile; fileRef = C436421A2E104B64612077A9 /* MapTools.swift */; };
@@ -50,6 +51,7 @@
 		2A435CF5F3E24DDA69B3D805 /* HouseFinder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseFinder.swift; sourceTree = "<group>"; };
 		2EA111A0C170B5467FF4FA79 /* TeamStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TeamStore.swift; sourceTree = "<group>"; };
 		34842738A2986BBA6CFB8722 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
+		399B958BCA0676701DF70323 /* People.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = People.swift; sourceTree = "<group>"; };
 		47EA67B56C23BE5902369F16 /* SessionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionStore.swift; sourceTree = "<group>"; };
 		489A01DBADBA6B07937A6CCF /* PinMapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PinMapView.swift; sourceTree = "<group>"; };
 		5C4CAA90E5B11DE14CB3C7E5 /* Controls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Controls.swift; sourceTree = "<group>"; };
@@ -112,6 +114,7 @@
 			children = (
 				D3741DA6E61790F75020848F /* AddressSearch.swift */,
 				0E28D78B76A4EC20A4777D6D /* Geocoder.swift */,
+				399B958BCA0676701DF70323 /* People.swift */,
 				D038A49430266F730D519377 /* Pin.swift */,
 				489A01DBADBA6B07937A6CCF /* PinMapView.swift */,
 				EB7E5F15073BF6AAD5E08458 /* PinStore.swift */,
@@ -336,6 +339,7 @@
 				DA3290C64738C36B699D6622 /* MapTools.swift in Sources */,
 				F8EC846FD250016097B2B771 /* MetricsSheet.swift in Sources */,
 				CEE00903C7223474482C42C9 /* Models.swift in Sources */,
+				C280E9E7A1327A8D178B2E7D /* People.swift in Sources */,
 				E59E567AE6F33846F72168F9 /* Pin.swift in Sources */,
 				844F0449788F947A3F65F749 /* PinMapView.swift in Sources */,
 				5DA187F41574481166D69D3D /* PinSheet.swift in Sources */,

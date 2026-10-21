@@ -76,9 +76,8 @@ final class SessionStore {
     }
 
     /// After the owner saves company settings.
-    func applyCompanySettings(name: String, roofCutoff: Int, sheetsUrl: String) {
+    func applyCompanySettings(name: String, sheetsUrl: String) {
         company?.name = name
-        company?.roofCutoff = roofCutoff
         company?.sheetsUrl = sheetsUrl
     }
 

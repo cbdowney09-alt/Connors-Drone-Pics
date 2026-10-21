@@ -7,10 +7,13 @@ struct HomeView: View {
     @Environment(SessionStore.self) private var session
     @State private var store: PinStore?
     @State private var shifts: ShiftStore?
+    @State private var people: People?
 
     var body: some View {
         Group {
-            if let store, let shifts { MapScreen(store: store, shifts: shifts) } else { Theme.bg.ignoresSafeArea() }
+            if let store, let shifts, let people {
+                MapScreen(store: store, shifts: shifts, people: people)
+            } else { Theme.bg.ignoresSafeArea() }
         }
         .task(id: session.companyId) {
             guard let cid = session.companyId, let uid = session.user?.uid else { return }
@@ -19,11 +22,14 @@ struct HomeView: View {
             let s = PinStore(companyId: cid, uid: uid, sheetsUrl: sheets)
             s.start()
             let sh = ShiftStore(companyId: cid, uid: uid, userName: session.profile?.name ?? "", sheetsUrl: sheets, pins: s)
+            let pe = People(uid: uid, selfName: session.profile?.name ?? "")
             store = s
             shifts = sh
+            people = pe
+            Task { await pe.load(companyId: cid) }
             await sh.start()
         }
-        .onDisappear { shifts?.pause(); store?.stop(); store = nil; shifts = nil }
+        .onDisappear { shifts?.pause(); store?.stop(); store = nil; shifts = nil; people = nil }
         // Owner edited company settings: new Sheets syncs go to the new URL.
         .onChange(of: session.company?.sheetsUrl) { _, url in
             store?.sheetsUrl = url ?? ""
@@ -38,6 +44,7 @@ struct MapScreen: View {
     @Environment(SessionStore.self) private var session
     @Bindable var store: PinStore
     let shifts: ShiftStore
+    let people: People
     @State private var controller = MapController()
     @State private var search = AddressSearch()
     @State private var query = ""
@@ -49,17 +56,21 @@ struct MapScreen: View {
     @State private var zoneName = ""
     @State private var zoneYear = ""
     @AppStorage("knoxBasemap") private var basemapRaw = Basemap.street.rawValue
+    @AppStorage("knoxColorBy") private var colorByRaw = ColorBy.status.rawValue
 
     enum Panel: String, Identifiable { case shift, layers, account, sweep, team, metrics, route, export; var id: String { rawValue } }
 
     private var basemap: Basemap { Basemap(rawValue: basemapRaw) ?? .street }
+    private var colorBy: ColorBy { ColorBy(rawValue: colorByRaw) ?? .status }
 
     var body: some View {
         ZStack(alignment: .top) {
             PinMapView(store: store, controller: controller, basemap: basemap,
-                       version: store.version, hidden: store.hidden, hasFrame: store.initialFrame != nil,
+                       version: store.version, hidden: store.hidden,
+                       colorBy: colorBy, people: people, peopleVersion: people.version,
+                       hasFrame: store.initialFrame != nil,
                        sweep: shifts.sweep, sweepVersion: shifts.sweep.version,
-                       tools: tools, toolsKey: toolsKey, roofCutoff: roofCutoff,
+                       tools: tools, toolsKey: toolsKey,
                        onTapPin: { open($0) }, onTapCandidate: { shifts.sweep.toggle($0) }, onTapMap: tapMap)
                 .ignoresSafeArea()
 
@@ -71,12 +82,13 @@ struct MapScreen: View {
                     DrawToolbar(tools: tools, name: $zoneName, year: $zoneYear, cancel: tools.stopDrawing, finish: finishDrawing)
                 } else {
                     searchCard
-                    if searchFocused && !search.results.isEmpty { suggestions } else { chips; statusRow }
+                    if searchFocused && !search.results.isEmpty { suggestions } else {
+                        chips
+                        if colorBy == .person { peopleChips }
+                        statusRow
+                    }
                 }
                 Spacer(minLength: 0)
-                if tools.roofing && shifts.sweep.candidates.isEmpty {
-                    RoofBanner(cutoff: roofCutoff).padding(.bottom, 4)
-                }
                 if !shifts.sweep.candidates.isEmpty {
                     SweepBanner(sweep: shifts.sweep) { panel = .sweep }
                         .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -91,6 +103,7 @@ struct MapScreen: View {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: toastText)
+        .onChange(of: store.version, initial: true) { people.update(from: store.pins) }
         .animation(.easeInOut(duration: 0.25), value: shifts.sweep.candidates.isEmpty)
         .onAppear {
             controller.onMessage = { showToast($0) }
@@ -99,7 +112,7 @@ struct MapScreen: View {
             shifts.sweep.toast = { showToast($0) }
         }
         .sheet(item: $selected) { sel in
-            PinSheet(store: store, pinId: sel.id, toast: showToast) { selected = nil }
+            PinSheet(store: store, people: people, pinId: sel.id, toast: showToast) { selected = nil }
                 .presentationDetents([.fraction(0.62), .large])
                 .presentationDragIndicator(.visible)
                 .presentationBackground(Theme.bg)
@@ -111,7 +124,7 @@ struct MapScreen: View {
             case .sweep:
                 SweepReviewSheet(sweep: shifts.sweep).presentationDetents([.medium, .large])
             case .layers:
-                LayersSheet(basemap: $basemapRaw, tools: tools, cutoff: roofCutoff, zipAdded: { rect in
+                LayersSheet(basemap: $basemapRaw, colorBy: $colorByRaw, tools: tools, zipAdded: { rect in
                     panel = nil
                     controller.show(rect)
                 }, toast: showToast)
@@ -229,6 +242,28 @@ struct MapScreen: View {
         }
     }
 
+    /// Person view: one chip per person, counting the pins the status chips let through.
+    private var peopleChips: some View {
+        var counts: [String: Int] = [:]
+        for p in store.pins.values where !store.hidden.contains(p.status) { counts[people.key(p), default: 0] += 1 }
+        let keys = people.order.filter { counts[$0] != nil || $0 == people.uid }
+            + (counts[People.unknown] != nil ? [People.unknown] : [])
+        return ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                Chip(label: "Everyone", count: counts.values.reduce(0, +), color: nil, active: people.hidden.isEmpty) {
+                    people.hidden = []
+                }
+                ForEach(keys, id: \.self) { k in
+                    Chip(label: people.shortName(k), count: counts[k] ?? 0, color: people.color(k), active: !people.hidden.contains(k)) {
+                        people.toggle(k)
+                    }
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 2)
+        }
+    }
+
     @ViewBuilder private var statusRow: some View {
         if store.sync != .ok || shifts.clockedIn {
             HStack(spacing: 6) {
@@ -268,11 +303,9 @@ struct MapScreen: View {
 
     // MARK: Actions
 
-    private var roofCutoff: Int { session.company?.roofCutoff ?? AppConfig.defaultRoofCutoff }
-
     /// Read here so SwiftUI updates the map when any tool layer changes.
     private var toolsKey: String {
-        "\(tools.drawVersion)-\(tools.routeVersion)-\(tools.zipVersion)-\(tools.roofing)-\(store.zonesVersion)-\(roofCutoff)"
+        "\(tools.drawVersion)-\(tools.routeVersion)-\(tools.zipVersion)-\(tools.showZones)-\(store.zonesVersion)"
     }
 
     private func startDrawing(forRoute: Bool) {

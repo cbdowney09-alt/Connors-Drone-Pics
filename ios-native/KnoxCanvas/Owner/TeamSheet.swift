@@ -10,7 +10,6 @@ struct TeamSheet: View {
     @State private var generating = false
     @State private var removing: Member?
     @State private var name = ""
-    @State private var cutoff = ""
     @State private var sheetsUrl = ""
     @State private var saving = false
     @State private var settingsError = ""
@@ -44,7 +43,6 @@ struct TeamSheet: View {
         .task {
             if let c = session.company {
                 name = c.name
-                cutoff = String(c.roofCutoff)
                 sheetsUrl = c.sheetsUrl
             }
             await team.loadMembers()
@@ -166,9 +164,6 @@ struct TeamSheet: View {
     private var settings: some View {
         Card {
             labeled("Company name") { KnoxField(placeholder: "Company name", text: $name, capitalization: .words) }
-            labeled("Roofing target: homes built in or before") {
-                KnoxField(placeholder: String(AppConfig.defaultRoofCutoff), text: $cutoff, keyboard: .numberPad)
-            }
             labeled("Google Sheets webhook URL (optional)") {
                 KnoxField(placeholder: "https://script.google.com/macros/s/\u{2026}/exec", text: $sheetsUrl,
                           content: .URL, keyboard: .URL, capitalization: .never)
@@ -191,8 +186,8 @@ struct TeamSheet: View {
         Task {
             defer { saving = false }
             do {
-                let (n, c, u) = try await team.saveSettings(name: name, cutoff: cutoff, sheetsUrl: sheetsUrl)
-                session.applyCompanySettings(name: n, roofCutoff: c, sheetsUrl: u)
+                let (n, u) = try await team.saveSettings(name: name, sheetsUrl: sheetsUrl)
+                session.applyCompanySettings(name: n, sheetsUrl: u)
                 name = n; sheetsUrl = u
                 toast("Settings saved")
             } catch { settingsError = error.localizedDescription }

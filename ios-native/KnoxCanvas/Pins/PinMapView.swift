@@ -84,12 +84,15 @@ final class MapController: NSObject, CLLocationManagerDelegate {
 final class PinAnnotation: NSObject, MKAnnotation {
     let id: String
     @objc dynamic var coordinate: CLLocationCoordinate2D
-    var status: PinStatus
+    /// What the color stands for (a status or a person), so clusters can find the majority.
+    var colorKey: String
+    var color: UIColor
 
-    init(_ p: Pin) {
+    init(_ p: Pin, key: String, color: UIColor) {
         id = p.id
         coordinate = p.coordinate
-        status = p.status
+        colorKey = key
+        self.color = color
     }
 }
 
@@ -122,7 +125,7 @@ final class PinDotView: MKAnnotationView {
 
     func refresh() {
         guard let a = annotation as? PinAnnotation else { return }
-        backgroundColor = UIColor(a.status.color)
+        backgroundColor = a.color
     }
 
     /// Fingers are bigger than 16 pt: accept taps within 22 pt of the center.
@@ -131,7 +134,7 @@ final class PinDotView: MKAnnotationView {
     }
 }
 
-/// Overlapping dots merge into a count, colored by the most common status inside.
+/// Overlapping dots merge into a count, colored by the most common status (or person) inside.
 final class PinClusterView: MKAnnotationView {
     static let reuseID = "cluster"
     private let label = UILabel()
@@ -157,13 +160,17 @@ final class PinClusterView: MKAnnotationView {
 
     override func prepareForDisplay() {
         super.prepareForDisplay()
+        refresh()
+    }
+
+    func refresh() {
         guard let cluster = annotation as? MKClusterAnnotation else { return }
         let members = cluster.memberAnnotations.compactMap { $0 as? PinAnnotation }
         label.text = members.count > 999 ? "999+" : "\(members.count)"
-        var tally: [PinStatus: Int] = [:]
-        for m in members { tally[m.status, default: 0] += 1 }
-        let top = tally.max { $0.value < $1.value }?.key ?? .none
-        backgroundColor = UIColor(top.color)
+        var tally: [String: Int] = [:]
+        for m in members { tally[m.colorKey, default: 0] += 1 }
+        let top = tally.max { $0.value < $1.value }?.key
+        backgroundColor = members.first { $0.colorKey == top }?.color ?? UIColor(PinStatus.none.color)
     }
 }
 
@@ -301,13 +308,16 @@ struct PinMapView: UIViewRepresentable {
     /// Passed in (not just read from the store) so SwiftUI re-runs updateUIView on every change.
     let version: Int
     let hidden: Set<PinStatus>
+    let colorBy: ColorBy
+    let people: People
+    /// People's colors, names or hidden set changed.
+    let peopleVersion: Int
     let hasFrame: Bool
     let sweep: SweepTracker
     let sweepVersion: Int
     let tools: MapTools
-    /// Changes whenever any tool layer, the saved zones or the roofing cutoff change.
+    /// Changes whenever any tool layer or the saved zones change.
     let toolsKey: String
-    let roofCutoff: Int
     var onTapPin: (String) -> Void
     var onTapCandidate: (String) -> Void
     var onTapMap: (CLLocationCoordinate2D) -> Void
@@ -365,6 +375,8 @@ struct PinMapView: UIViewRepresentable {
         private var annotations: [String: PinAnnotation] = [:]
         private var lastVersion = -1
         private var lastHidden: Set<PinStatus> = []
+        private var lastColorBy = ColorBy.status
+        private var lastPeople = -1
         private var basemap: Basemap?
         private var candidates: [String: CandidateAnnotation] = [:]
         private var trailLine: MKPolyline?
@@ -376,11 +388,11 @@ struct PinMapView: UIViewRepresentable {
             var overlays: [MKOverlay] = []
             var badges: [BadgeAnnotation] = []
         }
-        private enum Style { case draw, drawLine, routeZone, routeLine, roofTarget, roofOther, zip(UIColor) }
+        private enum Style { case draw, drawLine, routeZone, routeLine, zone, zip(UIColor) }
         private var styles: [ObjectIdentifier: Style] = [:]
-        private var drawLayer = Layer(), routeLayer = Layer(), roofLayer = Layer(), zipLayer = Layer()
+        private var drawLayer = Layer(), routeLayer = Layer(), zoneLayer = Layer(), zipLayer = Layer()
         private var lastDraw = -1, lastRoute = -1, lastZip = -1
-        private var lastRoof = ""
+        private var lastZones = ""
 
         init(_ parent: PinMapView) { self.parent = parent }
 
@@ -401,27 +413,53 @@ struct PinMapView: UIViewRepresentable {
 
         /// Diffs the store's pins against the map's annotations.
         func syncAnnotations(_ map: MKMapView) {
-            let store = parent.store
-            guard store.version != lastVersion || store.hidden != lastHidden else { return }
+            let store = parent.store, people = parent.people, byPerson = parent.colorBy == .person
+            guard store.version != lastVersion || store.hidden != lastHidden || parent.colorBy != lastColorBy
+                    || people.version != lastPeople else { return }
             lastVersion = store.version
             lastHidden = store.hidden
+            lastColorBy = parent.colorBy
+            lastPeople = people.version
+
+            func visible(_ p: Pin) -> Bool {
+                !store.hidden.contains(p.status) && !(byPerson && people.hidden.contains(people.key(p)))
+            }
+            func style(_ p: Pin) -> (String, UIColor) {
+                if byPerson {
+                    let k = people.key(p)
+                    return ("p:" + k, UIColor(people.color(k)))
+                }
+                return (p.status.rawValue, UIColor(p.status.color))
+            }
 
             var add: [PinAnnotation] = []
             var remove: [PinAnnotation] = []
+            var recolored = false
+            defer {
+                if recolored {
+                    for c in map.annotations.compactMap({ $0 as? MKClusterAnnotation }) {
+                        (map.view(for: c) as? PinClusterView)?.refresh()
+                    }
+                }
+            }
             for (id, a) in annotations {
-                guard let p = store.pins[id], !store.hidden.contains(p.status) else {
+                guard let p = store.pins[id], visible(p) else {
                     remove.append(a)
                     annotations[id] = nil
                     continue
                 }
                 if a.coordinate.latitude != p.lat || a.coordinate.longitude != p.lng { a.coordinate = p.coordinate }
-                if a.status != p.status {
-                    a.status = p.status
+                let (key, color) = style(p)
+                if a.colorKey != key || a.color != color {
+                    a.colorKey = key
+                    a.color = color
+                    recolored = true
                     (map.view(for: a) as? PinDotView)?.refresh()
                 }
             }
-            for (id, p) in store.pins where annotations[id] == nil && !store.hidden.contains(p.status) {
-                let a = PinAnnotation(p)
+            for (id, p) in store.pins where annotations[id] == nil && visible(p) {
+                let (key, color) = style(p)
+                let a = PinAnnotation(p, key: key, color: color)
                 annotations[id] = a
                 add.append(a)
             }
@@ -488,22 +526,21 @@ struct PinMapView: UIViewRepresentable {
                 }
                 replace(&routeLayer, with: l, on: map)
             }
-            let roofKey = "\(t.roofing)-\(parent.store.zonesVersion)-\(parent.roofCutoff)"
-            if roofKey != lastRoof {
-                lastRoof = roofKey
+            let zonesKey = "\(t.showZones)-\(parent.store.zonesVersion)"
+            if zonesKey != lastZones {
+                lastZones = zonesKey
                 var l = Layer()
-                if t.roofing {
+                if t.showZones {
                     for z in parent.store.zones {
                         guard let poly = z.polygon else { continue }
-                        let target = (Int(z.year) ?? .max) <= parent.roofCutoff
                         let p = MKPolygon(coordinates: poly, count: poly.count)
-                        l.overlays.append(styled(p, target ? .roofTarget : .roofOther))
-                        let color = UIColor(Color(hex: target ? 0x10b981 : 0x6b7280))
+                        l.overlays.append(styled(p, .zone))
+                        let name = z.name.isEmpty ? "Zone" : z.name
                         l.badges.append(BadgeAnnotation(Self.center(of: p.boundingMapRect),
-                                                        .label("\(z.name.isEmpty ? "Zone" : z.name) \u{00B7} \(z.year)", color)))
+                                                        .label(z.year.isEmpty ? name : "\(name) \u{00B7} \(z.year)", Self.zoneColor)))
                     }
                 }
-                replace(&roofLayer, with: l, on: map)
+                replace(&zoneLayer, with: l, on: map)
             }
             if t.zipVersion != lastZip {
                 lastZip = t.zipVersion
@@ -533,6 +570,8 @@ struct PinMapView: UIViewRepresentable {
             map.addAnnotations(new.badges)
             old = new
         }
+
+        private static let zoneColor = UIColor(Color(hex: 0x06b6d4))
 
         private static func center(of r: MKMapRect) -> CLLocationCoordinate2D {
             MKMapPoint(x: r.midX, y: r.midY).coordinate
@@ -569,8 +608,7 @@ struct PinMapView: UIViewRepresentable {
             case .routeLine:
                 set(orange, width: 2.5, fill: 0, dashed: true)
                 r.strokeColor = orange.withAlphaComponent(0.75)
-            case .roofTarget: set(UIColor(Color(hex: 0x10b981)), width: 2.5, fill: 0.18, dashed: false)
-            case .roofOther: set(UIColor(Color(hex: 0x6b7280)), width: 2.5, fill: 0.06, dashed: true)
+            case .zone: set(Self.zoneColor, width: 2.5, fill: 0.1, dashed: false)
             case let .zip(c): set(c, width: 2, fill: 0.08, dashed: true)
             }
             return r

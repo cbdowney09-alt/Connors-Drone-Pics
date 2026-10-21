@@ -1,8 +1,8 @@
 import SwiftUI
 import MapKit
 
-/// State for the map tools: zone drawing, the route optimizer, roofing target mode and zip
-/// boundaries. Mirrors app.html's "Roofing mode", "Zone drawing", "Route optimizer" and
+/// State for the map tools: zone drawing, the route optimizer, showing saved zones and zip
+/// boundaries. Mirrors app.html's "Zone drawing", "Route optimizer" and
 /// "Zip code overlay" sections. Each group has its own version so the map only redraws
 /// what changed.
 @MainActor @Observable
@@ -124,9 +124,11 @@ final class MapTools {
         d < 1000 ? "\(Int(d.rounded())) m" : String(format: "%.2f km", d / 1000)
     }
 
-    // MARK: Roofing target mode
+    // MARK: Saved neighborhood zones
 
-    var roofing = false
+    /// Shows drawn zones on the map. (Replaces the web's roofing target mode; the app is no
+    /// longer roofing-specific.)
+    var showZones = false
 
     // MARK: Zip boundaries
 

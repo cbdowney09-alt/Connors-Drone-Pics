@@ -14,7 +14,7 @@ final class PinStore {
     private(set) var version = 0
     private(set) var sync: Sync = .ok
     private(set) var zones: [YearZone] = []
-    /// Bumped when zones change so the map redraws roofing-mode polygons.
+    /// Bumped when zones change so the map redraws zone outlines.
     private(set) var zonesVersion = 0
     /// The most recent pins, set once after the first snapshot so the map can frame them.
     var initialFrame: [CLLocationCoordinate2D]?

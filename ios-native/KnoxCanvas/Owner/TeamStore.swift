@@ -95,20 +95,18 @@ final class TeamStore {
     // MARK: Settings
 
     /// Validates like the web, then updates the company doc. Returns the saved values.
-    func saveSettings(name rawName: String, cutoff rawCutoff: String, sheetsUrl rawUrl: String) async throws -> (String, Int, String) {
+    /// `roofCutoff` is left as it is: the app no longer has a roofing mode, but the website still reads it.
+    func saveSettings(name rawName: String, sheetsUrl rawUrl: String) async throws -> (String, String) {
         let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
         let sheetsUrl = rawUrl.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { throw Friendly("Company name can\u{2019}t be empty") }
-        guard let cutoff = Int(rawCutoff.trimmingCharacters(in: .whitespaces)), (1800...2100).contains(cutoff) else {
-            throw Friendly("Enter a valid year for the roofing target")
-        }
         if !sheetsUrl.isEmpty && !sheetsUrl.hasPrefix("https://") {
             throw Friendly("The Sheets URL must start with https://")
         }
-        do { try await Self.serverWrite { try await self.companyDoc.updateData(["name": name, "roofCutoff": cutoff, "sheetsUrl": sheetsUrl]) } }
+        do { try await Self.serverWrite { try await self.companyDoc.updateData(["name": name, "sheetsUrl": sheetsUrl]) } }
         catch let e as Friendly { throw e }
         catch { throw Friendly("Couldn\u{2019}t save (\(Self.describe(error)))") }
-        return (name, cutoff, sheetsUrl)
+        return (name, sheetsUrl)
     }
 
     // MARK: Metrics

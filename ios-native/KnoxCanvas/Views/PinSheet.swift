@@ -3,6 +3,7 @@ import SwiftUI
 /// The bottom sheet for one pin, like the web's #sheet.
 struct PinSheet: View {
     let store: PinStore
+    let people: People
     let pinId: String
     var toast: (String) -> Void
     var close: () -> Void
@@ -60,6 +61,12 @@ struct PinSheet: View {
                 .fixedSize(horizontal: false, vertical: true)
             Text(String(format: "%.5f, %.5f", p.lat, p.lng) + (year.isEmpty ? "" : " \u{00B7} Built \(year)"))
                 .font(.system(size: 14)).foregroundStyle(Theme.muted)
+            if let who = p.personId {
+                HStack(spacing: 6) {
+                    Circle().fill(people.color(who)).frame(width: 10, height: 10)
+                    Text(attribution(p, who)).font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.text)
+                }
+            }
             Button {
                 if let url = zillowURL(p.addr) { openURL(url) }
             } label: {
@@ -70,6 +77,18 @@ struct PinSheet: View {
             .foregroundStyle(Theme.accent)
         }
         .padding(.bottom, 4)
+    }
+
+    /// "Hung by Jake · Oct 12, 2026"
+    private func attribution(_ p: Pin, _ who: String) -> String {
+        let verb = switch p.status {
+        case .hanger: "Hung by"
+        case .none: "Dropped by"
+        default: "Marked by"
+        }
+        let name = who == people.uid ? "you" : people.name(who)
+        let at = p.personAt
+        return at > 0 ? "\(verb) \(name) \u{00B7} \(PinCSV.previewDate(at))" : "\(verb) \(name)"
     }
 
     private func statusButton(_ s: PinStatus, active: Bool) -> some View {

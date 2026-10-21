@@ -1,4 +1,5 @@
 import SwiftUI
+import AuthenticationServices
 
 struct AuthView: View {
     @Environment(SessionStore.self) private var session
@@ -10,7 +11,9 @@ struct AuthView: View {
     @State private var info = ""
     @State private var busy: Busy?
 
-    enum Busy { case login, register, google }
+    @State private var appleNonce = ""
+
+    enum Busy { case login, register, google, apple }
 
     var body: some View {
         ScrollView {
@@ -22,6 +25,25 @@ struct AuthView: View {
                 Card {
                     if registering { registerForm } else { loginForm }
                     divider
+                    SignInWithAppleButton(.continue) { request in
+                        appleNonce = AppleSignIn.makeNonce()
+                        request.requestedScopes = [.fullName, .email]
+                        request.nonce = AppleSignIn.sha256(appleNonce)
+                    } onCompletion: { result in
+                        switch result {
+                        case .success(let auth):
+                            guard let apple = auth.credential as? ASAuthorizationAppleIDCredential else { return }
+                            let nonce = appleNonce
+                            run(.apple) { try await session.signInWithApple(apple, nonce: nonce) }
+                        case .failure(let error):
+                            if !AppleSignIn.isCanceled(error) { setError(error.localizedDescription) }
+                        }
+                    }
+                    .signInWithAppleButtonStyle(.white)
+                    .frame(height: Theme.tapHeight)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.radius))
+                    .disabled(busy != nil)
+                    .opacity(busy == .apple ? 0.6 : 1)
                     KnoxButton(title: "Continue with Google", busyTitle: "Opening Google…", style: .google,
                                busy: busy == .google, action: google)
                     MessageText(error: error, info: info)

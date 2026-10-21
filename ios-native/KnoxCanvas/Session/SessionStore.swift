@@ -2,6 +2,7 @@ import SwiftUI
 import FirebaseAuth
 import FirebaseFirestore
 import GoogleSignIn
+import AuthenticationServices
 
 /// Mirrors app.html's loadSession / setup flow.
 @MainActor @Observable
@@ -121,7 +122,20 @@ final class SessionStore {
     func deleteAccount() async throws {
         guard let user else { return }
         let uid = user.uid
-        if let last = user.metadata.lastSignInDate, Date().timeIntervalSince(last) > 4 * 60 {
+        // Apple accounts confirm with Apple right here: that counts as a fresh sign-in, and the
+        // authorization code lets us revoke the Apple login, which App Store rules require.
+        var appleCode: String?
+        if user.providerData.contains(where: { $0.providerID == "apple.com" }) {
+            do {
+                let (apple, nonce) = try await AppleSignIn.request()
+                try await user.reauthenticate(with: try AppleSignIn.firebaseCredential(apple, nonce: nonce))
+                appleCode = apple.authorizationCode.flatMap { String(data: $0, encoding: .utf8) }
+            } catch let e as Friendly { throw e }
+            catch {
+                if AppleSignIn.isCanceled(error) { throw Friendly("Account not deleted.") }
+                throw Friendly("Couldn\u{2019}t confirm with Apple (\(error.localizedDescription))")
+            }
+        } else if let last = user.metadata.lastSignInDate, Date().timeIntervalSince(last) > 4 * 60 {
             throw Friendly("For security, sign out, sign back in, and then delete your account.")
         }
         // Deleting needs the server: queued deletes could land later and leave half an account.
@@ -138,6 +152,7 @@ final class SessionStore {
             try await db.collection("users").document(uid).delete()
             UserDefaults.standard.removeObject(forKey: "knoxClock_\(uid)")
             UserDefaults.standard.removeObject(forKey: "knoxTrail_\(uid)")
+            if let appleCode { try? await Auth.auth().revokeToken(withAuthorizationCode: appleCode) }
             try await user.delete()
         } catch let e as Friendly {
             throw e
@@ -191,6 +206,22 @@ final class SessionStore {
         do { try await Auth.auth().signIn(with: credential) }
         catch { throw Friendly(friendlyAuthError(error)) }
         return true
+    }
+
+    /// Finishes Sign in with Apple after the system sheet. Apple shares the name only the
+    /// first time, so it becomes the Firebase display name (used to prefill setup).
+    func signInWithApple(_ apple: ASAuthorizationAppleIDCredential, nonce: String) async throws {
+        let credential = try AppleSignIn.firebaseCredential(apple, nonce: nonce)
+        let name = [apple.fullName?.givenName, apple.fullName?.familyName].compactMap { $0 }.joined(separator: " ")
+        if !name.isEmpty { pendingName = name }
+        do {
+            let result = try await Auth.auth().signIn(with: credential)
+            if !name.isEmpty, (result.user.displayName ?? "").isEmpty {
+                let change = result.user.createProfileChangeRequest()
+                change.displayName = name
+                try? await change.commitChanges()
+            }
+        } catch { throw Friendly(friendlyAuthError(error)) }
     }
 
     // MARK: - Setup (create or join a company)

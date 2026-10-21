@@ -160,7 +160,7 @@ as the fallback until that passes.
   - The active shift is also stored in `users/{uid}.activeClockIn`.
   - Drawn zone polygons are saved as `[{lat,lng}]`. The web's `[[lat,lng]]` form is rejected by Firestore, and the web's `pointInPolygon` doesn't read the object form yet.
   - A Google geocode refusal is treated as a failure, not "no houses".
-- Privacy policy for the App Store: `docs/privacy.html` (fill in `CONTACT_EMAIL` before deploying).
+- Privacy policy for the App Store: `docs/privacy.html`.
 
 ## Next steps
 

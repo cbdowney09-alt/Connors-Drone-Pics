@@ -1,0 +1,105 @@
+rules_version = '2';
+
+// KnoxCanvas Firestore rules. Publish in the Firebase console (Firestore Database → Rules)
+// or with `firebase deploy --only firestore:rules`.
+//
+// - Every company belongs to one owner; employees join with a one-time invite code.
+// - New companies start `status: 'pending'` and only a KnoxCanvas admin (a doc in
+//   `admins/{uid}`, added by hand in the console) can approve, pause or resume them.
+//   Companies with no status (made before approvals) count as active.
+// - Members of a company that isn't active can still read the company doc (to see
+//   "waiting for approval" / "paused") but not its pins, shifts or settings.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function me() { return request.auth.uid; }
+    function isAdmin() { return signedIn() && exists(/databases/$(database)/documents/admins/$(me())); }
+
+    function myProfile() { return get(/databases/$(database)/documents/users/$(me())).data; }
+    function hasProfile() { return signedIn() && exists(/databases/$(database)/documents/users/$(me())); }
+    function inCompany(cid) { return hasProfile() && myProfile().get('companyId', '') == cid; }
+
+    function companyDoc(cid) { return get(/databases/$(database)/documents/companies/$(cid)).data; }
+    function isActive(cid) { return companyDoc(cid).get('status', 'active') == 'active'; }
+    function ownsCompany(cid) { return signedIn() && companyDoc(cid).ownerId == me(); }
+
+    // ── Admins: only readable by themselves; created by hand in the console ──
+    match /admins/{uid} {
+      allow get: if signedIn() && me() == uid;
+      allow list, write: if false;
+    }
+
+    // ── Users ──
+    match /users/{uid} {
+      // Yourself, anyone in your company (team list, names on the map), or an admin.
+      allow get: if signedIn() && (me() == uid || inCompany(resource.data.get('companyId', '')) || isAdmin());
+      allow list: if isAdmin() || (hasProfile() && resource.data.get('companyId', '') == myProfile().get('companyId', '-'));
+
+      // Owner: in the same batch as a new pending company they own.
+      // Employee: with a valid, unexpired invite for that company, deleted in the same batch.
+      allow create: if signedIn() && me() == uid && (
+        (request.resource.data.role == 'owner'
+          && getAfter(/databases/$(database)/documents/companies/$(request.resource.data.companyId)).data.ownerId == uid
+          && !exists(/databases/$(database)/documents/companies/$(request.resource.data.companyId)))
+        ||
+        (request.resource.data.role == 'employee'
+          && request.resource.data.inviteCode is string
+          && exists(/databases/$(database)/documents/invites/$(request.resource.data.inviteCode))
+          && get(/databases/$(database)/documents/invites/$(request.resource.data.inviteCode)).data.companyId == request.resource.data.companyId
+          && get(/databases/$(database)/documents/invites/$(request.resource.data.inviteCode)).data.expiresAt > request.time
+          && !existsAfter(/databases/$(database)/documents/invites/$(request.resource.data.inviteCode)))
+      );
+
+      // Your own doc (name, activeClockIn), but never your role or company.
+      allow update: if isAdmin() || (signedIn() && me() == uid
+        && request.resource.data.get('role', '') == resource.data.get('role', '')
+        && request.resource.data.get('companyId', '') == resource.data.get('companyId', ''));
+
+      // Yourself (delete account / start over), the owner removing an employee, or an admin.
+      allow delete: if isAdmin() || (signedIn() && (me() == uid
+        || (resource.data.get('role', '') == 'employee' && ownsCompany(resource.data.get('companyId', '')))));
+    }
+
+    // ── Companies ──
+    match /companies/{cid} {
+      allow get: if isAdmin() || inCompany(cid) || (signedIn() && resource.data.ownerId == me());
+      allow list: if isAdmin();
+
+      // Only as a pending request, owned by the person creating it, who has no company yet.
+      allow create: if signedIn()
+        && request.resource.data.ownerId == me()
+        && request.resource.data.status == 'pending'
+        && !exists(/databases/$(database)/documents/users/$(me()))
+        && getAfter(/databases/$(database)/documents/users/$(me())).data.companyId == cid;
+
+      // Admin: anything (approve, pause, resume, decline). Owner: settings only, never status.
+      allow update: if isAdmin() || (signedIn() && resource.data.ownerId == me()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'sheetsUrl', 'roofCutoff']));
+
+      allow delete: if isAdmin() || (signedIn() && resource.data.ownerId == me());
+
+      // Pins, shifts, settings: members of an active company. Admins can read (counts).
+      // `{coll}/{rest=**}` needs at least one segment; a bare `{sub=**}` would also match
+      // the company doc itself and let members edit it (including its status).
+      match /{coll}/{rest=**} {
+        allow read: if isAdmin() || (inCompany(cid) && isActive(cid));
+        allow write: if inCompany(cid) && isActive(cid);
+      }
+    }
+
+    // ── Invites: one-time join codes ──
+    match /invites/{code} {
+      allow get: if signedIn();
+      allow list: if false;
+      allow create: if signedIn()
+        && request.resource.data.companyId is string
+        && ownsCompany(request.resource.data.companyId)
+        && isActive(request.resource.data.companyId)
+        && request.resource.data.createdBy == me();
+      // The person joining deletes it (single use); the owner can too.
+      allow delete: if signedIn();
+      allow update: if false;
+    }
+  }
+}

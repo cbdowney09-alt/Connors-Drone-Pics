@@ -11,6 +11,7 @@ struct RootView: View {
             case .loadError(let msg): LoadingView(message: msg, failed: true)
             case .signedOut: AuthView()
             case .setup: SetupView()
+            case .locked(let status): LockedView(status: status)
             case .ready: HomeView()
             }
         }

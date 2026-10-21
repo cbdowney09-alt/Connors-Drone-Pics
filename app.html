@@ -41,6 +41,11 @@ body.is-owner .owner-only{display:flex!important}
 .fine{margin-top:18px;font-size:12px;color:var(--text2);text-align:center;max-width:340px;line-height:1.5}
 #loading-msg{font-size:14px;color:var(--text2);text-align:center;max-width:320px;line-height:1.5;margin:16px 0}
 #loading-actions{width:100%;max-width:320px;flex-direction:column;gap:10px}
+#locked-icon{font-size:40px;margin-top:20px}
+#locked-title{font-size:20px;font-weight:700;margin-top:10px;text-align:center}
+#locked-msg{font-size:14px;color:var(--text2);text-align:center;max-width:340px;line-height:1.5;margin:12px 0}
+#locked-email{color:var(--accent);font-weight:600;font-size:15px;margin-bottom:18px;text-decoration:none}
+#locked-actions{width:100%;max-width:320px;display:flex;flex-direction:column;gap:10px}
 .tabs{display:flex;gap:8px}
 .tab{flex:1;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:var(--text2);font-size:13px;font-weight:600;cursor:pointer;text-align:center}
 .tab.active{background:var(--accent);color:#fff;border-color:var(--accent)}
@@ -287,6 +292,19 @@ body.is-owner .owner-only{display:flex!important}
   </div>
 </div>
 
+<!-- Locked: company pending approval, paused or declined -->
+<div id="locked-screen" class="screen">
+  <div class="logo">Knox<span>Canvas</span></div>
+  <div id="locked-icon"></div>
+  <div id="locked-title"></div>
+  <div id="locked-msg"></div>
+  <a id="locked-email" href="#"></a>
+  <div id="locked-actions">
+    <button class="auth-btn primary" id="locked-startover" style="display:none">Start over</button>
+    <button class="auth-btn ghost" id="locked-signout">Sign out</button>
+  </div>
+</div>
+
 <!-- Auth -->
 <div id="auth-screen" class="screen">
   <div class="logo">Knox<span>Canvas</span></div>
@@ -332,8 +350,9 @@ body.is-owner .owner-only{display:flex!important}
     </div>
     <div id="setup-create-section" class="form">
       <input class="auth-input" id="setup-company" type="text" placeholder="Company name">
-      <div class="hint">You'll be the owner. You can invite your canvassers from the menu.</div>
-      <button class="auth-btn primary" id="setup-create-btn">Create company</button>
+      <input class="auth-input" id="setup-phone" type="tel" placeholder="Your phone number" autocomplete="tel">
+      <div class="hint">New companies are approved by KnoxCanvas. We'll call or text you to get set up. Once you're approved, you can invite your canvassers.</div>
+      <button class="auth-btn primary" id="setup-create-btn">Request access</button>
     </div>
     <div id="setup-join-section" class="form" style="display:none">
       <input class="auth-input" id="setup-invite-code" type="text" placeholder="Invite code (e.g. AB12CD34)" autocapitalize="characters" style="text-transform:uppercase;letter-spacing:2px">
@@ -601,6 +620,10 @@ const COLORS = { none:'#6b7280', hanger:'#f59e0b', interest:'#10b981', no:'#ef44
 const LABELS = { none:'Not visited', hanger:'Door hanger', interest:'Interested', no:'Not interested', dnr:'Do not return' };
 const GEO_PROXY = 'https://broken-tree-befb.connorbdowney48.workers.dev';
 const INVITE_DAYS = 7;
+// Company approval: who to contact, and the Apps Script that emails the admin about new
+// requests (empty = no email; requests still show in the iPhone app's Admin screen).
+const SUPPORT_EMAIL = 'connorbdowney48@gmail.com';
+const REQUEST_WEBHOOK = '';
 const OVERPASS = ['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter','https://maps.mail.ru/osm/tools/overpass/api/interpreter','https://overpass.openstreetmap.ru/api/interpreter'];
 const ZIP_COLORS = ['#4f6ef7','#10b981','#f59e0b','#7c3aed','#ef4444','#06b6d4'];
 
@@ -642,7 +665,7 @@ const csvEsc = v => `"${String(v ?? '').replace(/"/g,'""')}"`;
 // ── State ─────────────────────────────────────────────────
 let currentUser = null, profile = null, companyId = null, company = {};
 let pins = {}, markers = {}, neighborhoodYears = [], shifts = [];
-let unsubPins = null;
+let unsubPins = null, unsubCompany = null;
 let hiddenStatuses = new Set(), currentPinId = null, noteDebounce = null, yearDebounce = null;
 let roofingMode = false, zonePolygonLayers = [];
 let drawingMode = false, drawingForRoute = false, drawnPoints = [], drawnPolyline = null, drawnPolygon = null, drawnMarkers = [];
@@ -654,7 +677,7 @@ const isOwner = () => profile?.role === 'owner';
 const myUid = () => currentUser?.uid;
 
 // ── Screens ───────────────────────────────────────────────
-const SCREENS = ['loading-screen','auth-screen','setup-screen','app-root'];
+const SCREENS = ['loading-screen','locked-screen','auth-screen','setup-screen','app-root'];
 function showScreen(id) { SCREENS.forEach(s => { $(s).style.display = s === id ? (s === 'app-root' ? 'block' : 'flex') : 'none'; }); }
 function showLoading(msg) { $('loading-msg').textContent = msg; $('loading-spinner').style.display = 'block'; $('loading-actions').style.display = 'none'; showScreen('loading-screen'); }
 function showLoadingError(msg) { $('loading-msg').textContent = msg; $('loading-spinner').style.display = 'none'; $('loading-actions').style.display = 'flex'; showScreen('loading-screen'); }
@@ -756,6 +779,8 @@ async function loadSession(user) {
       const c = await getDoc(doc(db, 'companies', companyId));
       company = c.exists() ? c.data() : { name: profile.companyName || 'Your company' };
     } catch (e) { company = { name: profile.companyName || 'Your company' }; }
+    watchCompany(companyId);
+    if (companyStatus() !== 'active') { showLocked(companyStatus()); return; }
     enterApp();
   } catch (e) {
     console.error(e);
@@ -777,21 +802,24 @@ $('setup-invite-code').addEventListener('input', e => { e.target.value = e.targe
 $('setup-signout').addEventListener('click', () => signOut(auth));
 
 $('setup-create-btn').addEventListener('click', async () => {
-  const name = $('setup-name').value.trim(), companyName = $('setup-company').value.trim();
+  const name = $('setup-name').value.trim(), companyName = $('setup-company').value.trim(), phone = $('setup-phone').value.trim();
   if (!name || !companyName) { $('setup-err').textContent = 'Enter your name and your company name.'; return; }
-  busy($('setup-create-btn'), true, 'Creating…'); $('setup-err').textContent = '';
+  if (phone.replace(/\D/g, '').length < 10) { $('setup-err').textContent = 'Enter a phone number so we can reach you.'; return; }
+  busy($('setup-create-btn'), true, 'Sending…'); $('setup-err').textContent = '';
   try {
     const companyRef = doc(collection(db, 'companies'));
     const batch = writeBatch(db);
-    batch.set(companyRef, { name: companyName, ownerId: currentUser.uid, roofCutoff: 2012, sheetsUrl: '', createdAt: serverTimestamp() });
+    // New companies wait for KnoxCanvas approval (status 'pending'); the rules only allow creating them that way.
+    batch.set(companyRef, { name: companyName, ownerId: currentUser.uid, roofCutoff: 2012, sheetsUrl: '', createdAt: serverTimestamp(),
+      status: 'pending', ownerName: name, ownerEmail: currentUser.email || '', phone, requestedAt: serverTimestamp() });
     batch.set(doc(db, 'users', currentUser.uid), { name, email: currentUser.email || '', role: 'owner', companyId: companyRef.id, companyName, createdAt: serverTimestamp() });
     await batch.commit();
     pendingName = '';
+    notifyRequest({ company: companyName, companyId: companyRef.id, owner: name, email: currentUser.email || '', phone });
     await loadSession(currentUser);
-    showToast(`Welcome! ${companyName} is set up.`);
   } catch (e) {
     console.error(e);
-    $('setup-err').textContent = e.code === 'permission-denied' ? 'Permission denied — the Firestore security rules need to be published.' : `Couldn\u2019t create the company (${e.code || e.message}).`;
+    $('setup-err').textContent = e.code === 'permission-denied' ? 'Permission denied — the Firestore security rules need to be published.' : `Couldn\u2019t send the request (${e.code || e.message}).`;
   } finally { busy($('setup-create-btn'), false); }
 });
 
@@ -817,6 +845,47 @@ $('setup-join-btn').addEventListener('click', async () => {
   } finally { busy($('setup-join-btn'), false); }
 });
 
+// ── Company approval (pending / paused / declined) ────────
+// Companies made before approvals existed have no status and count as active.
+const companyStatus = () => company?.status || 'active';
+function notifyRequest(d) {
+  if (!REQUEST_WEBHOOK) return;
+  fetch(REQUEST_WEBHOOK, { method:'POST', mode:'no-cors', headers:{ 'Content-Type':'text/plain;charset=utf-8' }, body: JSON.stringify({ action:'companyRequest', source:'website', ...d }) }).catch(() => {});
+}
+function showLocked(status) {
+  const name = company.name || 'Your company';
+  const t = {
+    pending: ['⏳', 'Request sent', `${name} is waiting for approval. We\u2019ll reach out${company.phone ? ' at ' + company.phone : ''} to finish getting you set up. This page opens the map on its own once you\u2019re approved.`],
+    paused: ['⏸️', `${name} is paused`, 'Your team\u2019s account is paused. Your pins and shifts are saved and will all be here when it\u2019s turned back on. Contact KnoxCanvas to get it running again.'],
+    declined: ['✖️', 'Request not approved', 'This company request wasn\u2019t approved. Contact KnoxCanvas with any questions, or start over to join a team with an invite code.'],
+  }[status] || ['⏸️', `${name} isn\u2019t available`, 'Contact KnoxCanvas for help.'];
+  $('locked-icon').textContent = t[0]; $('locked-title').textContent = t[1]; $('locked-msg').textContent = t[2];
+  $('locked-email').textContent = SUPPORT_EMAIL; $('locked-email').href = 'mailto:' + SUPPORT_EMAIL;
+  $('locked-startover').style.display = status === 'declined' ? 'flex' : 'none';
+  showScreen('locked-screen');
+}
+// Approval, pause and resume take effect right away.
+function watchCompany(cid) {
+  if (unsubCompany) unsubCompany();
+  unsubCompany = onSnapshot(doc(db, 'companies', cid), snap => {
+    if (!snap.exists() || cid !== companyId) return;
+    const was = companyStatus();
+    company = { ...company, ...snap.data() };
+    const now = companyStatus();
+    if (was === now) return;
+    if (now === 'active') { enterApp(); return; }
+    // Paused (or otherwise locked) mid-session: stop everything, keep the shift and trail on this device.
+    const user = currentUser;
+    leaveApp(); currentUser = user;
+    loadSession(user);
+  }, e => console.warn('company', e));
+}
+$('locked-signout').addEventListener('click', () => signOut(auth));
+$('locked-startover').addEventListener('click', async () => {
+  try { await deleteDoc(doc(db, 'users', currentUser.uid)); leaveApp(); await loadSession(currentUser); }
+  catch (e) { showToast('Couldn\u2019t start over (' + (e.code || 'error') + ')'); }
+});
+
 // ── App lifecycle ─────────────────────────────────────────
 function enterApp() {
   showScreen('app-root');
@@ -837,6 +906,7 @@ function enterApp() {
 
 function leaveApp() {
   if (unsubPins) { unsubPins(); unsubPins = null; }
+  if (unsubCompany) { unsubCompany(); unsubCompany = null; }
   Object.values(markers).forEach(m => map.removeLayer(m)); markers = {}; pins = {};
   zonePolygonLayers.forEach(l => map.removeLayer(l)); zonePolygonLayers = [];
   clearRoute(true);

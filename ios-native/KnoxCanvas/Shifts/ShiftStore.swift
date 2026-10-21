@@ -9,9 +9,13 @@ struct Shift: Identifiable {
     var durationMs: Int64
     var hangers: Int
     var hangersPerHour: Double
+    var userId: String
+    var userName: String
 
     init(id: String, data d: [String: Any]) {
         self.id = id
+        userId = d["userId"] as? String ?? ""
+        userName = d["userName"] as? String ?? ""
         clockIn = (d["clockIn"] as? NSNumber)?.int64Value ?? 0
         clockOut = (d["clockOut"] as? NSNumber)?.int64Value ?? clockIn
         durationMs = (d["durationMs"] as? NSNumber)?.int64Value ?? max(0, clockOut - clockIn)

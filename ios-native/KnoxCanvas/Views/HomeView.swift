@@ -24,12 +24,18 @@ struct HomeView: View {
             await sh.start()
         }
         .onDisappear { shifts?.pause(); store?.stop(); store = nil; shifts = nil }
+        // Owner edited company settings: new Sheets syncs go to the new URL.
+        .onChange(of: session.company?.sheetsUrl) { _, url in
+            store?.sheetsUrl = url ?? ""
+            shifts?.sheetsUrl = url ?? ""
+        }
     }
 }
 
 private struct SelectedPin: Identifiable { let id: String }
 
 struct MapScreen: View {
+    @Environment(SessionStore.self) private var session
     @Bindable var store: PinStore
     let shifts: ShiftStore
     @State private var controller = MapController()
@@ -41,7 +47,7 @@ struct MapScreen: View {
     @State private var toastText: String?
     @AppStorage("knoxBasemap") private var basemapRaw = Basemap.street.rawValue
 
-    enum Panel: String, Identifiable { case shift, layers, account, sweep; var id: String { rawValue } }
+    enum Panel: String, Identifiable { case shift, layers, account, sweep, team, metrics; var id: String { rawValue } }
 
     private var basemap: Basemap { Basemap(rawValue: basemapRaw) ?? .street }
 
@@ -96,7 +102,11 @@ struct MapScreen: View {
             case .layers:
                 LayersSheet(basemap: $basemapRaw).presentationDetents([.height(250)])
             case .account:
-                AccountSheet(clockedIn: shifts.clockedIn).presentationDetents([.medium])
+                AccountSheet(clockedIn: shifts.clockedIn) { panel = $0 }.presentationDetents([.medium, .large])
+            case .team:
+                TeamSheet(companyId: store.companyId, uid: store.uid).presentationDetents([.large])
+            case .metrics:
+                MetricsSheet(pins: store, companyId: store.companyId, uid: store.uid).presentationDetents([.large])
             }
         }
     }
@@ -391,28 +401,78 @@ struct LayersSheet: View {
 struct AccountSheet: View {
     @Environment(SessionStore.self) private var session
     var clockedIn = false
+    var open: (MapScreen.Panel) -> Void = { _ in }
     @State private var confirmSignOut = false
+    @State private var confirmDelete = false
+    @State private var deleting = false
+    @State private var deleteError = ""
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Account").font(.title2.bold()).foregroundStyle(Theme.text)
-            row("Name", session.profile?.name)
-            row("Email", session.user?.email)
-            row("Company", session.company?.name)
-            row("Role", session.profile?.role)
-            Spacer()
-            KnoxButton(title: "Sign out", style: .ghost) {
-                if clockedIn { confirmSignOut = true } else { session.signOut() }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Account").font(.title2.bold()).foregroundStyle(Theme.text)
+                row("Name", session.profile?.name)
+                row("Email", session.user?.email)
+                row("Company", session.company?.name)
+                row("Role", session.profile?.role)
+                if session.profile?.isOwner == true {
+                    Text("OWNER TOOLS").font(.system(size: 13, weight: .bold)).foregroundStyle(Theme.muted).padding(.top, 8)
+                    menuItem("Team and company settings", "person.2.fill") { open(.team) }
+                    menuItem("Team metrics", "chart.bar.fill") { open(.metrics) }
+                }
+                KnoxButton(title: "Sign out", style: .ghost) {
+                    if clockedIn { confirmSignOut = true } else { session.signOut() }
+                }
+                .padding(.top, 10)
+                MessageText(error: deleteError, info: "")
+                Button(deleting ? "Deleting\u{2026}" : "Delete account") {
+                    deleteError = ""
+                    if clockedIn { deleteError = "Clock out first, then delete your account." } else { confirmDelete = true }
+                }
+                .font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.error)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .disabled(deleting)
             }
+            .padding(20)
         }
         .confirmationDialog("You\u{2019}re still clocked in. Sign out anyway?", isPresented: $confirmSignOut, titleVisibility: .visible) {
             Button("Sign out", role: .destructive) { session.signOut() }
         } message: {
             Text("Your shift keeps running and picks back up when you sign in again.")
         }
-        .padding(20)
+        .confirmationDialog("Permanently delete your account?", isPresented: $confirmDelete, titleVisibility: .visible) {
+            Button("Delete account", role: .destructive) { deleteAccount() }
+        } message: {
+            Text("This can\u{2019}t be undone.")
+        }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Theme.bg)
+    }
+
+    private func menuItem(_ title: String, _ icon: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Image(systemName: icon).font(.system(size: 18)).foregroundStyle(Theme.accent).frame(width: 26)
+                Text(title).font(.system(size: 17, weight: .semibold)).foregroundStyle(Theme.text)
+                Spacer()
+                Image(systemName: "chevron.right").font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.muted)
+            }
+            .padding(.horizontal, 16)
+            .frame(minHeight: Theme.tapHeight)
+            .background(Theme.card, in: RoundedRectangle(cornerRadius: 14))
+            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.border))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func deleteAccount() {
+        deleting = true
+        Task {
+            defer { deleting = false }
+            do { try await session.deleteAccount() }
+            catch { deleteError = error.localizedDescription }
+        }
     }
 
     private func row(_ label: String, _ value: String?) -> some View {

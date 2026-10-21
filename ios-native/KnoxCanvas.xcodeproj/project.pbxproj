@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		02FD54D51714BCAC5BB89A49 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34842738A2986BBA6CFB8722 /* HomeView.swift */; };
 		16B8E61ECC7CF40628EE51D8 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 18C4243D9907702CAD6DFA53 /* FirebaseAuth */; };
+		20A1F803D4F4A7B05E5855CA /* TeamSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 012CD8FACAE9715CA5B7D1BC /* TeamSheet.swift */; };
 		21C7779B29379A4588DBCD6D /* HouseFinder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A435CF5F3E24DDA69B3D805 /* HouseFinder.swift */; };
 		24DAEE85184CE5FDE6E58E3A /* FirebaseBootstrap.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E7F8008F673EE2054EA6D67 /* FirebaseBootstrap.swift */; };
 		27879E1D0F85EA1066B9FFB7 /* ShiftSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = C65CD8D3FEECC01CFE601B69 /* ShiftSheet.swift */; };
@@ -27,6 +28,7 @@
 		A4E30CC8F71CA2AFA31C102B /* AuthView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CC3276B1AE1CEAF5A690036 /* AuthView.swift */; };
 		AA5A0C9565F3B6A836849DE2 /* AppConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FA4FA64718E5507789052AD /* AppConfig.swift */; };
 		AC0286B129218BCAD8B299EF /* SetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC52D208B67A73C72FC9D9DA /* SetupView.swift */; };
+		AC5D6D2A5DA94CE89A04E77E /* TeamStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2EA111A0C170B5467FF4FA79 /* TeamStore.swift */; };
 		BCDFBBAF1257013439169E61 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD737031080C6F0BC0C1480E /* Theme.swift */; };
 		C38FE65707A4CFA795124DBD /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = EAFBD6606E92E216A805A16E /* Assets.xcassets */; };
 		CEE00903C7223474482C42C9 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82BCEBD41AAFCD83446BC04F /* Models.swift */; };
@@ -34,14 +36,17 @@
 		E59E567AE6F33846F72168F9 /* Pin.swift in Sources */ = {isa = PBXBuildFile; fileRef = D038A49430266F730D519377 /* Pin.swift */; };
 		E5CC5C6DF6C8EE105EC2CD44 /* KnoxCanvasApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D630213640615320DC2AEC84 /* KnoxCanvasApp.swift */; };
 		EA4EE002E8E6090DDE8A37FC /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = EE5AB89A05F4FCECA9804504 /* FirebaseFirestore */; };
+		F8EC846FD250016097B2B771 /* MetricsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8340C869CB1819B9E281E12F /* MetricsSheet.swift */; };
 		F8F3988B691E69A87D2A37A0 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 71ECAF4093E94C9DF9124CD3 /* GoogleSignIn */; };
 		F91C28EEC74BAE999D365A4A /* PinStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB7E5F15073BF6AAD5E08458 /* PinStore.swift */; };
 		F985ABBE09B4DBBC477FF3CC /* Controls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C4CAA90E5B11DE14CB3C7E5 /* Controls.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		012CD8FACAE9715CA5B7D1BC /* TeamSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TeamSheet.swift; sourceTree = "<group>"; };
 		0E28D78B76A4EC20A4777D6D /* Geocoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Geocoder.swift; sourceTree = "<group>"; };
 		2A435CF5F3E24DDA69B3D805 /* HouseFinder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseFinder.swift; sourceTree = "<group>"; };
+		2EA111A0C170B5467FF4FA79 /* TeamStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TeamStore.swift; sourceTree = "<group>"; };
 		34842738A2986BBA6CFB8722 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		47EA67B56C23BE5902369F16 /* SessionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionStore.swift; sourceTree = "<group>"; };
 		489A01DBADBA6B07937A6CCF /* PinMapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PinMapView.swift; sourceTree = "<group>"; };
@@ -51,6 +56,7 @@
 		7CC3276B1AE1CEAF5A690036 /* AuthView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthView.swift; sourceTree = "<group>"; };
 		7FA4FA64718E5507789052AD /* AppConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfig.swift; sourceTree = "<group>"; };
 		82BCEBD41AAFCD83446BC04F /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		8340C869CB1819B9E281E12F /* MetricsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetricsSheet.swift; sourceTree = "<group>"; };
 		89F24E5135B8072E265CE868 /* SweepViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SweepViews.swift; sourceTree = "<group>"; };
 		8A0079B8DA8EDE29E204179B /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		903FEC186323142B56EA0C47 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -115,6 +121,16 @@
 				5C4CAA90E5B11DE14CB3C7E5 /* Controls.swift */,
 			);
 			path = Components;
+			sourceTree = "<group>";
+		};
+		24D0692E4BE2FE8365DAB5A1 /* Owner */ = {
+			isa = PBXGroup;
+			children = (
+				8340C869CB1819B9E281E12F /* MetricsSheet.swift */,
+				012CD8FACAE9715CA5B7D1BC /* TeamSheet.swift */,
+				2EA111A0C170B5467FF4FA79 /* TeamStore.swift */,
+			);
+			path = Owner;
 			sourceTree = "<group>";
 		};
 		3044D36E5E8D889EF9FC0D76 /* Simulated Walks */ = {
@@ -182,6 +198,7 @@
 				903FEC186323142B56EA0C47 /* Info.plist */,
 				8C2E1F9A2F8DC01003A2D930 /* App */,
 				1F182F60E6BF7692D53A4715 /* Components */,
+				24D0692E4BE2FE8365DAB5A1 /* Owner */,
 				0D80555BC23819CE25EDBDFA /* Pins */,
 				3174DCC9367B8B84B480B5C1 /* Resources */,
 				3B3D2E04B925CDBE94C8F3F6 /* Session */,
@@ -301,6 +318,7 @@
 				02FD54D51714BCAC5BB89A49 /* HomeView.swift in Sources */,
 				21C7779B29379A4588DBCD6D /* HouseFinder.swift in Sources */,
 				E5CC5C6DF6C8EE105EC2CD44 /* KnoxCanvasApp.swift in Sources */,
+				F8EC846FD250016097B2B771 /* MetricsSheet.swift in Sources */,
 				CEE00903C7223474482C42C9 /* Models.swift in Sources */,
 				E59E567AE6F33846F72168F9 /* Pin.swift in Sources */,
 				844F0449788F947A3F65F749 /* PinMapView.swift in Sources */,
@@ -314,6 +332,8 @@
 				659D018150CAA79EED8045B2 /* SweepGeo.swift in Sources */,
 				2988DF9B9909F4BEE94AEEBE /* SweepTracker.swift in Sources */,
 				667AFCD27B117AD2BB1F2473 /* SweepViews.swift in Sources */,
+				20A1F803D4F4A7B05E5855CA /* TeamSheet.swift in Sources */,
+				AC5D6D2A5DA94CE89A04E77E /* TeamStore.swift in Sources */,
 				BCDFBBAF1257013439169E61 /* Theme.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

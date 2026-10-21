@@ -17,6 +17,8 @@ enum AppConfig {
     }
 
     static let geocodeWorker = URL(string: "https://broken-tree-befb.connorbdowney48.workers.dev")!
+    /// The web app; invite messages point new members here.
+    static let webAppURL = "https://connorsdronepics.com/app.html"
     static let inviteDays = 7
     static let defaultRoofCutoff = 2012
 }

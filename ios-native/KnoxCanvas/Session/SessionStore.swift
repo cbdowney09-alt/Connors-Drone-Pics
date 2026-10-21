@@ -75,6 +75,45 @@ final class SessionStore {
         try? Auth.auth().signOut()
     }
 
+    /// After the owner saves company settings.
+    func applyCompanySettings(name: String, roofCutoff: Int, sheetsUrl: String) {
+        company?.name = name
+        company?.roofCutoff = roofCutoff
+        company?.sheetsUrl = sheetsUrl
+    }
+
+    /// Like the web's delete-account button. An owner must remove their team first; the
+    /// company doc goes with the owner. Checked up front so nothing is deleted when Firebase
+    /// would refuse to delete the login (it needs a sign-in in the last few minutes).
+    func deleteAccount() async throws {
+        guard let user else { return }
+        let uid = user.uid
+        if let last = user.metadata.lastSignInDate, Date().timeIntervalSince(last) > 4 * 60 {
+            throw Friendly("For security, sign out, sign back in, and then delete your account.")
+        }
+        do {
+            if profile?.isOwner == true, let cid = companyId {
+                let members = try await TeamStore.fetchMembers(companyId: cid)
+                if members.count > 1 {
+                    throw Friendly("Remove your team members first (Account \u{2192} Team and company settings), then delete your account.")
+                }
+                try await db.collection("companies").document(cid).delete()
+            }
+            try await db.collection("users").document(uid).delete()
+            UserDefaults.standard.removeObject(forKey: "knoxClock_\(uid)")
+            UserDefaults.standard.removeObject(forKey: "knoxTrail_\(uid)")
+            try await user.delete()
+        } catch let e as Friendly {
+            throw e
+        } catch {
+            if (error as NSError).code == AuthErrorCode.requiresRecentLogin.rawValue {
+                throw Friendly("For security, sign out, sign back in, and then delete your account.")
+            }
+            throw Friendly("Couldn\u{2019}t delete account (\(error.localizedDescription))")
+        }
+        GIDSignIn.sharedInstance.signOut()
+    }
+
     // MARK: - Auth actions (throw friendly messages)
 
     func signIn(email: String, password: String) async throws {

@@ -83,7 +83,11 @@ final class MapController: NSObject, CLLocationManagerDelegate {
 
 final class PinAnnotation: NSObject, MKAnnotation {
     let id: String
-    @objc dynamic var coordinate: CLLocationCoordinate2D
+    @objc dynamic var coordinate: CLLocationCoordinate2D {
+        didSet { point = MKMapPoint(coordinate) }
+    }
+    /// Where the pin sits on the flat map, for the grid clustering.
+    private(set) var point: MKMapPoint
     /// What the color stands for (a status or a person), so clusters can find the majority.
     var colorKey: String
     var color: UIColor
@@ -91,6 +95,7 @@ final class PinAnnotation: NSObject, MKAnnotation {
     init(_ p: Pin, key: String, color: UIColor) {
         id = p.id
         coordinate = p.coordinate
+        point = MKMapPoint(p.coordinate)
         colorKey = key
         self.color = color
     }
@@ -111,9 +116,10 @@ final class PinDotView: MKAnnotationView {
         layer.shadowOpacity = 0.35
         layer.shadowRadius = 1.5
         layer.shadowOffset = .zero
-        clusteringIdentifier = "pin"
-        collisionMode = .circle
-        displayPriority = .defaultHigh
+        // A fixed shadow shape, so iOS doesn't re-trace every dot while the map moves.
+        layer.shadowPath = UIBezierPath(ovalIn: bounds).cgPath
+        // Coordinator.recluster already merges crowded pins, so MapKit doesn't need to hide any.
+        displayPriority = .required
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -134,7 +140,25 @@ final class PinDotView: MKAnnotationView {
     }
 }
 
-/// Overlapping dots merge into a count, colored by the most common status (or person) inside.
+/// Several pins shown as one count bubble (see Coordinator.recluster).
+final class PinCluster: NSObject, MKAnnotation {
+    let id: String
+    let coordinate: CLLocationCoordinate2D
+    let count: Int
+    let color: UIColor
+    /// The members' bounds, to zoom to on tap.
+    let rect: MKMapRect
+
+    init(id: String, coordinate: CLLocationCoordinate2D, count: Int, color: UIColor, rect: MKMapRect) {
+        self.id = id
+        self.coordinate = coordinate
+        self.count = count
+        self.color = color
+        self.rect = rect
+    }
+}
+
+/// Nearby dots merged into a count, colored by the most common status (or person) inside.
 final class PinClusterView: MKAnnotationView {
     static let reuseID = "cluster"
     private let label = UILabel()
@@ -152,8 +176,7 @@ final class PinClusterView: MKAnnotationView {
         label.adjustsFontSizeToFitWidth = true
         label.minimumScaleFactor = 0.6
         addSubview(label)
-        collisionMode = .circle
-        displayPriority = .defaultHigh
+        displayPriority = .required
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -164,13 +187,9 @@ final class PinClusterView: MKAnnotationView {
     }
 
     func refresh() {
-        guard let cluster = annotation as? MKClusterAnnotation else { return }
-        let members = cluster.memberAnnotations.compactMap { $0 as? PinAnnotation }
-        label.text = members.count > 999 ? "999+" : "\(members.count)"
-        var tally: [String: Int] = [:]
-        for m in members { tally[m.colorKey, default: 0] += 1 }
-        let top = tally.max { $0.value < $1.value }?.key
-        backgroundColor = members.first { $0.colorKey == top }?.color ?? UIColor(PinStatus.none.color)
+        guard let c = annotation as? PinCluster else { return }
+        label.text = c.count > 999 ? "999+" : "\(c.count)"
+        backgroundColor = c.color
     }
 }
 
@@ -372,7 +391,12 @@ struct PinMapView: UIViewRepresentable {
     @MainActor
     final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognizerDelegate {
         var parent: PinMapView
+        /// Every visible pin (filters applied), whether or not it's on the map right now.
         private var annotations: [String: PinAnnotation] = [:]
+        /// What's on the map: "p:<pin id>" for single pins, "c:..." for count bubbles.
+        private var shown: [String: MKAnnotation] = [:]
+        /// Bumped when colors change, so count bubbles get redrawn.
+        private var colorGen = 0
         private var lastVersion = -1
         private var lastHidden: Set<PinStatus> = []
         private var lastColorBy = ColorBy.status
@@ -432,19 +456,13 @@ struct PinMapView: UIViewRepresentable {
                 return (p.status.rawValue, UIColor(p.status.color))
             }
 
-            var add: [PinAnnotation] = []
-            var remove: [PinAnnotation] = []
             var recolored = false
             defer {
-                if recolored {
-                    for c in map.annotations.compactMap({ $0 as? MKClusterAnnotation }) {
-                        (map.view(for: c) as? PinClusterView)?.refresh()
-                    }
-                }
+                if recolored { colorGen &+= 1 }
+                recluster(map)
             }
             for (id, a) in annotations {
                 guard let p = store.pins[id], visible(p) else {
-                    remove.append(a)
                     annotations[id] = nil
                     continue
                 }
@@ -459,12 +477,64 @@ struct PinMapView: UIViewRepresentable {
             }
             for (id, p) in store.pins where annotations[id] == nil && visible(p) {
                 let (key, color) = style(p)
-                let a = PinAnnotation(p, key: key, color: color)
-                annotations[id] = a
-                add.append(a)
+                annotations[id] = PinAnnotation(p, key: key, color: color)
             }
+        }
+
+        private struct Cell: Hashable { let x: Int, y: Int }
+
+        /// Puts the pins near the screen on the map. Zoomed out, pins that share a grid square
+        /// (about 56 pt across) become one count bubble; from street level in, every pin shows.
+        /// Much lighter than MapKit's own clustering, which re-sorts every pin on the map on
+        /// every zoom and was laggy with thousands of pins.
+        func recluster(_ map: MKMapView) {
+            guard map.bounds.width > 0 else { return }
+            let visible = map.visibleMapRect
+            let perPoint = visible.size.width / Double(map.bounds.width)   // map points per screen point
+            let lat = MKMapPoint(x: visible.midX, y: visible.midY).coordinate.latitude
+            let metersPerPoint = perPoint / MKMapPointsPerMeterAtLatitude(lat)
+            // Pins a little past the edges too, so a short pan doesn't show empty space.
+            let area = visible.insetBy(dx: -visible.size.width / 2, dy: -visible.size.height / 2)
+
+            var want: [String: MKAnnotation] = [:]
+            if metersPerPoint < 1 {
+                // About 400 m across the screen or closer: houses are far enough apart to tap.
+                for (id, a) in annotations where area.contains(a.point) { want["p:" + id] = a }
+            } else {
+                // A power-of-two cell size, so cells stay put while panning at one zoom.
+                let level = Int(log2(56 * perPoint).rounded())
+                let size = pow(2, Double(level))
+                var cells: [Cell: [PinAnnotation]] = [:]
+                for a in annotations.values where area.contains(a.point) {
+                    cells[Cell(x: Int(floor(a.point.x / size)), y: Int(floor(a.point.y / size))), default: []].append(a)
+                }
+                for (cell, members) in cells {
+                    if members.count == 1 { want["p:" + members[0].id] = members[0]; continue }
+                    var tally: [String: Int] = [:]
+                    var x = 0.0, y = 0.0, rect = MKMapRect.null
+                    for m in members {
+                        tally[m.colorKey, default: 0] += 1
+                        x += m.point.x
+                        y += m.point.y
+                        rect = rect.union(MKMapRect(origin: m.point, size: MKMapSize(width: 1, height: 1)))
+                    }
+                    let top = tally.max { $0.value < $1.value || ($0.value == $1.value && $0.key > $1.key) }!.key
+                    let id = "c:\(level):\(cell.x):\(cell.y):\(members.count):\(top):\(colorGen)"
+                    if let existing = shown[id] { want[id] = existing; continue }
+                    let n = Double(members.count)
+                    want[id] = PinCluster(id: id, coordinate: MKMapPoint(x: x / n, y: y / n).coordinate, count: members.count,
+                                          color: members.first { $0.colorKey == top }!.color, rect: rect)
+                }
+            }
+            let remove = shown.compactMap { want[$0.key] == nil ? $0.value : nil }
+            let add = want.compactMap { shown[$0.key] == nil ? $0.value : nil }
+            shown = want
             if !remove.isEmpty { map.removeAnnotations(remove) }
             if !add.isEmpty { map.addAnnotations(add) }
+        }
+
+        func mapView(_ map: MKMapView, regionDidChangeAnimated animated: Bool) {
+            recluster(map)
         }
 
         /// Candidate rings and the walked trail.
@@ -622,7 +692,7 @@ struct PinMapView: UIViewRepresentable {
                 map.dequeueReusableAnnotationView(withIdentifier: CandidateRingView.reuseID, for: annotation)
             case is PinAnnotation:
                 map.dequeueReusableAnnotationView(withIdentifier: PinDotView.reuseID, for: annotation)
-            case is MKClusterAnnotation:
+            case is PinCluster:
                 map.dequeueReusableAnnotationView(withIdentifier: PinClusterView.reuseID, for: annotation)
             default:
                 nil // the user's blue dot
@@ -636,8 +706,11 @@ struct PinMapView: UIViewRepresentable {
                 parent.onTapCandidate(a.key)
             } else if let a = annotation as? PinAnnotation {
                 parent.onTapPin(a.id)
-            } else if let c = annotation as? MKClusterAnnotation {
-                map.showAnnotations(c.memberAnnotations, animated: true)
+            } else if let c = annotation as? PinCluster {
+                // Zoom to the bubble's pins, at least far enough in that they split apart.
+                let minSide = 300 * MKMapPointsPerMeterAtLatitude(c.coordinate.latitude)
+                let r = c.rect.insetBy(dx: -max(0, minSide - c.rect.size.width) / 2, dy: -max(0, minSide - c.rect.size.height) / 2)
+                map.setVisibleMapRect(r, edgePadding: UIEdgeInsets(top: 190, left: 40, bottom: 120, right: 40), animated: true)
             }
         }
 

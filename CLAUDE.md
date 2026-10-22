@@ -12,6 +12,7 @@ up, create a company and invite their team.
 | `app.html` | **Current app.** One self-contained HTML file (Leaflet + Firebase v10 from CDN). Newest work happens here. |
 | `docs/` | **What Vercel actually serves** (`vercel.json` → `outputDirectory: docs`). `docs/app.html` is a copy of `app.html` (synced Oct 2026). `docs/index.html` is the landing page. |
 | `ios/` | Native iPhone app: SwiftUI + WKWebView wrapper that loads `https://connorsdronepics.com/app.html`, plus native GPS. |
+| `android/` | Android app: Kotlin WebView wrapper around the same page (the Android `ios/`). See `android/README.md`. |
 | `knoxcanvas/` | Abandoned-for-now React/Vite migration (built output in `docs/knoxcanvas/`). Don't touch unless asked. |
 | `test_2.html` | Scratch file. |
 
@@ -169,6 +170,15 @@ Anyone can download the app and make a login, but **new companies are requests**
 - Firestore rules live in `firestore.rules` (publish them in the Firebase console). After editing,
   run the emulator tests: `cd rules-test && npm install && npm test` (needs Java 11+). Never use a bare
   `{sub=**}` under `companies/{cid}`: it also matches the company doc and lets members edit `status`.
+
+## Android app (`android/`) — started Oct 2026
+
+Kotlin WebView wrapper, built in Android Studio (open the `android` folder). **Never compiled yet**: expect small fixes on the first
+build. It speaks the same bridge contract as `ios/`: `BridgeScript.kt` defines `window.webkit.messageHandlers.knox` on top of the
+`knoxAndroid` web-message listener (allowed only for the site's origins), so `app.html` needs no Android-specific code. Shift GPS
+runs under a location foreground service (`TrackingService`, "Recording your route" notification) with only "While using the app"
+permission, with no `ACCESS_BACKGROUND_LOCATION`. Google sign-in uses Credential Manager and needs `AppConfig.GOOGLE_WEB_CLIENT_ID`
+plus the app's SHA-1 in Firebase. The state house-data downloads are iPhone-native only, so Android gets the website's sweep.
 
 ## Native rewrite
 

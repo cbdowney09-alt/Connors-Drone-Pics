@@ -1,0 +1,9 @@
+<resources>
+    <style name="Theme.Knox" parent="Theme.AppCompat.NoActionBar">
+        <item name="colorPrimary">@color/knox_accent</item>
+        <item name="colorAccent">@color/knox_accent</item>
+        <item name="android:windowBackground">@color/knox_bg</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+</resources>

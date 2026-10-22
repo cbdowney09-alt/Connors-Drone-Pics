@@ -1,0 +1,5 @@
+<resources>
+    <!-- Match --bg and the accent in app.html -->
+    <color name="knox_bg">#0F1117</color>
+    <color name="knox_accent">#4F6EF7</color>
+</resources>

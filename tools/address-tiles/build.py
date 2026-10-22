@@ -13,8 +13,10 @@ Tile layout (served by Vercel from docs/, so at https://connorsdronepics.com/add
     index.json                 {"v", "source", "tileDeg", "areas": [...], "tiles": ["ty/tx", ...]}
     {ty}/{tx}.json             ty = floor(lat / tileDeg), tx = floor(lng / tileDeg)
         {"v": 1, "st": "TN", "lat0", "lng0",
-         "s": [street names], "c": ["City 37909", ...],
+         "s": [street names], "c": ["City 37909", ...], "cs": [state per city, when a tile spans states],
          "a": [[dLat, dLng, "number", streetIdx, cityIdx], ...]}   dLat/dLng in 1e-5 degrees from lat0/lng0
+Tiles on a state line hold both states' houses: building the second state merges into the file
+the first one wrote, and "cs" records each city's state ("st" is the first state, for older apps).
 Units in one building are merged into one entry per house number + street.
 """
 import argparse, json, os, re
@@ -37,6 +39,30 @@ def nice(name):
             w = w[:1] + w[1:].lower()
         out.append(w)
     return " ".join(out)
+
+
+def merge(old, new, state):
+    """Combine another state's houses into an existing tile (same lat0/lng0)."""
+    old_states = old.get("cs") or [old["st"]] * len(old["c"])
+    # Drop this state's houses from a previous run, then add the fresh ones.
+    keep = [row for row in old["a"] if old_states[row[4]] != state]
+    streets, cities, states, rows = {}, {}, [], []
+    def add(row, s_name, c_name, st):
+        si = streets.setdefault(s_name, len(streets))
+        if (c_name, st) not in cities:
+            cities[(c_name, st)] = len(cities)
+            states.append(st)
+        rows.append([row[0], row[1], row[2], si, cities[(c_name, st)]])
+    for row in keep:
+        add(row, old["s"][row[3]], old["c"][row[4]], old_states[row[4]])
+    for row in new["a"]:
+        add(row, new["s"][row[3]], new["c"][row[4]], state)
+    first = old["st"] if keep else state
+    out = {"v": 1, "st": first, "lat0": old["lat0"], "lng0": old["lng0"],
+           "s": list(streets), "c": [c for c, _ in cities], "a": rows}
+    if len(set(states)) > 1:
+        out["cs"] = states
+    return out
 
 
 def main():
@@ -89,9 +115,15 @@ def main():
             out.append([round((lat - lat0) * 1e5), round((lng - lng0) * 1e5), str(number), si, ci])
         d = os.path.join(a.out, str(ty))
         os.makedirs(d, exist_ok=True)
-        with open(os.path.join(d, f"{tx}.json"), "w") as f:
-            json.dump({"v": 1, "st": a.state, "lat0": lat0, "lng0": lng0,
-                       "s": list(streets), "c": list(cities), "a": out}, f, separators=(",", ":"))
+        path = os.path.join(d, f"{tx}.json")
+        tile = {"v": 1, "st": a.state, "lat0": lat0, "lng0": lng0,
+                "s": list(streets), "c": list(cities), "a": out}
+        if os.path.exists(path):
+            with open(path) as f:
+                old = json.load(f)
+            tile = merge(old, tile, a.state)
+        with open(path, "w") as f:
+            json.dump(tile, f, separators=(",", ":"))
         tiles.append(f"{ty}/{tx}")
         total += len(out)
 

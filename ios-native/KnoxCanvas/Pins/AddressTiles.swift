@@ -24,7 +24,7 @@ struct TileAddress {
 }
 
 /// House addresses for the route optimizer and the street sweep, so they don't depend on the
-/// public Overpass servers. Tennessee ships inside the app (Resources/addresses.knxa, made by
+/// public Overpass servers. Tennessee and North Carolina ship inside the app (Resources/addresses.knxa, made by
 /// tools/address-tiles/pack.py) and works with no signal. Other states can be served from the
 /// website (/addr/v1/) and are kept on the phone once downloaded.
 actor AddressTiles {
@@ -36,6 +36,8 @@ actor AddressTiles {
     private struct Index: Decodable { let v: Int; let tileDeg: Double; let tiles: [String] }
     private struct Tile: Decodable {
         let st: String
+        /// State per city, on tiles that straddle a state line.
+        let cs: [String]?
         let lat0: Double
         let lng0: Double
         let s: [String]
@@ -149,7 +151,8 @@ actor AddressTiles {
         let houses = t.a.compactMap { r -> TileAddress? in
             guard r.street < t.s.count, r.city < t.c.count else { return nil }
             return TileAddress(lat: t.lat0 + Double(r.dLat) / 1e5, lng: t.lng0 + Double(r.dLng) / 1e5,
-                               number: r.number, street: t.s[r.street], cityZip: t.c[r.city], state: t.st)
+                               number: r.number, street: t.s[r.street], cityZip: t.c[r.city],
+                               state: t.cs.flatMap { r.city < $0.count ? $0[r.city] : nil } ?? t.st)
         }
         if memory.count > 24 { memory.removeAll() }
         memory[key] = houses

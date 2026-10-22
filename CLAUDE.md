@@ -39,9 +39,10 @@ it had already run. The iOS app loads the live URL, so it only picks up changes 
   `https://broken-tree-befb.connorbdowney48.workers.dev` (`?lat=&lng=`). Nominatim is the fallback.
 - Houses / route optimizer: OSM Overpass, with 4 fallback endpoints (`OVERPASS` constant). The
   public servers are often down or "at capacity", so the **iPhone app** reads our own address tiles first.
-  Tennessee ships **inside the app** (`ios-native/KnoxCanvas/Resources/addresses.knxa`, 28 MB, made by
-  `tools/address-tiles/pack.py`) and works with no signal. Other states can be served as tiles from the website:
-  `docs/addr/v1/` (served at `/addr/v1/`). They hold 3.35M Tennessee houses from Overture Maps / the National
+  Tennessee and North Carolina ship **inside the app** (`ios-native/KnoxCanvas/Resources/addresses.knxa`, 73 MB,
+  made by `tools/address-tiles/pack.py --states TN,NC`) and work with no signal. Tiles on a state line hold both
+  states (`cs` = state per city). Other states can be served as tiles from the website:
+  `docs/addr/v1/` (served at `/addr/v1/`). They hold 3.35M Tennessee + 5.23M North Carolina houses from Overture Maps / the National
   Address Database, built by `tools/address-tiles/build.py`; run it again to refresh or add a state. The sweep
   matches tile houses to the walked street names that Apple's reverse geocoder gives for trail points.
 - Zip overlays: Census TIGERweb, with Overpass as the fallback.

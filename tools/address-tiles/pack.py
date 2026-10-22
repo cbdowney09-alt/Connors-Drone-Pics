@@ -29,7 +29,8 @@ def main():
         ty, tx = map(int, key.split("/"))
         with open(os.path.join(a.tiles, str(ty), f"{tx}.json"), "rb") as f:
             raw = f.read()
-        if json.loads(raw).get("st") not in states:
+        t = json.loads(raw)
+        if not ({t.get("st")} | set(t.get("cs", []))) & states:
             continue
         c = zlib.compressobj(9, zlib.DEFLATED, -15)
         blobs.append((ty, tx, c.compress(raw) + c.flush()))

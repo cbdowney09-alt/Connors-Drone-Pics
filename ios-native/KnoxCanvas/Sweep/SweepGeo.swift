@@ -5,6 +5,8 @@ enum SWEEP {
     static let maxAcc = 35.0          // ignore GPS fixes worse than this (m)
     static let minStep = 6.0          // ignore jitter smaller than this (m)
     static let maxWalkSpeed = 3.5     // faster than ~8 mph = driving, not canvassing (m/s)
+    static let speedWindowMs: Int64 = 10_000  // average speed over at least this long, too (iPhone app)
+    static let driveCooldownMs: Int64 = 30_000 // after driving, wait this long on foot before detecting (red lights, parking)
     static let lookupEvery = 120.0    // look up houses after this much walking (m)
     static let lookupMinMs: Int64 = 90_000 // ...or this long, if at least 40 m walked
     static let houseRadius = 45.0     // max distance from trail to a house (m)

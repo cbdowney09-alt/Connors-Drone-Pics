@@ -45,6 +45,12 @@ final class SweepTracker: NSObject, CLLocationManagerDelegate {
     private var busy = false
     /// Live "walked up to a house" check: one lookup at a time; the newest step waits its turn.
     private var nearBusy = false
+    /// Recent fixes (about the last minute, walking or not) for the average-speed check.
+    private var recent: [TrailPoint] = []
+    private var lastDrivingAt: Int64 = .min
+    private var lastWasDriving = false
+    /// Consecutive fixes that each moved faster than walking pace.
+    private var fastSteps = 0
     private var nearNext: [LatLng]?
     private var retryTimer: Timer?
     private var saveTask: Task<Void, Never>?
@@ -81,6 +87,7 @@ final class SweepTracker: NSObject, CLLocationManagerDelegate {
     func start(clockIn: Int64) {
         guard !isOn else { return }
         isOn = true
+        recent = []; lastDrivingAt = .min; lastWasDriving = false; fastSteps = 0
         start = clockIn
         // Pick the trail back up if the app was closed mid-shift.
         trail = []; seen = []; candidates = []
@@ -181,7 +188,7 @@ final class SweepTracker: NSObject, CLLocationManagerDelegate {
         MainActor.assumeIsolated {
             let background = UIApplication.shared.applicationState != .active
             for loc in locations where loc.horizontalAccuracy >= 0 {
-                addPoint(lat: loc.coordinate.latitude, lng: loc.coordinate.longitude, acc: loc.horizontalAccuracy,
+                addPoint(lat: loc.coordinate.latitude, lng: loc.coordinate.longitude, acc: loc.horizontalAccuracy, speed: loc.speed,
                          t: Int64((loc.timestamp.timeIntervalSince1970 * 1000).rounded()))
                 if background { noteBackgroundWalking(loc) }
             }
@@ -189,32 +196,61 @@ final class SweepTracker: NSObject, CLLocationManagerDelegate {
     }
 
     /// app.html's sweepAddPoint.
-    func addPoint(lat: Double, lng: Double, acc: Double, t: Int64) {
+    /// `speed` is the iPhone's own GPS speed in m/s (negative when unknown).
+    func addPoint(lat: Double, lng: Double, acc: Double, speed: Double = -1, t: Int64) {
         guard isOn, lat.isFinite, lng.isFinite, acc <= SWEEP.maxAcc else { return }
         if gps != .on { gps = .on }
         let last = trail.last
-        var driving = false
-        if let last {
-            let d = SweepGeo.dist(last.lat, last.lng, lat, lng)
-            if d < SWEEP.minStep { return }
-            let dt = Double(t - last.t) / 1000
-            driving = d > 25 && dt > 0 && d / dt > SWEEP.maxWalkSpeed
-        }
+        if let last, SweepGeo.dist(last.lat, last.lng, lat, lng) < SWEEP.minStep { return }
         let pt = TrailPoint(lat: lat, lng: lng, t: t)
+        let driving = isDriving(pt, last: last, speed: speed)
         trail.append(pt)
         if driving {
-            // Got in the car: close out the walked stretch and start a new one here.
-            flushSeg()
-            seg = [pt]; segDist = 0; segStart = pt.t
+            // In a car: close out the walked stretch; houses along the road don't count. The
+            // quick step(s) just before this were the car pulling away, not walking.
+            if fastSteps > 1 { seg.removeLast(min(fastSteps - 1, seg.count)) }
+            if !seg.isEmpty { flushSeg() }
+            seg = []; segDist = 0; segStart = 0
+            lastWasDriving = true
         } else {
-            if seg.isEmpty { seg = last.map { [$0] } ?? []; segDist = 0; segStart = pt.t }
+            if seg.isEmpty {
+                // Back on foot: don't stitch the drive onto the new walked stretch.
+                seg = (lastWasDriving ? nil : last).map { [$0] } ?? []; segDist = 0; segStart = pt.t
+            }
+            lastWasDriving = false
             if let prev = seg.last { segDist += SweepGeo.dist(prev.lat, prev.lng, pt.lat, pt.lng) }
             seg.append(pt)
         }
         version &+= 1
         save(now: false)
-        if !driving { checkNear(last.map { [$0.ll, pt.ll] } ?? [pt.ll]) }
+        // The step just walked (never the drive before it). A lone first fix waits for the
+        // next one: until then there's no way to tell walking from driving.
+        // A single quick step is held back too, until the next fix shows walking or driving.
+        if !driving, fastSteps == 0, seg.count >= 2 { checkNear([seg[seg.count - 2].ll, pt.ll]) }
         if segDist >= SWEEP.lookupEvery || (segDist >= 40 && pt.t - segStart >= SWEEP.lookupMinMs) { flushSeg() }
+    }
+
+    /// Driving if the GPS speed, or the average over the last 10+ seconds, is faster than a
+    /// walk, or if the walker was driving within the last 30 seconds (stopped at a light,
+    /// just parked). Car GPS fixes come every second or so, only 10\u{2013}15 m apart, so the
+    /// gap between two fixes alone can't tell a car from a walk.
+    private func isDriving(_ pt: TrailPoint, last: TrailPoint?, speed: Double) -> Bool {
+        recent.append(pt)
+        recent.removeAll { pt.t - $0.t > 60_000 }
+        var fast = speed > SWEEP.maxWalkSpeed
+        if !fast, let past = recent.last(where: { pt.t - $0.t >= SWEEP.speedWindowMs }) {
+            let dt = Double(pt.t - past.t) / 1000
+            fast = dt > 0 && SweepGeo.dist(past.ll, pt.ll) / dt > SWEEP.maxWalkSpeed
+        }
+        if let last {
+            let d = SweepGeo.dist(last.ll, pt.ll), dt = Double(pt.t - last.t) / 1000
+            let stepFast = dt > 0 && d / dt > SWEEP.maxWalkSpeed
+            fastSteps = stepFast ? fastSteps + 1 : 0
+            // One quick step can be a GPS jump; two in a row (or one long one) is a car.
+            if stepFast && (d > 25 || fastSteps >= 2) { fast = true }
+        }
+        if fast { lastDrivingAt = pt.t }
+        return fast || (lastDrivingAt != .min && pt.t - lastDrivingAt < SWEEP.driveCooldownMs)
     }
 
     private func flushSeg() {

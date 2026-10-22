@@ -37,6 +37,8 @@ await t('employee writes zones', assertSucceeds(setDoc(doc(as('emp1'), 'companie
 await t('employee lists team (names on map)', assertSucceeds(getDocs(query(collection(as('emp1'), 'users'), where('companyId', '==', 'legacy')))));
 await t('employee sets activeClockIn', assertSucceeds(setDoc(doc(as('emp1'), 'users/emp1'), { activeClockIn: 123 }, { merge: true })));
 await t('owner saves settings', assertSucceeds(updateDoc(doc(as('owner1'), 'companies/legacy'), { name: 'Jeff Woods Roofing', roofCutoff: 2010, sheetsUrl: 'https://x' })));
+await t('owner sets company states', assertSucceeds(updateDoc(doc(as('owner1'), 'companies/legacy'), { states: ['TN', 'NC'] })));
+await t('employee CANNOT set company states', assertFails(updateDoc(doc(as('emp1'), 'companies/legacy'), { states: ['TX'] })));
 await t('owner creates invite', assertSucceeds(setDoc(doc(as('owner1'), 'invites/NEWCODE1'), { companyId: 'legacy', companyName: 'J', createdBy: 'owner1', createdAt: serverTimestamp(), expiresAt: Timestamp.fromMillis(Date.now() + 1e8) })));
 
 console.log('Nobody can unlock themselves');

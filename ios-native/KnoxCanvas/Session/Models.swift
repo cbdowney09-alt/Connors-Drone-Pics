@@ -37,6 +37,8 @@ struct Company {
     var ownerEmail: String
     var phone: String
     var requestedAt: Date?
+    /// States the company works in ("TN"); every phone on the team downloads their house data.
+    var states: [String]
 
     init(_ d: [String: Any], fallbackName: String = "Your company") {
         name = d["name"] as? String ?? fallbackName
@@ -48,5 +50,6 @@ struct Company {
         ownerEmail = d["ownerEmail"] as? String ?? ""
         phone = d["phone"] as? String ?? ""
         requestedAt = (d["requestedAt"] as? Timestamp)?.dateValue() ?? (d["createdAt"] as? Timestamp)?.dateValue()
+        states = d["states"] as? [String] ?? []
     }
 }

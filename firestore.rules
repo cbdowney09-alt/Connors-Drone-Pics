@@ -73,9 +73,9 @@ service cloud.firestore {
         && !exists(/databases/$(database)/documents/users/$(me()))
         && getAfter(/databases/$(database)/documents/users/$(me())).data.companyId == cid;
 
-      // Admin: anything (approve, pause, resume, decline). Owner: settings only, never status.
+      // Admin: anything (approve, pause, resume, decline). Owner: settings and states only, never status.
       allow update: if isAdmin() || (signedIn() && resource.data.ownerId == me()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'sheetsUrl', 'roofCutoff']));
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'sheetsUrl', 'roofCutoff', 'states']));
 
       allow delete: if isAdmin() || (signedIn() && resource.data.ownerId == me());
 

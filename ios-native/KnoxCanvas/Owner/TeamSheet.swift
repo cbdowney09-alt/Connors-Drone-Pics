@@ -13,6 +13,7 @@ struct TeamSheet: View {
     @State private var sheetsUrl = ""
     @State private var saving = false
     @State private var settingsError = ""
+    @State private var pickingStates = false
 
     init(companyId: String, uid: String) {
         _team = State(initialValue: TeamStore(companyId: companyId, uid: uid))
@@ -28,6 +29,9 @@ struct TeamSheet: View {
 
                 section("Team members")
                 members
+
+                section("States you work in")
+                statesCard
 
                 section("Company settings")
                 settings
@@ -157,6 +161,28 @@ struct TeamSheet: View {
         .frame(minHeight: 64)
         .background(Theme.card, in: RoundedRectangle(cornerRadius: 14))
         .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.border))
+    }
+
+    // MARK: States
+
+    private var statesCard: some View {
+        let codes = session.company?.states ?? []
+        return Card {
+            Text(codes.isEmpty ? "None picked yet. Pick your states so your team\u{2019}s phones download their houses."
+                               : codes.map { StatePacks.shared.name($0) }.joined(separator: ", "))
+                .font(.system(size: 16)).foregroundStyle(codes.isEmpty ? Theme.muted : Theme.text)
+            KnoxButton(title: codes.isEmpty ? "Pick states" : "Change states", style: codes.isEmpty ? .primary : .ghost) {
+                pickingStates = true
+            }
+        }
+        .sheet(isPresented: $pickingStates) {
+            CompanyStatesSheet(initial: codes, title: "States you work in") { picked in
+                try await team.saveStates(picked)
+                session.applyCompanyStates(picked)
+                StatePacks.shared.ensure(picked)
+            }
+            .presentationDetents([.large])
+        }
     }
 
     // MARK: Settings

@@ -38,13 +38,14 @@ it had already run. The iOS app loads the live URL, so it only picks up changes 
 - Geocoding: Google Geocoding API behind the Cloudflare Worker
   `https://broken-tree-befb.connorbdowney48.workers.dev` (`?lat=&lng=`). Nominatim is the fallback.
 - Houses / route optimizer: OSM Overpass, with 4 fallback endpoints (`OVERPASS` constant). The
-  public servers are often down or "at capacity", so the **iPhone app** reads our own address tiles first.
-  Tennessee and North Carolina ship **inside the app** (`ios-native/KnoxCanvas/Resources/addresses.knxa`, 73 MB,
-  made by `tools/address-tiles/pack.py --states TN,NC`) and work with no signal. Tiles on a state line hold both
-  states (`cs` = state per city). Other states can be served as tiles from the website:
-  `docs/addr/v1/` (served at `/addr/v1/`). They hold 3.35M Tennessee + 5.23M North Carolina houses from Overture Maps / the National
-  Address Database, built by `tools/address-tiles/build.py`; run it again to refresh or add a state. The sweep
-  matches tile houses to the walked street names that Apple's reverse geocoder gives for trail points.
+  public servers are often down or "at capacity", so the **iPhone app** uses our own house data instead:
+  **one downloadable file per state** (`XX.knxa`, from Overture Maps / the National Address Database), hosted as
+  assets of the GitHub release `address-data-v1` with a `manifest.json`. The owner picks the company's states
+  (`companies/{id}.states`) and every phone on the team downloads them. Anyone can add more under Account → House data.
+  To rebuild: `tools/address-tiles/extract_us.py`, then `build_all.py`, then `publish.sh`. Re-running publish replaces the
+  files, and phones see "Update". The app keeps nothing built in (about 20 MB). Website tiles at `docs/addr/v1/`
+  (TN + NC) are an older fallback that builds 2.0.0 and 2.0.1(2) still use. The sweep detects houses within
+  `SWEEP.doorRadius` of each GPS step.
 - Zip overlays: Census TIGERweb, with Overpass as the fallback.
 - Google Sheets: an Apps Script webhook (company setting `sheetsUrl`) receives hanger pins and shifts.
 

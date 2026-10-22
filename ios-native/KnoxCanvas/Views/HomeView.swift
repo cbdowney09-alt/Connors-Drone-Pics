@@ -55,10 +55,11 @@ struct MapScreen: View {
     @State private var tools = MapTools()
     @State private var zoneName = ""
     @State private var zoneYear = ""
+    @State private var packs = StatePacks.shared
     @AppStorage("knoxBasemap") private var basemapRaw = Basemap.street.rawValue
     @AppStorage("knoxColorBy") private var colorByRaw = ColorBy.status.rawValue
 
-    enum Panel: String, Identifiable { case shift, layers, account, sweep, team, metrics, route, export, admin; var id: String { rawValue } }
+    enum Panel: String, Identifiable { case shift, layers, account, sweep, team, metrics, route, export, admin, houseData, companyStates; var id: String { rawValue } }
 
     private var basemap: Basemap { Basemap(rawValue: basemapRaw) ?? .street }
     private var colorBy: ColorBy { ColorBy(rawValue: colorByRaw) ?? .status }
@@ -104,6 +105,8 @@ struct MapScreen: View {
         }
         .animation(.easeInOut(duration: 0.2), value: toastText)
         .onChange(of: store.version, initial: true) { people.update(from: store.pins) }
+        .onChange(of: session.company?.states ?? [], initial: false) { _, codes in packs.ensure(codes) }
+        .task { await setUpHouseData() }
         .animation(.easeInOut(duration: 0.25), value: shifts.sweep.candidates.isEmpty)
         .onAppear {
             controller.onMessage = { showToast($0) }
@@ -145,6 +148,17 @@ struct MapScreen: View {
                 ExportSheet(pins: store).presentationDetents([.large])
             case .admin:
                 AdminSheet(uid: store.uid).presentationDetents([.large])
+            case .houseData:
+                HouseDataSheet(companyStates: session.company?.states ?? []).presentationDetents([.large])
+            case .companyStates:
+                CompanyStatesSheet(initial: []) { picked in
+                    let team = TeamStore(companyId: store.companyId, uid: store.uid)
+                    try await team.saveStates(picked)
+                    session.applyCompanyStates(picked)
+                    packs.ensure(picked)
+                }
+                .presentationDetents([.large])
+                .interactiveDismissDisabled(false)
             case .team:
                 TeamSheet(companyId: store.companyId, uid: store.uid).presentationDetents([.large])
             case .metrics:
@@ -267,8 +281,14 @@ struct MapScreen: View {
     }
 
     @ViewBuilder private var statusRow: some View {
-        if store.sync != .ok || shifts.clockedIn {
+        if store.sync != .ok || shifts.clockedIn || packs.isDownloading {
             HStack(spacing: 6) {
+                if let (code, p) = packs.progress.first {
+                    Button { panel = .houseData } label: {
+                        StatusPill(text: "Downloading \(packs.name(code)) houses \(Int(p * 100))%", color: Theme.accent)
+                    }
+                    .buttonStyle(.plain)
+                }
                 if store.sync != .ok {
                     StatusPill(text: syncText, color: store.sync == .error ? PinStatus.no.color : PinStatus.hanger.color)
                 }
@@ -308,6 +328,22 @@ struct MapScreen: View {
     /// Read here so SwiftUI updates the map when any tool layer changes.
     private var toolsKey: String {
         "\(tools.drawVersion)-\(tools.routeVersion)-\(tools.zipVersion)-\(tools.showZones)-\(store.zonesVersion)"
+    }
+
+    /// Downloads the company's states. With none picked yet, the owner is asked once, and
+    /// everyone else gets the state they're standing in.
+    private func setUpHouseData() async {
+        await packs.loadManifest()
+        let codes = session.company?.states ?? []
+        if !codes.isEmpty { packs.ensure(codes); return }
+        let askedKey = "knoxStatesAsked_\(store.companyId)"
+        if session.profile?.isOwner == true, !UserDefaults.standard.bool(forKey: askedKey) {
+            UserDefaults.standard.set(true, forKey: askedKey)
+            try? await Task.sleep(for: .seconds(1))
+            if panel == nil && selected == nil { panel = .companyStates }
+        } else if packs.installed.isEmpty, let here = await StatePacks.currentState() {
+            packs.ensure([here])
+        }
     }
 
     private func startDrawing(forRoute: Bool) {
@@ -495,6 +531,7 @@ struct AccountSheet: View {
                     menuItem("Admin: companies", "building.2.fill") { open(.admin) }
                 }
                 Text("DATA").font(.system(size: 13, weight: .bold)).foregroundStyle(Theme.muted).padding(.top, 8)
+                menuItem("House data (states)", "house.fill") { open(.houseData) }
                 menuItem("Export pins (CSV)", "square.and.arrow.up") { open(.export) }
                 KnoxButton(title: "Sign out", style: .ghost) {
                     if clockedIn { confirmSignOut = true } else { session.signOut() }

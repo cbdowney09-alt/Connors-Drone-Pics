@@ -109,6 +109,13 @@ final class TeamStore {
         return (name, sheetsUrl)
     }
 
+    /// The company's states (house data every phone on the team downloads).
+    func saveStates(_ codes: [String]) async throws {
+        do { try await Self.serverWrite { try await self.companyDoc.updateData(["states": codes]) } }
+        catch let e as Friendly { throw e }
+        catch { throw Friendly("Couldn\u{2019}t save (\(Self.describe(error)))") }
+    }
+
     // MARK: Metrics
 
     func loadMetrics() async {

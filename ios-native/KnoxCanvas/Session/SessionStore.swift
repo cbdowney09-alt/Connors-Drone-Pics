@@ -111,6 +111,8 @@ final class SessionStore {
     }
 
     /// After the owner saves company settings.
+    func applyCompanyStates(_ codes: [String]) { company?.states = codes }
+
     func applyCompanySettings(name: String, sheetsUrl: String) {
         company?.name = name
         company?.sheetsUrl = sheetsUrl

@@ -107,6 +107,11 @@ While a canvasser is **clocked in**, GPS builds a walking trail. Code is in the
   within `SWEEP.doorRadius` (default 20 m, set in the Shift screen: 15/20/30/45 m) becomes a candidate right away.
   The 120 m stretch lookups still run and catch anything missed offline. The first field test (Oct 2026) found
   nothing with the old method, because Overpass was down and the tiles weren't deployed yet.
+- **Website, same as the iPhone (Oct 2026):** `app.html` reads the same `/addr/v1/` tiles (TN + NC) and lights up
+  houses within `SWEEP.doorRadius` on every walking step (`sweepCheckNear`, `tileHousesNear`). It saves the tiles in Cache Storage
+  (`knox-addr-v1`) for offline use, and has the Shift-panel radius picker (`knoxDoorRadius` in localStorage) and the iPhone 2.0.1 driving
+  checks (`sweepIsDriving`). Outside tile areas it falls back to Overpass/Google as before. In a browser, a Wake Lock keeps the screen on
+  while clocked in (browsers stop GPS when the screen sleeps). `docs/manifest.webmanifest` lets Android Chrome install it (Account → Install).
 - **Not yet field-tested against real OSM data.** It was tested only with simulated data. First real
   walks should check how many houses get found in Knoxville and Tennessee Ridge, and whether the
   Google fallback fills the gaps.

@@ -2,44 +2,284 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>KnoxCanvas</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>KnoxCanvas · Door-to-door canvassing tracker</title>
+<meta name="description" content="KnoxCanvas maps every house your crew knocks, marks door hangers automatically as they walk, and shows owners the hours and results of every shift.">
+<meta name="theme-color" content="#0f1117">
+<meta property="og:title" content="KnoxCanvas">
+<meta property="og:description" content="Every door your crew knocks, on one map. Automatic door hangers, shift tracking and team metrics for door-to-door companies.">
+<meta property="og:image" content="https://knoxcanvas.app/icons/icon-512.png">
+<meta property="og:url" content="https://knoxcanvas.app/">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="manifest" href="manifest.webmanifest">
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
-  --bg:#0f1117;--surface:#1a1d27;--surface2:#22253a;
-  --border:rgba(255,255,255,0.08);--text:#f0f2ff;--text2:#8b90b0;--accent:#4f6ef7;
+  --bg:#0f1117;--surface:#1a1d27;--surface2:#22253a;--border:rgba(255,255,255,0.08);
+  --text:#f0f2ff;--text2:#a3a8c3;--accent:#4f6ef7;
+  --c-none:#6b7280;--c-hanger:#f59e0b;--c-interest:#10b981;--c-no:#ef4444;--c-dnr:#7c3aed;
 }
-html,body{height:100%;width:100%;background:var(--bg);font-family:'SF Pro Display',-apple-system,BlinkMacSystemFont,sans-serif;color:var(--text)}
-body{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px;min-height:100vh}
-#logo{font-size:34px;font-weight:800;letter-spacing:-0.5px;margin-bottom:6px}
-#logo span{color:var(--accent)}
-#tagline{font-size:14px;color:var(--text2);margin-bottom:40px;text-align:center}
-#buttons{width:100%;max-width:340px;display:flex;flex-direction:column;gap:14px}
-.landing-btn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;border:none;border-radius:14px;padding:16px;font-size:16px;font-weight:600;cursor:pointer;text-decoration:none;-webkit-appearance:none}
-.landing-btn.primary{background:var(--accent);color:#fff}
-.landing-btn.secondary{background:var(--surface);color:var(--text);border:1px solid var(--border)}
-.landing-btn:active{opacity:0.85}
-#footnote{margin-top:28px;font-size:12px;color:var(--text2);text-align:center;max-width:300px}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',sans-serif;line-height:1.55;-webkit-font-smoothing:antialiased}
+a{color:inherit;text-decoration:none}
+.wrap{max-width:1080px;margin:0 auto;padding:0 20px}
+
+/* Nav */
+nav{position:sticky;top:0;z-index:10;background:rgba(15,17,23,0.85);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid var(--border)}
+nav .wrap{display:flex;align-items:center;justify-content:space-between;height:60px}
+.logo{font-size:22px;font-weight:800;letter-spacing:-0.5px}
+.logo span{color:var(--accent)}
+.nav-links{display:flex;align-items:center;gap:22px;font-size:15px;color:var(--text2)}
+.nav-links a:hover{color:var(--text)}
+.nav-links .btn{color:#fff}
+@media (max-width:640px){.nav-links .hide-sm{display:none}}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border-radius:12px;padding:14px 22px;font-size:16px;font-weight:650;min-height:50px;border:1px solid transparent;transition:opacity .15s}
+.btn:hover{opacity:.9}
+.btn.primary{background:var(--accent);color:#fff}
+.btn.ghost{background:var(--surface);border-color:var(--border);color:var(--text)}
+.btn.small{padding:8px 16px;min-height:38px;font-size:14px;border-radius:10px}
+
+/* Hero */
+.hero{padding:64px 0 40px}
+.hero .wrap{display:grid;grid-template-columns:1.1fr 0.9fr;gap:48px;align-items:center}
+.eyebrow{display:inline-block;font-size:13px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--accent);background:rgba(79,110,247,0.12);border-radius:999px;padding:6px 12px;margin-bottom:18px}
+h1{font-size:clamp(36px,6vw,58px);line-height:1.05;letter-spacing:-1.5px;font-weight:800}
+h1 em{font-style:normal;color:var(--c-hanger)}
+.lead{font-size:clamp(17px,2.2vw,20px);color:var(--text2);margin:20px 0 28px;max-width:540px}
+.cta{display:flex;flex-wrap:wrap;gap:12px}
+.platforms{margin-top:18px;font-size:14px;color:var(--text2)}
+
+/* Phone mockup */
+.phone{position:relative;width:min(300px,100%);aspect-ratio:9/18.5;margin:0 auto;border-radius:44px;background:#05060a;padding:10px;box-shadow:0 30px 80px rgba(0,0,0,0.55),0 0 0 1px rgba(255,255,255,0.08)}
+.screen{position:relative;width:100%;height:100%;border-radius:34px;overflow:hidden;background:#1b1f2a}
+.map{position:absolute;inset:0;background:
+  linear-gradient(90deg,transparent 47%,#2b3142 47%,#2b3142 53%,transparent 53%) 0 0/100% 100%,
+  linear-gradient(0deg,transparent 30%,#2b3142 30%,#2b3142 34%,transparent 34%) 0 0/100% 100%,
+  linear-gradient(0deg,transparent 72%,#2b3142 72%,#2b3142 76%,transparent 76%) 0 0/100% 100%,
+  linear-gradient(90deg,transparent 14%,#262b3a 14%,#262b3a 16%,transparent 16%) 0 0/100% 100%,
+  #1b1f2a}
+.street-name{position:absolute;font-size:9px;color:#6b7290;font-weight:600;letter-spacing:.3px}
+.dot{position:absolute;width:13px;height:13px;border-radius:50%;border:2px solid #fff;transform:translate(-50%,-50%);box-shadow:0 1px 3px rgba(0,0,0,.4)}
+.ring{position:absolute;width:20px;height:20px;border-radius:50%;border:2.5px dashed var(--c-hanger);background:rgba(245,158,11,0.3);transform:translate(-50%,-50%)}
+.trail{position:absolute;left:50%;top:22%;width:6px;height:52%;margin-left:-3px;border-radius:3px;background:rgba(79,110,247,0.5)}
+.me{position:absolute;left:50%;top:22%;width:16px;height:16px;border-radius:50%;background:var(--accent);border:3px solid #fff;transform:translate(-50%,-50%);box-shadow:0 0 0 8px rgba(79,110,247,0.25)}
+.search{position:absolute;top:34px;left:12px;right:12px;height:36px;border-radius:12px;background:rgba(26,29,39,0.95);border:1px solid var(--border);font-size:11px;color:var(--text2);display:flex;align-items:center;padding:0 12px}
+.chips{position:absolute;top:78px;left:12px;right:0;display:flex;gap:6px;overflow:hidden}
+.chip{flex:none;font-size:9.5px;font-weight:600;padding:5px 9px;border-radius:999px;background:rgba(26,29,39,0.95);border:1px solid var(--border);display:flex;align-items:center;gap:5px}
+.chip i{width:7px;height:7px;border-radius:50%;display:inline-block}
+.banner{position:absolute;left:10px;right:10px;bottom:62px;border-radius:16px;background:rgba(26,29,39,0.97);border:1px solid var(--border);padding:11px 12px;box-shadow:0 8px 24px rgba(0,0,0,.4)}
+.banner b{display:block;font-size:12px}
+.banner small{display:block;font-size:9.5px;color:var(--text2);margin:2px 0 8px}
+.banner span{display:block;text-align:center;font-size:11.5px;font-weight:700;background:var(--c-hanger);color:#111;border-radius:9px;padding:8px}
+.tabbar{position:absolute;left:0;right:0;bottom:0;height:52px;background:rgba(15,17,23,0.97);border-top:1px solid var(--border);display:grid;grid-template-columns:repeat(5,1fr);font-size:8.5px;color:var(--text2);text-align:center;padding-top:9px}
+.tabbar .on{color:var(--c-interest);font-weight:700}
+
+/* Sections */
+section{padding:56px 0}
+.section-head{max-width:640px;margin-bottom:32px}
+h2{font-size:clamp(28px,4vw,38px);letter-spacing:-0.8px;line-height:1.15;font-weight:800}
+.section-head p{color:var(--text2);font-size:17px;margin-top:10px}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:18px;padding:22px}
+.card .ic{width:42px;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:21px;margin-bottom:14px}
+.card h3{font-size:18px;margin-bottom:6px;letter-spacing:-0.2px}
+.card p{color:var(--text2);font-size:15px}
+
+.statuses{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.statuses span{font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:6px;background:var(--surface2);border-radius:999px;padding:5px 11px}
+.statuses i{width:9px;height:9px;border-radius:50%;display:inline-block}
+
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;counter-reset:s}
+.step{position:relative;padding:22px;border-radius:18px;border:1px solid var(--border)}
+.step::before{counter-increment:s;content:counter(s);display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:50%;background:var(--accent);color:#fff;font-weight:800;margin-bottom:14px}
+.step h3{font-size:18px;margin-bottom:6px}
+.step p{color:var(--text2);font-size:15px}
+
+.cta-band{background:linear-gradient(135deg,rgba(79,110,247,0.18),rgba(245,158,11,0.12));border:1px solid var(--border);border-radius:24px;padding:40px 28px;text-align:center}
+.cta-band p{color:var(--text2);font-size:17px;margin:10px auto 24px;max-width:520px}
+.cta-band .cta{justify-content:center}
+
+footer{border-top:1px solid var(--border);padding:28px 0 calc(28px + env(safe-area-inset-bottom));color:var(--text2);font-size:14px}
+footer .wrap{display:flex;flex-wrap:wrap;gap:12px 24px;justify-content:space-between;align-items:center}
+footer nav{all:unset;display:flex;gap:20px;flex-wrap:wrap}
+footer a:hover{color:var(--text)}
+
+@media (max-width:860px){
+  .hero .wrap{grid-template-columns:1fr;gap:40px}
+  .grid,.steps{grid-template-columns:1fr 1fr}
+}
+@media (max-width:560px){
+  .hero{padding-top:40px}
+  .grid,.steps{grid-template-columns:1fr}
+  .cta .btn{flex:1 1 100%}
+  section{padding:44px 0}
+}
 </style>
 </head>
 <body>
-  <div id="logo">Knox<span>Canvas</span></div>
-  <div id="tagline">Door-to-door sales tracking</div>
 
-  <div id="buttons">
-    <a class="landing-btn primary" href="app.html">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
-      Login
-    </a>
-    <a class="landing-btn secondary" href="docs/test.html">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-      Test Tool
-    </a>
+<nav>
+  <div class="wrap">
+    <a class="logo" href="/">Knox<span>Canvas</span></a>
+    <div class="nav-links">
+      <a class="hide-sm" href="#features">Features</a>
+      <a class="hide-sm" href="#how">How it works</a>
+      <a class="btn primary small" href="app.html">Sign in</a>
+    </div>
   </div>
+</nav>
 
-  <div id="footnote">Test Tool works without an account — search zip codes and check house ages.</div>
+<header class="hero">
+  <div class="wrap">
+    <div>
+      <span class="eyebrow">For door-to-door teams</span>
+      <h1>Every door your crew knocks, <em>on one map.</em></h1>
+      <p class="lead">KnoxCanvas marks door hangers automatically as your canvassers walk, keeps the whole team on a shared map, and shows owners the hours and results of every shift.</p>
+      <div class="cta">
+        <a class="btn primary" href="app.html">Get started</a>
+        <a class="btn ghost" href="#how">See how it works</a>
+      </div>
+      <p class="platforms">iPhone app · Android and any phone through the web app</p>
+    </div>
+
+    <div class="phone" role="img" aria-label="The KnoxCanvas map: colored pins on houses, the canvasser's walked route, and a banner offering to mark six houses as door hangers">
+      <div class="screen">
+        <div class="map"></div>
+        <span class="street-name" style="left:52%;top:68%;writing-mode:vertical-rl">OAK ST</span>
+        <span class="street-name" style="left:4%;top:64%">MAPLE AVE</span>
+        <div class="trail"></div>
+        <!-- pins along the street -->
+        <div class="dot" style="left:35%;top:16%;background:var(--c-hanger)"></div>
+        <div class="dot" style="left:65%;top:14%;background:var(--c-interest)"></div>
+        <div class="dot" style="left:30%;top:25%;background:var(--c-hanger)"></div>
+        <div class="dot" style="left:68%;top:24%;background:var(--c-no)"></div>
+        <div class="dot" style="left:24%;top:78%;background:var(--c-hanger)"></div>
+        <div class="dot" style="left:40%;top:82%;background:var(--c-dnr)"></div>
+        <div class="dot" style="left:70%;top:84%;background:var(--c-hanger)"></div>
+        <div class="dot" style="left:84%;top:79%;background:var(--c-none)"></div>
+        <div class="dot" style="left:8%;top:44%;background:var(--c-interest)"></div>
+        <!-- houses just walked past -->
+        <div class="ring" style="left:36%;top:38%"></div>
+        <div class="ring" style="left:64%;top:36%"></div>
+        <div class="ring" style="left:35%;top:47%"></div>
+        <div class="ring" style="left:65%;top:46%"></div>
+        <div class="ring" style="left:36%;top:57%"></div>
+        <div class="ring" style="left:64%;top:58%"></div>
+        <div class="me"></div>
+        <div class="search">🔍&nbsp; Search an address</div>
+        <div class="chips">
+          <span class="chip"><i style="background:var(--c-hanger)"></i>Door hanger 214</span>
+          <span class="chip"><i style="background:var(--c-interest)"></i>Interested 18</span>
+          <span class="chip"><i style="background:var(--c-no)"></i>Not interested 41</span>
+        </div>
+        <div class="banner">
+          <b>🏠 6 houses passed · Oak St</b>
+          <small>Tap an orange ring to leave a house out.</small>
+          <span>Mark 6 as hangers</span>
+        </div>
+        <div class="tabbar">
+          <div class="on">● 1:42:07</div><div>Route</div><div>Zone</div><div>Layers</div><div>Account</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<section id="features">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>Built for the street, not the office</h2>
+      <p>Big buttons, one hand, bright sun, bad signal. Canvassers spend their time at doors, not typing.</p>
+    </div>
+    <div class="grid">
+      <div class="card">
+        <div class="ic" style="background:rgba(245,158,11,0.15)">🏠</div>
+        <h3>Automatic door hangers</h3>
+        <p>While clocked in, the phone's GPS lights up every house the canvasser walks up to. One tap marks the whole street as door hangers.</p>
+      </div>
+      <div class="card">
+        <div class="ic" style="background:rgba(79,110,247,0.15)">🗺️</div>
+        <h3>One shared map</h3>
+        <p>Everyone in your company sees every pin, colored by status or by who placed it, so nobody knocks the same door twice.</p>
+        <div class="statuses">
+          <span><i style="background:var(--c-hanger)"></i>Door hanger</span>
+          <span><i style="background:var(--c-interest)"></i>Interested</span>
+          <span><i style="background:var(--c-dnr)"></i>Do not return</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="ic" style="background:rgba(16,185,129,0.15)">⏱️</div>
+        <h3>Shifts and team metrics</h3>
+        <p>Clock in and out from the app. Owners see hours, door hangers, hangers per hour and the route walked for every shift.</p>
+      </div>
+      <div class="card">
+        <div class="ic" style="background:rgba(124,58,237,0.15)">📶</div>
+        <h3>Works with no signal</h3>
+        <p>Download house data for the states you work in, nearly all of the U.S. Pins save on the phone and sync when signal comes back.</p>
+      </div>
+      <div class="card">
+        <div class="ic" style="background:rgba(239,68,68,0.15)">🧭</div>
+        <h3>Routes and zones</h3>
+        <p>Draw a neighborhood and get a walking route through the houses you haven't visited yet. Tag zones with the year the houses were built.</p>
+      </div>
+      <div class="card">
+        <div class="ic" style="background:rgba(6,182,212,0.15)">📊</div>
+        <h3>Your data, your way</h3>
+        <p>Export pins and shifts to CSV any time, or send door hangers and shifts straight to a Google Sheet.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="how">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>Up and running in a day</h2>
+      <p>No hardware, no training binder. If your crew can use a phone map, they can use KnoxCanvas.</p>
+    </div>
+    <div class="steps">
+      <div class="step">
+        <h3>Request access</h3>
+        <p>Create an account, choose "I'm the owner" and name your company. We'll reach out and approve you, usually within a business day.</p>
+      </div>
+      <div class="step">
+        <h3>Invite your crew</h3>
+        <p>Make a join code in the app and text it to your team. Pick your states, and every phone downloads its house data automatically.</p>
+      </div>
+      <div class="step">
+        <h3>Clock in and knock</h3>
+        <p>Canvassers clock in and walk. Houses light up as they pass, and you watch the map and the numbers fill in.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="cta-band">
+      <h2>See it on your own street</h2>
+      <p>Request access for your company, or reach out and we'll set you up with a demo.</p>
+      <div class="cta">
+        <a class="btn primary" href="app.html">Request access</a>
+        <a class="btn ghost" href="mailto:connorbdowney48@gmail.com?subject=KnoxCanvas%20demo">Contact us</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>© 2026 KnoxCanvas</span>
+    <nav>
+      <a href="support.html">Support</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="app.html">Sign in</a>
+    </nav>
+  </div>
+</footer>
+
 </body>
 </html>

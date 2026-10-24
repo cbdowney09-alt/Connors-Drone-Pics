@@ -240,15 +240,14 @@ class MainActivity : AppCompatActivity(), LocationBridge.Host {
     /** Our own site and Firebase auth stay inside the app; everything else (Zillow, etc.) opens in the browser. */
     private fun isInternal(uri: Uri): Boolean {
         val host = uri.host?.lowercase() ?: ""
-        val site = bareHost(Uri.parse(AppConfig.APP_URL).host)
-        return bareHost(host) == site || host.endsWith(".$site")
+        return AppConfig.APP_ORIGINS.any { bareHost(Uri.parse(it).host) == bareHost(host) }
             || host.endsWith(".vercel.app")
             || host.endsWith(".firebaseapp.com") || host.endsWith(".web.app")
     }
 
     private fun isAppPage(url: String?): Boolean {
         val uri = Uri.parse(url ?: return false)
-        return uri.scheme == "https" && bareHost(uri.host) == bareHost(Uri.parse(AppConfig.APP_URL).host)
+        return uri.scheme == "https" && AppConfig.APP_ORIGINS.any { bareHost(Uri.parse(it).host) == bareHost(uri.host) }
     }
 
     /** Firebase's Google sign-in pages (popup or redirect) and Google's own login page. */

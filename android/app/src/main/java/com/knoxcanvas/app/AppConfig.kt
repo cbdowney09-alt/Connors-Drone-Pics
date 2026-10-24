@@ -2,10 +2,13 @@ package com.knoxcanvas.app
 
 object AppConfig {
     /** Where the app loads KnoxCanvas from. Change this if you host app.html somewhere else. */
-    const val APP_URL = "https://connorsdronepics.com/app.html"
+    const val APP_URL = "https://knoxcanvas.app/app.html"
 
     /** Origins allowed to talk to the native code (GPS, Google sign-in, share). */
-    val APP_ORIGINS = setOf("https://connorsdronepics.com", "https://www.connorsdronepics.com")
+    val APP_ORIGINS = setOf(
+        "https://knoxcanvas.app", "https://www.knoxcanvas.app",
+        "https://connorsdronepics.com", "https://www.connorsdronepics.com",
+    )
 
     /**
      * The Firebase project's *Web* client ID, used by native Google sign-in. Firebase console →

@@ -15,7 +15,9 @@ up, create a company and invite their team.
 | `knoxcanvas/` | Abandoned-for-now React/Vite migration (built output in `docs/knoxcanvas/`). Don't touch unless asked. |
 | `test_2.html` | Scratch file. |
 
-**Deploying:** the live site is `connorsdronepics.com` on Vercel, served from `docs/`. Editing
+**Deploying:** the live site is `knoxcanvas.app` on Vercel (Oct 2026; DNS at GoDaddy → Vercel), served from `docs/`. `connorsdronepics.com`
+serves the same files and must keep working: older iPhone builds load its `app.html` and `/addr/v1/` tiles, and the old `ios/`
+wrapper opens any other domain in Safari, so never redirect it. Browser storage (login, clock-in) is per domain. `docs/index.html` is the landing page. Editing
 root `app.html` does NOT change the live site. To ship, copy `app.html` → `docs/app.html`.
 Keep the two identical. They were synced in Oct 2026, after confirming both use the same Firestore
 paths and fields. The old one-time JSONBin migration for the original owner account was dropped;

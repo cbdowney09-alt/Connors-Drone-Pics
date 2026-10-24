@@ -51,9 +51,9 @@ Use a **test company**, not the real one. Plug the phone in, pick it in Xcode, t
 **App information**
 - Name: `KnoxCanvas`. Subtitle: `Door-to-door canvassing tracker`.
 - Category: Business (secondary: Productivity). Age rating: 4+ (answer "None" to everything).
-- Privacy Policy URL: `https://connorsdronepics.com/privacy.html`
+- Privacy Policy URL: `https://knoxcanvas.app/privacy.html` (2.1.0 was submitted with the connorsdronepics.com one; both work)
   (`docs/privacy.html` in this repo). **Deploy it before submitting.**
-- Support URL: `https://connorsdronepics.com`
+- Support URL: `https://knoxcanvas.app/support.html`
 
 **Description**
 

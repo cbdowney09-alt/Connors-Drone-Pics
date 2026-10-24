@@ -628,7 +628,10 @@ googleProvider.setCustomParameters({ prompt: 'select_account' });
 // ── Constants ─────────────────────────────────────────────
 const COLORS = { none:'#6b7280', hanger:'#f59e0b', interest:'#10b981', no:'#ef4444', dnr:'#7c3aed' };
 const LABELS = { none:'Not visited', hanger:'Door hanger', interest:'Interested', no:'Not interested', dnr:'Do not return' };
-const GEO_PROXY = 'https://broken-tree-befb.connorbdowney48.workers.dev';
+const GEO_PROXY = 'https://broken-tree-befb.connorbdowney48.workers.dev';   // Google (billed; the backup)
+// Apple Maps address lookup (free with the Apple Developer Program), tried first for pin addresses.
+// Worker code: tools/apple-geocode-worker/. Empty = not set up yet, so pins go straight to Google.
+const APPLE_GEO_PROXY = '';
 const INVITE_DAYS = 7;
 // Company approval: who to contact, and the Apps Script that emails the admin about new
 // requests (empty = no email; requests still show in the iPhone app's Admin screen).
@@ -1171,14 +1174,20 @@ map.on('click', e => {
 
 async function reverseGeocode(lat, lng, id) {
   let addr = '';
-  try {
-    const r = await fetch(`${GEO_PROXY}?lat=${lat}&lng=${lng}`);
-    const d = await r.json();
-    if (d.status === 'OK' && d.results?.length) {
-      const best = d.results.find(x => x.geometry.location_type === 'ROOFTOP' || x.geometry.location_type === 'RANGE_INTERPOLATED') || d.results[0];
-      addr = best.formatted_address || '';
-    }
-  } catch (e) {}
+  // Apple first (free), then Google (billed). Both Workers answer in Google's format.
+  // Apple without a house number only knows the street, so Google gets a turn then.
+  for (const proxy of [APPLE_GEO_PROXY, GEO_PROXY].filter(Boolean)) {
+    try {
+      const r = await fetch(`${proxy}?lat=${lat}&lng=${lng}`);
+      const d = await r.json();
+      if (d.status === 'OK' && d.results?.length) {
+        const best = d.results.find(x => x.geometry.location_type === 'ROOFTOP' || x.geometry.location_type === 'RANGE_INTERPOLATED');
+        if (best) { addr = best.formatted_address || ''; break; }
+        if (proxy === GEO_PROXY) addr = d.results[0].formatted_address || '';
+      }
+    } catch (e) {}
+    if (addr) break;
+  }
   if (!addr) {
     try {
       const r = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&addressdetails=1&zoom=18`);

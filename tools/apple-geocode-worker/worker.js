@@ -90,7 +90,7 @@ async function accessToken(env) {
 async function signedJwt(env) {
   const iat = Math.floor(Date.now() / 1000);
   const enc = o => b64url(new TextEncoder().encode(JSON.stringify(o)));
-  const data = `${enc({ alg: 'ES256', kid: env.APPLE_KEY_ID, typ: 'JWT' })}.${enc({ iss: env.APPLE_TEAM_ID, iat, exp: iat + 1800 })}`;
+  const data = `${enc({ alg: 'ES256', kid: env.APPLE_KEY_ID, typ: 'JWT' })}.${enc({ iss: env.APPLE_TEAM_ID, iat, exp: iat + 1800, scope: 'server_api' })}`;
   const der = Uint8Array.from(atob(env.APPLE_PRIVATE_KEY.replace(/-----[^-]+-----/g, '').replace(/\s+/g, '')), c => c.charCodeAt(0));
   const key = await crypto.subtle.importKey('pkcs8', der, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign']);
   // WebCrypto returns the raw r||s signature, which is what ES256 JWTs use.

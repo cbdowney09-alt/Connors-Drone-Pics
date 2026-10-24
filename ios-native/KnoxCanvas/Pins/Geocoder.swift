@@ -1,12 +1,13 @@
 import Foundation
 import CoreLocation
 
-/// Reverse geocoding: Google through the Cloudflare Worker (same as the web), then Apple's
-/// geocoder, then plain coordinates so the pin always gets a label.
+/// Reverse geocoding: Apple's geocoder first (free), then Google through the Cloudflare Worker
+/// (billed, the backup; also fills in when Apple has no house number), then plain coordinates
+/// so the pin always gets a label.
 enum Geocoder {
     static func address(for c: CLLocationCoordinate2D) async -> String {
-        if let a = await worker(c) { return a }
         if let a = await apple(c) { return a }
+        if let a = await worker(c) { return a }
         return String(format: "%.4f, %.4f", c.latitude, c.longitude)
     }
 

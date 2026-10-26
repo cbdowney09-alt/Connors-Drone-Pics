@@ -29,13 +29,15 @@ it had already run. The iOS app loads the live URL, so it only picks up changes 
 - Data: Firebase project `knoxcanvas-a7bfe`. Firestore uses an offline persistent cache; auth is
   email/password plus Google (in the iOS app, Google sign-in runs natively; see GoogleSignIn.swift).
   - `users/{uid}` → `{ name, email, role: owner|employee, companyId, companyName }`
-  - `companies/{id}` → `{ name, ownerId, roofCutoff, sheetsUrl, status?, ownerName?, ownerEmail?, phone?, requestedAt?, statusAt?, statusBy? }`
+  - `companies/{id}` → `{ name, ownerId, roofCutoff, sheetsUrl, status?, ownerName?, ownerEmail?, phone?, requestedAt?, statusAt?, statusBy?, states?, doorline?, crew? }`
     - `status`: `pending` (new request) · `active` · `paused` · `declined`. **Missing means active**
       (companies made before approvals). Only an admin can change it.
   - `admins/{uid}` → exists = KnoxCanvas admin (approves, pauses, resumes companies). Added by hand in the console.
   - `companies/{id}/pins/{lat6,lng6}` → `{ lat, lng, addr, status, note, yearBuilt, ts, createdBy, statusBy, statusAt, hangerBy, hangerAt, source? }`
   - `companies/{id}/shifts/{auto}` → `{ clockIn, clockOut, durationMs, hangers, hangersPerHour, userId, userName, trail?, trailMeters?, gpsHangers? }`
   - `companies/{id}/settings/neighborhoodYears` → `{ zones: [...] }`
+  - `companies/{id}/settings/areas` → `{ list: [{ id, kind: 'zip', zip, name } | { id, kind: 'draw', name, points: [{lat,lng}] }] }` (Doorline client routes)
+  - Shifts may also have `forCompanyId`, `forCompanyName` (a Doorline crew shift, copied to the crew's own company)
   - `invites/{code}` → one-time join codes, expire in 7 days
 - Geocoding: Google Geocoding API behind the Cloudflare Worker
   `https://broken-tree-befb.connorbdowney48.workers.dev` (`?lat=&lng=`). Nominatim is the fallback.
@@ -167,6 +169,23 @@ Anyone can download the app and make a login, but **new companies are requests**
   Payment happens outside the app: no prices or payment links in the app (App Store guideline 3.1.3(c)).
 - Both apps watch the company doc. Approval opens the map right away, and a pause drops the team to the locked screen.
   Paused data stays. The rules block pins, shifts and settings unless the company is active.
+
+## Doorline Hangers (added Oct 2026, website only so far)
+
+Doorline Hangers is the owner's door hanger distribution service. At company setup the owner answers
+"Are you signing up through Doorline Hangers?" Yes saves `doorline: true` on the company.
+- **Doorline client** (`isClient()`, `body.is-client`): the simple view. Tabs are Hangers / Routes / Layers / Account.
+  They see the hanger count, a read-only map (tapping the map doesn't make pins), the date each door was hung, a CSV of
+  addresses, and the crew's walk paths (shift `trail`s, split wherever the pace is faster than walking).
+  **Routes**: zip codes (TIGERweb outlines) and drawn neighborhoods, saved in `settings/areas`. No shifts, metrics, team or invites.
+- **Crew**: the admin's own team. In Account → Doorline clients (admins only), the admin approves, pauses or resumes clients
+  and toggles who hangs for each one (the client's `crew` array of uids). Crew members see "Hanging for" in the Shift panel.
+  The chosen business is `workCid`; the pins, zones, routes and sweep all read and write there, while `companyId` stays their own.
+  It's locked while clocked in. On clock-out, the shift is saved to the client (walk path) and to the crew's company
+  (`forCompanyId`), so the admin's Team metrics count those hangers.
+- Rules: `onCrew(cid)` gives the crew the same pins, shifts and settings access as members. Only an admin changes `crew` or `doorline`.
+- **iPhone app not done yet:** the native app ignores `doorline` and `crew`. Until it's updated, crew hanging for a client and
+  client owners should use the website.
 
 ## Known open issues
 

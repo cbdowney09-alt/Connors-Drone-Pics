@@ -19,6 +19,10 @@ button{font-family:inherit}
 button:disabled{opacity:0.55;cursor:default}
 .owner-only{display:none!important}
 body.is-owner .owner-only{display:flex!important}
+/* Doorline clients (businesses paying Doorline Hangers to hang their door hangers) get a simple view */
+.client-only{display:none!important}
+body.is-client .client-only{display:flex!important}
+body.is-client .owner-only,body.is-client .crew-only{display:none!important}
 
 /* Screens */
 .screen{position:fixed;inset:0;z-index:9000;background:var(--bg);display:none;flex-direction:column;align-items:center;justify-content:center;padding:32px 20px;overflow-y:auto}
@@ -77,6 +81,12 @@ body.is-owner .owner-only{display:flex!important}
 #gps-pill.on.warn{display:inline-flex;color:#f59e0b}
 #shift-chip{display:none;color:#10b981;font-variant-numeric:tabular-nums;border:none;cursor:pointer;font-family:inherit}
 #shift-chip.on{display:inline-flex}
+#work-chip{display:none;color:#f59e0b;font-size:11px;font-weight:700;padding:5px 10px;border-radius:20px;white-space:nowrap;background:var(--surface);box-shadow:var(--shadow);border:none;cursor:pointer;font-family:inherit;max-width:60vw;overflow:hidden;text-overflow:ellipsis}
+#work-chip.on{display:inline-block}
+#client-count{align-self:flex-start;background:var(--surface);border:1px solid rgba(255,255,255,0.08);border-radius:20px;padding:8px 14px;font-size:14px;font-weight:700;color:var(--text);box-shadow:var(--shadow);cursor:pointer;align-items:center;gap:8px;font-family:inherit}
+#client-count .dot{width:10px;height:10px;border-radius:50%;background:var(--c-hanger)}
+#client-count b{color:var(--c-hanger);font-variant-numeric:tabular-nums}
+body.is-client #legend{display:none}
 #user-name-display{display:none}
 #stats-row{display:none}
 /* Status filter chips */
@@ -97,6 +107,7 @@ body.is-owner .owner-only{display:flex!important}
 .tab-btn.active{color:var(--accent)}
 .tab-btn .tab-label{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;font-variant-numeric:tabular-nums}
 #shifts-btn.active{color:#10b981}
+body.is-client #tabbar{grid-template-columns:repeat(4,1fr)}
 .leaflet-bottom{bottom:calc(var(--tabbar-h) + var(--safe-b))}
 .leaflet-control-attribution{background:rgba(255,255,255,0.6)!important;font-size:9px!important}
 #search-results{position:fixed;left:12px;right:12px;z-index:1200;background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.5);display:none}
@@ -126,6 +137,7 @@ body.is-owner .owner-only{display:flex!important}
 #sheet-set-start{background:transparent;color:var(--accent);border:1px solid rgba(79,110,247,0.35)}
 #sheet-delete{background:transparent;color:#ef4444;border:1px solid rgba(239,68,68,0.35)}
 #sheet-close{background:var(--accent);color:#fff;border:none}
+body.is-client #sheet .status-btn,body.is-client #sheet .sheet-row,body.is-client #sheet-set-start,body.is-client #sheet-delete,body.is-client #zillow-btn{display:none}
 
 /* Layers panel / banners */
 .leaflet-control-zoom{display:none}
@@ -282,6 +294,16 @@ body.is-owner .owner-only{display:flex!important}
 @keyframes spin{to{transform:rotate(360deg)}}
 #toast{position:fixed;bottom:calc(var(--tabbar-h) + var(--safe-b) + 24px);left:50%;transform:translateX(-50%);background:rgba(20,20,30,0.96);color:#fff;font-size:13px;padding:9px 18px;border-radius:20px;z-index:9999;pointer-events:none;opacity:0;transition:opacity 0.25s;max-width:90vw;text-align:center;border:1px solid var(--border)}
 #toast.show{opacity:1}
+/* Doorline */
+.hp-total{font-size:46px;font-weight:800;color:var(--c-hanger);font-variant-numeric:tabular-nums;line-height:1.1}
+.area-row{display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px;cursor:pointer}
+.area-row .a-swatch{width:12px;height:12px;border-radius:4px;flex-shrink:0}
+.area-row .a-info{flex:1;min-width:0}
+.area-row .a-count{font-size:18px;font-weight:800;color:var(--c-hanger);font-variant-numeric:tabular-nums}
+.status-tag{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;margin-left:6px;text-transform:capitalize;vertical-align:middle}
+.status-tag.active{background:rgba(16,185,129,0.15);color:#10b981}
+.status-tag.pending{background:rgba(245,158,11,0.15);color:#f59e0b}
+.status-tag.paused,.status-tag.declined{background:rgba(239,68,68,0.15);color:#ef4444}
 </style>
 </head>
 <body>
@@ -356,7 +378,10 @@ body.is-owner .owner-only{display:flex!important}
     <div id="setup-create-section" class="form">
       <input class="auth-input" id="setup-company" type="text" placeholder="Company name">
       <input class="auth-input" id="setup-phone" type="tel" placeholder="Your phone number" autocomplete="tel">
-      <div class="hint">New companies are approved by KnoxCanvas. We'll call or text you to get set up. Once you're approved, you can invite your canvassers.</div>
+      <div class="label" style="margin:4px 0 0">Are you signing up through Doorline Hangers?</div>
+      <div class="seg" id="setup-doorline-seg"><button type="button" data-v="no">No</button><button type="button" data-v="yes">Yes</button></div>
+      <div class="hint" id="setup-doorline-hint" style="display:none">Doorline Hangers hangs your door hangers for you. You'll see every door they've been hung on, and pick the zip codes and neighborhoods you want covered.</div>
+      <div class="hint" id="setup-approval-hint">New companies are approved by KnoxCanvas. We'll call or text you to get set up. Once you're approved, you can invite your canvassers.</div>
       <button class="auth-btn primary" id="setup-create-btn">Request access</button>
     </div>
     <div id="setup-join-section" class="form" style="display:none">
@@ -388,7 +413,8 @@ body.is-owner .owner-only{display:flex!important}
       <div class="legend-row active" data-filter="dnr"><div class="dot" style="background:var(--c-dnr)"></div><span>Do not return</span><span class="label-count" id="cnt-dnr">0</span></div>
       <div class="legend-row active" data-filter="none"><div class="dot" style="background:var(--c-none)"></div><span>Not visited</span><span class="label-count" id="cnt-none">0</span></div>
     </div>
-    <div id="status-row"><span id="sync-pill" class="ok">Synced</span><span id="gps-pill">GPS</span><button id="shift-chip" aria-label="Open shift">00:00</button><span id="user-name-display"></span></div>
+    <button id="client-count" class="client-only" aria-label="Your door hangers"><span class="dot"></span><b id="client-count-num">0</b> door hangers</button>
+    <div id="status-row"><span id="sync-pill" class="ok">Synced</span><span id="gps-pill">GPS</span><button id="shift-chip" aria-label="Open shift">00:00</button><button id="work-chip" aria-label="Who you're hanging for"></button><span id="user-name-display"></span></div>
     <div id="stats-row"></div>
   </div>
   <div id="search-results"></div>
@@ -398,6 +424,7 @@ body.is-owner .owner-only{display:flex!important}
     <div id="sheet-handle"></div>
     <div id="sheet-addr">Select a location</div>
     <div id="sheet-coords"></div>
+    <div id="sheet-hung" class="client-only" style="padding:0 20px 12px;font-size:14px;color:var(--c-hanger);font-weight:600"></div>
     <a id="zillow-btn" href="#" target="_blank" rel="noopener">View on Zillow ↗</a>
     <button class="status-btn" data-status="none"><span class="swatch" style="background:var(--c-none)"></span>Not visited<span class="check">✓</span></button>
     <button class="status-btn" data-status="hanger"><span class="swatch" style="background:var(--c-hanger)"></span>Door hanger left<span class="check">✓</span></button>
@@ -426,9 +453,11 @@ body.is-owner .owner-only{display:flex!important}
   </div>
 
   <nav id="tabbar">
-    <button class="tab-btn" id="shifts-btn" aria-label="Shift"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6"/></svg><span class="tab-label" id="shift-tab-label">Clock in</span></button>
-    <button class="tab-btn" id="route-btn" aria-label="Route"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="19" r="2.5"/><circle cx="18" cy="5" r="2.5"/><path d="M8.5 19H16a3.5 3.5 0 0 0 0-7H8a3.5 3.5 0 0 1 0-7h7.5"/></svg><span class="tab-label">Route</span></button>
-    <button class="tab-btn" id="draw-zone-btn" aria-label="Draw zone"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5 21 9l-3.5 11h-11L3 9z"/></svg><span class="tab-label">Zone</span></button>
+    <button class="tab-btn client-only" id="hangers-btn" aria-label="Door hangers"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg><span class="tab-label">Hangers</span></button>
+    <button class="tab-btn client-only" id="areas-btn" aria-label="Routes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5 21 9l-3.5 11h-11L3 9z"/></svg><span class="tab-label">Routes</span></button>
+    <button class="tab-btn crew-only" id="shifts-btn" aria-label="Shift"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6"/></svg><span class="tab-label" id="shift-tab-label">Clock in</span></button>
+    <button class="tab-btn crew-only" id="route-btn" aria-label="Route"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="19" r="2.5"/><circle cx="18" cy="5" r="2.5"/><path d="M8.5 19H16a3.5 3.5 0 0 0 0-7H8a3.5 3.5 0 0 1 0-7h7.5"/></svg><span class="tab-label">Route</span></button>
+    <button class="tab-btn crew-only" id="draw-zone-btn" aria-label="Draw zone"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5 21 9l-3.5 11h-11L3 9z"/></svg><span class="tab-label">Zone</span></button>
     <button class="tab-btn" id="layers-btn" aria-label="Map layers"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 9 5-9 5-9-5 9-5z"/><path d="m3 13 9 5 9-5"/></svg><span class="tab-label">Layers</span></button>
     <button class="tab-btn" id="menu-btn" aria-label="Menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg><span class="tab-label">Account</span></button>
   </nav>
@@ -478,8 +507,10 @@ body.is-owner .owner-only{display:flex!important}
       </div>
       <button class="menu-item owner-only" id="menu-team">👥 Team and company settings</button>
       <button class="menu-item owner-only" id="menu-metrics">📊 Team metrics</button>
-      <button class="menu-item" id="menu-shifts">⏱ My shifts</button>
-      <button class="menu-item" id="menu-export">⬇️ Export data (CSV)</button>
+      <button class="menu-item" id="menu-doorline" style="display:none">🚪 Doorline clients</button>
+      <button class="menu-item crew-only" id="menu-shifts">⏱ My shifts</button>
+      <button class="menu-item crew-only" id="menu-export">⬇️ Export data (CSV)</button>
+      <button class="menu-item client-only" id="menu-client-csv">⬇️ Download hanger addresses (CSV)</button>
       <button class="menu-item" id="menu-install" style="display:none">📲 Install KnoxCanvas on this phone</button>
       <button class="menu-item" id="logout-btn">Sign out</button>
       <button class="menu-item danger" id="delete-account-btn">Delete my account</button>
@@ -519,6 +550,11 @@ body.is-owner .owner-only{display:flex!important}
   <div id="shifts-panel" class="panel">
     <div class="panel-header"><button class="panel-back" data-close="shifts-panel" aria-label="Back"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg></button><h2>Shifts</h2><button class="panel-action-btn" id="shifts-export-btn">Export CSV</button></div>
     <div class="panel-body">
+      <div id="work-picker" style="display:none;flex-direction:column;gap:8px">
+        <div class="section-title">Hanging for</div>
+        <div class="chips" id="work-chips"></div>
+        <div class="hint" id="work-hint"></div>
+      </div>
       <div id="clock-card">
         <div id="clock-status">Clocked out</div>
         <div id="clock-timer">00:00:00</div>
@@ -586,6 +622,43 @@ body.is-owner .owner-only{display:flex!important}
     </div>
   </div>
 
+  <!-- Doorline client: their door hangers -->
+  <div id="hangers-panel" class="panel">
+    <div class="panel-header"><button class="panel-back" data-close="hangers-panel" aria-label="Back"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg></button><h2>Your door hangers</h2></div>
+    <div class="panel-body">
+      <div class="box" style="text-align:center"><div class="hp-total" id="hp-total">0</div><div class="hint">door hangers hung</div></div>
+      <div class="metric-grid" id="hp-stats"></div>
+      <button class="toggle-row" id="paths-btn"><div><div>Show walk paths</div><div class="tr-sub">The streets our crew walked, from their GPS</div></div><span class="switch"></span></button>
+      <div class="section-title">By route</div>
+      <div id="hp-areas" style="display:flex;flex-direction:column;gap:8px"></div>
+      <div class="section-title">Most recent</div>
+      <div id="hp-recent" class="export-list" style="background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden"></div>
+      <button class="primary-btn" id="hp-csv">Download addresses (CSV)</button>
+    </div>
+  </div>
+
+  <!-- Doorline client: routes (zip codes / neighborhoods they want hung) -->
+  <div id="areas-panel" class="panel">
+    <div class="panel-header"><button class="panel-back" data-close="areas-panel" aria-label="Back"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg></button><h2>Routes</h2></div>
+    <div class="panel-body">
+      <div class="hint">Pick the zip codes and neighborhoods you want hung. Doorline Hangers sees them right away.</div>
+      <div class="section-title">Add a zip code</div>
+      <div class="box"><div style="display:flex;gap:8px"><input id="area-zip-input" class="field" type="text" inputmode="numeric" maxlength="5" placeholder="Zip code, e.g. 37923" style="flex:1;min-width:0"><button id="area-zip-add" class="primary-btn" style="width:auto;padding:0 20px">Add</button></div></div>
+      <button class="secondary-btn" id="area-draw-btn">✏️ Draw a neighborhood on the map</button>
+      <div class="section-title">Your routes</div>
+      <div id="area-list" style="display:flex;flex-direction:column;gap:8px"></div>
+    </div>
+  </div>
+
+  <!-- KnoxCanvas admin: Doorline clients and who hangs for them -->
+  <div id="doorline-panel" class="panel">
+    <div class="panel-header"><button class="panel-back" data-close="doorline-panel" aria-label="Back"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg></button><h2>Doorline clients</h2><button class="panel-action-btn" id="doorline-refresh-btn">↻ Refresh</button></div>
+    <div class="panel-body">
+      <div class="hint">Businesses that signed up through Doorline Hangers. Tap names to choose who on your team hangs for each one. They'll see that business under “Hanging for” when they clock in.</div>
+      <div id="doorline-list" style="display:flex;flex-direction:column;gap:12px"></div>
+    </div>
+  </div>
+
   <!-- Street sweep review -->
   <div id="sweep-panel" class="panel">
     <div class="panel-header"><button class="panel-back" data-close="sweep-panel" aria-label="Back"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg></button><h2>Houses you passed</h2><button class="panel-action-btn" id="sweep-toggle-all">None</button></div>
@@ -602,7 +675,7 @@ body.is-owner .owner-only{display:flex!important}
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, signInWithRedirect, signInWithCredential, getRedirectResult, GoogleAuthProvider, signOut, onAuthStateChanged, sendPasswordResetEmail, updateProfile, deleteUser } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, getFirestore, doc, setDoc, getDoc, getDocs, addDoc, collection, query, where, onSnapshot, deleteDoc, updateDoc, writeBatch, serverTimestamp, Timestamp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, getFirestore, doc, setDoc, getDoc, getDocs, addDoc, collection, query, where, onSnapshot, deleteDoc, updateDoc, writeBatch, serverTimestamp, Timestamp, arrayUnion, arrayRemove } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 // Firebase web config is a public identifier, not a secret. Access is enforced by Firestore security rules.
 const firebaseConfig = {
@@ -686,7 +759,17 @@ let routeStart = null, routeZonePolygon = null, routeZoneLayer = null, routeMark
 let clockedIn = false, clockInTime = null, clockTimerInterval = null;
 let pendingName = '';
 let locateMarker = null, didInitialView = false;
+// Doorline Hangers: a door hanger distribution service. Businesses that sign up through it are
+// "Doorline clients" (companies/{id}.doorline): their owner sees only where hangers went and picks
+// the routes. Doorline's own crew (employees of the admin's company) are listed in the client's
+// `crew` field and hang for it: `workCid` is the company whose pins the map shows and writes to
+// (the client they picked under "Hanging for"); `companyId` stays their own company.
+let workCid = null, workCompany = null, crewJobs = [], isAdminUser = false;
+let areas = [], areaLayers = [], zipShapes = {}, pathLayers = [], pathsOn = false;
+let drawingForArea = false, setupDoorline = null, unsubJobs = null;
 const isOwner = () => profile?.role === 'owner';
+const isClient = () => !!company?.doorline;
+const workId = () => workCid || companyId;
 const myUid = () => currentUser?.uid;
 
 // ── Screens ───────────────────────────────────────────────
@@ -813,22 +896,30 @@ $('tab-create').addEventListener('click', () => { $('tab-create').classList.add(
 $('tab-join').addEventListener('click', () => { $('tab-join').classList.add('active'); $('tab-create').classList.remove('active'); $('setup-join-section').style.display = 'flex'; $('setup-create-section').style.display = 'none'; });
 $('setup-invite-code').addEventListener('input', e => { e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''); });
 $('setup-signout').addEventListener('click', () => signOut(auth));
+document.querySelectorAll('#setup-doorline-seg button').forEach(b => b.addEventListener('click', () => {
+  setupDoorline = b.dataset.v;
+  document.querySelectorAll('#setup-doorline-seg button').forEach(x => x.classList.toggle('active', x === b));
+  $('setup-doorline-hint').style.display = setupDoorline === 'yes' ? 'block' : 'none';
+  $('setup-approval-hint').style.display = setupDoorline === 'yes' ? 'none' : 'block';
+  $('setup-err').textContent = '';
+}));
 
 $('setup-create-btn').addEventListener('click', async () => {
   const name = $('setup-name').value.trim(), companyName = $('setup-company').value.trim(), phone = $('setup-phone').value.trim();
   if (!name || !companyName) { $('setup-err').textContent = 'Enter your name and your company name.'; return; }
   if (phone.replace(/\D/g, '').length < 10) { $('setup-err').textContent = 'Enter a phone number so we can reach you.'; return; }
+  if (!setupDoorline) { $('setup-err').textContent = 'Tell us whether you\u2019re signing up through Doorline Hangers.'; return; }
   busy($('setup-create-btn'), true, 'Sending…'); $('setup-err').textContent = '';
   try {
     const companyRef = doc(collection(db, 'companies'));
     const batch = writeBatch(db);
     // New companies wait for KnoxCanvas approval (status 'pending'); the rules only allow creating them that way.
     batch.set(companyRef, { name: companyName, ownerId: currentUser.uid, roofCutoff: 2012, sheetsUrl: '', createdAt: serverTimestamp(),
-      status: 'pending', ownerName: name, ownerEmail: currentUser.email || '', phone, requestedAt: serverTimestamp() });
+      status: 'pending', ownerName: name, ownerEmail: currentUser.email || '', phone, requestedAt: serverTimestamp(), ...(setupDoorline === 'yes' ? { doorline: true } : {}) });
     batch.set(doc(db, 'users', currentUser.uid), { name, email: currentUser.email || '', role: 'owner', companyId: companyRef.id, companyName, createdAt: serverTimestamp() });
     await batch.commit();
     pendingName = '';
-    notifyRequest({ company: companyName, companyId: companyRef.id, owner: name, email: currentUser.email || '', phone });
+    notifyRequest({ company: companyName, companyId: companyRef.id, owner: name, email: currentUser.email || '', phone, doorline: setupDoorline === 'yes' });
     await loadSession(currentUser);
   } catch (e) {
     console.error(e);
@@ -904,6 +995,8 @@ function enterApp() {
   showScreen('app-root');
   setTimeout(() => map.invalidateSize(), 60);
   document.body.classList.toggle('is-owner', isOwner());
+  document.body.classList.toggle('is-client', isClient());
+  restoreWork();
   $('user-name-display').textContent = `${profile.name || currentUser.email} · ${company.name || ''}`;
   $('menu-name').textContent = profile.name || '';
   $('menu-email').textContent = currentUser.email || '';
@@ -912,9 +1005,12 @@ function enterApp() {
   setRoofLabel(roofCutoff());
   subscribePins();
   loadNeighborhoodYears();
+  loadAreas();
   loadShifts();
   restoreClock();
   setSync(navigator.onLine ? 'ok' : 'offline');
+  watchCrewJobs();
+  checkAdmin();
 }
 
 function leaveApp() {
@@ -922,6 +1018,11 @@ function leaveApp() {
   if (unsubCompany) { unsubCompany(); unsubCompany = null; }
   Object.values(markers).forEach(m => map.removeLayer(m)); markers = {}; pins = {};
   zonePolygonLayers.forEach(l => map.removeLayer(l)); zonePolygonLayers = [];
+  areaLayers.forEach(l => map.removeLayer(l)); areaLayers = []; areas = [];
+  pathLayers.forEach(l => map.removeLayer(l)); pathLayers = []; pathsOn = false; $('paths-btn').classList.remove('active');
+  if (unsubJobs) { unsubJobs(); unsubJobs = null; }
+  workCid = null; workCompany = null; crewJobs = []; isAdminUser = false;
+  $('menu-doorline').style.display = 'none'; $('work-picker').style.display = 'none'; $('work-chip').classList.remove('on');
   clearRoute(true);
   if (drawingMode) stopDrawing();
   stopClockTimer(); clockedIn = false; clockInTime = null;
@@ -930,7 +1031,7 @@ function leaveApp() {
   document.querySelectorAll('.panel.open').forEach(p => p.classList.remove('open'));
   profile = null; companyId = null; company = {}; neighborhoodYears = []; shifts = [];
   didInitialView = false;
-  document.body.classList.remove('is-owner');
+  document.body.classList.remove('is-owner', 'is-client');
   updateStats();
 }
 
@@ -948,7 +1049,7 @@ window.addEventListener('offline', () => setSync('offline'));
 window.addEventListener('online', () => setSync('ok'));
 
 // ── Data layer ────────────────────────────────────────────
-const pinsCol = () => collection(db, 'companies', companyId, 'pins');
+const pinsCol = () => collection(db, 'companies', workId(), 'pins');
 function normalizePin(d) {
   return { ...d, lat: Number(d.lat), lng: Number(d.lng), status: LABELS[d.status] ? d.status : 'none', note: d.note || '', yearBuilt: d.yearBuilt || '', addr: d.addr || '', ts: typeof d.ts === 'number' ? d.ts : 0 };
 }
@@ -967,6 +1068,7 @@ function subscribePins() {
     if (!didInitialView && Object.keys(pins).length) {
       didInitialView = true;
       const recent = Object.values(pins).sort((x, y) => (y.ts || 0) - (x.ts || 0)).slice(0, 150);
+      map.invalidateSize(); // cached pins can arrive before the map has its size, which would zoom out to the whole world
       map.fitBounds(L.latLngBounds(recent.map(p => [p.lat, p.lng])).pad(0.1), { maxZoom: 17 });
     }
     if (snap.metadata.hasPendingWrites) setSync('pending');
@@ -975,21 +1077,23 @@ function subscribePins() {
   }, err => { console.error(err); setSync('error'); showToast('Sync error: ' + (err.code || err.message)); });
 }
 function savePin(id, data) {
-  return setDoc(doc(db, 'companies', companyId, 'pins', id), { ...data, updatedBy: myUid(), updatedAt: serverTimestamp() }, { merge: true })
+  return setDoc(doc(db, 'companies', workId(), 'pins', id), { ...data, updatedBy: myUid(), updatedAt: serverTimestamp() }, { merge: true })
     .catch(e => { console.error(e); setSync('error'); showToast('Couldn\u2019t save (' + (e.code || 'error') + ')'); });
 }
 function deletePinFromDb(id) {
-  return deleteDoc(doc(db, 'companies', companyId, 'pins', id)).catch(e => { setSync('error'); showToast('Couldn\u2019t delete (' + (e.code || 'error') + ')'); });
+  return deleteDoc(doc(db, 'companies', workId(), 'pins', id)).catch(e => { setSync('error'); showToast('Couldn\u2019t delete (' + (e.code || 'error') + ')'); });
 }
 async function loadNeighborhoodYears() {
+  const cid = workId();
   try {
-    const d = await getDoc(doc(db, 'companies', companyId, 'settings', 'neighborhoodYears'));
+    const d = await getDoc(doc(db, 'companies', cid, 'settings', 'neighborhoodYears'));
+    if (cid !== workId()) return;
     neighborhoodYears = d.exists() ? (d.data().zones || []) : [];
     renderZonePolygons();
   } catch (e) { console.warn('zones', e); }
 }
 function saveNeighborhoodYears() {
-  return setDoc(doc(db, 'companies', companyId, 'settings', 'neighborhoodYears'), { zones: neighborhoodYears }).catch(e => showToast('Couldn\u2019t save zones (' + (e.code || 'error') + ')'));
+  return setDoc(doc(db, 'companies', workId(), 'settings', 'neighborhoodYears'), { zones: neighborhoodYears }).catch(e => showToast('Couldn\u2019t save zones (' + (e.code || 'error') + ')'));
 }
 async function loadShifts() {
   try {
@@ -1056,6 +1160,7 @@ function updateStats() {
   Object.values(pins).forEach(p => { if (counts[p.status] !== undefined) counts[p.status]++; });
   const total = Object.values(counts).reduce((a, b) => a + b, 0);
   $('cnt-all').textContent = total;
+  $('client-count-num').textContent = counts.hanger.toLocaleString();
   Object.keys(counts).forEach(k => { $('cnt-' + k).textContent = counts[k]; });
   const row = $('stats-row'); row.innerHTML = '';
   [['interest','Interested'],['hanger','Hangers'],['no','No'],['dnr','DNR']].forEach(([k, label]) => {
@@ -1078,6 +1183,8 @@ function openSheet(id) {
   $('sheet-note').value = p.note || '';
   $('sheet-year').value = p.yearBuilt || '';
   $('zillow-btn').href = zillowUrl(p.addr);
+  const hungAt = p.hangerAt || p.ts;
+  $('sheet-hung').textContent = p.status === 'hanger' && hungAt ? `Door hanger left ${formatDate(hungAt)}, ${formatTime(hungAt)}` : 'Not hung yet';
   markActiveStatus(p.status);
   $('sheet').classList.add('open'); $('overlay').classList.add('visible');
 }
@@ -1086,7 +1193,7 @@ $('overlay').addEventListener('click', closeSheet);
 $('sheet-close').addEventListener('click', closeSheet);
 
 document.querySelectorAll('.status-btn').forEach(btn => btn.addEventListener('click', () => {
-  if (!currentPinId || !companyId) return;
+  if (!currentPinId || !companyId || isClient()) return;
   const id = currentPinId, status = btn.dataset.status, now = Date.now();
   const upd = { status, ts: now, statusBy: myUid(), statusAt: now };
   if (status === 'hanger') { upd.hangerBy = myUid(); upd.hangerAt = now; }
@@ -1168,7 +1275,7 @@ map.on('click', e => {
     drawnMarkers.push(L.circleMarker([lat, lng], { radius: 6, color: '#4f6ef7', fillColor: '#4f6ef7', fillOpacity: 1, weight: 2 }).addTo(map));
     updateDrawingLayers(); return;
   }
-  if (!companyId) return;
+  if (!companyId || isClient()) return; // Doorline clients look; the crew places pins
   openSheet(createPin(lat, lng));
 });
 
@@ -1242,6 +1349,7 @@ async function doSearch(q) {
       d.addEventListener('click', () => {
         const lat = parseFloat(item.lat), lng = parseFloat(item.lon);
         map.setView([lat, lng], 18); searchResults.style.display = 'none'; searchInput.value = ''; searchInput.blur();
+        if (isClient()) return;
         const id = createPin(lat, lng, parts.slice(0, 3).join(',').trim());
         setTimeout(() => openSheet(id), 250);
       });
@@ -1288,20 +1396,24 @@ function updateDrawingLayers() {
   if (drawnPoints.length >= 3) drawnPolygon = L.polygon(drawnPoints, { color: '#4f6ef7', weight: 2, fillColor: '#4f6ef7', fillOpacity: 0.1, interactive: false }).addTo(map);
   $('zone-point-count').textContent = drawnPoints.length === 0 ? 'Tap the map to start' : drawnPoints.length < 3 ? `${drawnPoints.length} point(s) — need at least 3` : `${drawnPoints.length} points — ready to save`;
 }
-function startDrawing(forRoute) {
+function startDrawing(forRoute, forArea) {
   closeSheet();
-  drawingMode = true; drawingForRoute = !!forRoute; drawnPoints = []; drawnMarkers = [];
+  drawingMode = true; drawingForRoute = !!forRoute; drawingForArea = !!forArea; drawnPoints = []; drawnMarkers = [];
   $('zone-toolbar').style.top = ($('header').getBoundingClientRect().bottom + 8) + 'px';
   $('zone-toolbar').classList.add('active');
   $('draw-zone-btn').classList.add('active');
-  $('zone-toolbar-title').textContent = forRoute ? 'Outline the area to route — tap its corners' : 'Outline a neighborhood — tap its corners';
+  $('zone-toolbar-title').textContent = forArea ? 'Outline the neighborhood you want hung — tap its corners' : forRoute ? 'Outline the area to route — tap its corners' : 'Outline a neighborhood — tap its corners';
   $('zone-toolbar-fields').style.display = forRoute ? 'none' : 'grid';
-  $('zone-finish-btn').textContent = forRoute ? '✓ Use zone' : '✓ Save zone';
+  $('zone-toolbar-fields').style.gridTemplateColumns = forArea ? '1fr' : '';
+  $('zone-year-input').style.display = forArea ? 'none' : '';
+  $('zone-name-input').placeholder = forArea ? 'Neighborhood name' : 'Zone name';
+  $('zone-finish-btn').textContent = forArea ? '✓ Add route' : forRoute ? '✓ Use zone' : '✓ Save zone';
   updateDrawingLayers();
   map.getContainer().style.cursor = 'crosshair';
 }
 function stopDrawing() {
-  drawingMode = false; drawnPoints = [];
+  drawingMode = false; drawingForArea = false; drawnPoints = [];
+  $('zone-year-input').style.display = ''; $('zone-toolbar-fields').style.gridTemplateColumns = '';
   drawnMarkers.forEach(m => map.removeLayer(m)); drawnMarkers = [];
   if (drawnPolyline) { map.removeLayer(drawnPolyline); drawnPolyline = null; }
   if (drawnPolygon) { map.removeLayer(drawnPolygon); drawnPolygon = null; }
@@ -1316,6 +1428,14 @@ $('zone-undo-btn').addEventListener('click', () => { if (!drawnPoints.length) re
 $('zone-finish-btn').addEventListener('click', () => {
   if (drawnPoints.length < 3) { showToast('Tap at least 3 points'); return; }
   const poly = drawnPoints.map(p => [p[0], p[1]]);
+  if (drawingForArea) {
+    const name = $('zone-name-input').value.trim() || 'Neighborhood ' + (areas.filter(a => a.kind === 'draw').length + 1);
+    // Firestore can't store nested arrays, so the outline is saved as [{lat,lng}].
+    areas.push({ id: Date.now().toString(36), kind: 'draw', name, points: poly.map(([lat, lng]) => ({ lat: +lat.toFixed(6), lng: +lng.toFixed(6) })), addedAt: Date.now(), addedBy: myUid() });
+    saveAreas(); stopDrawing(); renderAreas(); openAreas();
+    showToast(`"${name}" added`);
+    return;
+  }
   if (drawingForRoute) {
     if (routeZoneLayer) map.removeLayer(routeZoneLayer);
     routeZonePolygon = poly;
@@ -1928,7 +2048,7 @@ async function placeSweepPins() {
         ts: now, createdBy: myUid(), createdAt: now, statusBy: myUid(), statusAt: now, hangerBy: myUid(), hangerAt: now, source: 'gps-sweep' };
       pins[id] = { ...p, id };
       addOrUpdateMarker(id); ids.push(id);
-      batch.set(doc(db, 'companies', companyId, 'pins', id), { ...p, updatedBy: myUid(), updatedAt: serverTimestamp() }, { merge: true });
+      batch.set(doc(db, 'companies', workId(), 'pins', id), { ...p, updatedBy: myUid(), updatedAt: serverTimestamp() }, { merge: true });
     });
     batch.commit().catch(e => { console.error(e); setSync('error'); showToast('Couldn’t save street pins (' + (e.code || 'error') + ')'); });
   }
@@ -2003,7 +2123,7 @@ function startClockTimer() {
   tick(); clockTimerInterval = setInterval(tick, 1000);
 }
 function updateClockUI() {
-  $('clock-btn').textContent = clockedIn ? 'Clock out' : 'Clock in';
+  $('clock-btn').textContent = clockedIn ? 'Clock out' : crewJobs.length ? `Clock in for ${workCompany?.name || company.name || 'your company'}` : 'Clock in';
   $('clock-btn').className = clockedIn ? 'clocked-in' : 'clocked-out';
   $('clock-status').textContent = clockedIn ? 'Clocked in' : 'Clocked out';
   $('clock-timer').classList.toggle('running', clockedIn);
@@ -2024,15 +2144,16 @@ function updateShiftBadges() {
 function restoreClock() {
   try {
     const saved = JSON.parse(localStorage.getItem(clockKey()) || 'null');
-    if (saved && saved.time && Date.now() - saved.time < 16 * 3600000) { clockedIn = true; clockInTime = saved.time; startClockTimer(); sweepStart(); }
+    if (saved && saved.time && Date.now() - saved.time < 16 * 3600000) { clockedIn = true; clockInTime = saved.time; startClockTimer(); sweepStart(); renderWorkPicker(); }
     else { localStorage.removeItem(clockKey()); clockedIn = false; clockInTime = null; }
   } catch (e) { clockedIn = false; }
   updateClockUI();
 }
 function clockIn() {
   clockedIn = true; clockInTime = Date.now();
-  try { localStorage.setItem(clockKey(), JSON.stringify({ time: clockInTime })); } catch (e) {}
-  updateClockUI(); startClockTimer(); showToast('Clocked in');
+  try { localStorage.setItem(clockKey(), JSON.stringify({ time: clockInTime, work: workId(), workName: workCompany?.name || '' })); } catch (e) {}
+  updateClockUI(); startClockTimer(); renderWorkPicker();
+  showToast(workId() !== companyId ? `Clocked in · hanging for ${workCompany?.name || 'client'}` : 'Clocked in');
   sweepStart();
 }
 async function clockOut() {
@@ -2047,9 +2168,16 @@ async function clockOut() {
   shifts.unshift(shift);
   try { localStorage.removeItem(clockKey()); } catch (e) {}
   clockedIn = false; clockInTime = null;
-  updateClockUI(); renderShifts();
+  updateClockUI(); renderShifts(); renderWorkPicker();
   showToast(`Shift saved: ${hangers} hangers · ${hangersPerHour}/hr`);
-  addDoc(collection(db, 'companies', companyId, 'shifts'), shift).catch(e => showToast('Shift couldn\u2019t sync (' + (e.code || 'error') + ')'));
+  const shiftErr = e => showToast('Shift couldn\u2019t sync (' + (e.code || 'error') + ')');
+  if (workId() !== companyId) {
+    // Hanging for a Doorline client: the client's copy gives them the walk path; ours keeps team metrics whole.
+    shift.forCompanyId = workId(); shift.forCompanyName = workCompany?.name || '';
+    const { forCompanyId, forCompanyName, ...clientShift } = shift;
+    addDoc(collection(db, 'companies', workId(), 'shifts'), clientShift).catch(shiftErr);
+  }
+  addDoc(collection(db, 'companies', companyId, 'shifts'), shift).catch(shiftErr);
   syncShiftToSheets(shift);
 }
 $('clock-btn').addEventListener('click', () => { clockedIn ? clockOut() : clockIn(); });
@@ -2114,6 +2242,8 @@ $('menu-shifts').addEventListener('click', () => fromMenu(openShifts));
 $('menu-export').addEventListener('click', () => fromMenu(openExport));
 $('menu-team').addEventListener('click', () => fromMenu(openTeam));
 $('menu-metrics').addEventListener('click', () => fromMenu(openMetrics));
+$('menu-doorline').addEventListener('click', () => fromMenu(openDoorline));
+$('menu-client-csv').addEventListener('click', () => fromMenu(downloadHangerCsv));
 
 // ── Team & settings (owner) ───────────────────────────────
 async function fetchMembers() {
@@ -2255,7 +2385,8 @@ function renderMetrics() {
   const since = getRangeMs(metricsRange);
   const match = uid => metricsUid === 'all' || uid === metricsUid;
   const all = Object.values(pins);
-  const hangersFor = uidTest => all.filter(p => p.status === 'hanger' && (p.hangerAt || p.ts || 0) >= since && uidTest(p.hangerBy || p.updatedBy)).length;
+  const hangersFor = uidTest => all.filter(p => p.status === 'hanger' && (p.hangerAt || p.ts || 0) >= since && uidTest(p.hangerBy || p.updatedBy)).length
+    + allShifts.filter(s => s.forCompanyId && (s.clockIn || 0) >= since && uidTest(s.userId)).reduce((a, s) => a + (s.hangers || 0), 0);
   const fShifts = allShifts.filter(s => (s.clockIn || 0) >= since && match(s.userId));
   const hangers = hangersFor(match);
   const interested = all.filter(p => p.status === 'interest' && (p.statusAt || p.ts || 0) >= since && match(p.statusBy || p.updatedBy)).length;
@@ -2273,8 +2404,313 @@ function renderMetrics() {
   }
   $('metrics-shifts').innerHTML = fShifts.slice(0, 20).map(s => {
     const emp = allEmployees.find(e => e.uid === s.userId);
-    return `<div class="mshift-row"><div><div class="mshift-name">${esc(emp ? (emp.name || emp.email) : (s.userName || 'Former member'))}</div><div class="mshift-date">${new Date(s.clockIn).toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' })} · ${formatDuration(s.durationMs || 0)}</div></div><div><div class="mshift-hangers">${s.hangers || 0}</div><div class="mshift-rate">${s.hangersPerHour || 0}/hr</div></div></div>`;
+    return `<div class="mshift-row"><div><div class="mshift-name">${esc(emp ? (emp.name || emp.email) : (s.userName || 'Former member'))}</div><div class="mshift-date">${new Date(s.clockIn).toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' })} · ${formatDuration(s.durationMs || 0)}${s.forCompanyName ? ' · for ' + esc(s.forCompanyName) : ''}</div></div><div><div class="mshift-hangers">${s.hangers || 0}</div><div class="mshift-rate">${s.hangersPerHour || 0}/hr</div></div></div>`;
   }).join('') || '<div class="empty">No shifts in this period</div>';
+}
+
+// ── Doorline Hangers ──────────────────────────────────────
+// Crew side: "Hanging for" in the Shift panel picks which client's map they work on.
+const workKey = () => `knoxWork_${myUid()}`;
+function restoreWork() {
+  workCid = companyId; workCompany = company;
+  if (isClient()) return;
+  let saved = null;
+  try {
+    const clock = JSON.parse(localStorage.getItem(clockKey()) || 'null');
+    saved = clock?.work ? { cid: clock.work, name: clock.workName } : JSON.parse(localStorage.getItem(workKey()) || 'null');
+  } catch (e) {}
+  if (saved?.cid && saved.cid !== companyId) { workCid = saved.cid; workCompany = { name: saved.name || 'Client' }; }
+  renderWorkChip();
+}
+// Clients this person is on the crew for. Live, so a new assignment shows up without a reload.
+function watchCrewJobs() {
+  if (unsubJobs) { unsubJobs(); unsubJobs = null; }
+  if (isClient()) return;
+  unsubJobs = onSnapshot(query(collection(db, 'companies'), where('crew', 'array-contains', myUid())), snap => {
+    crewJobs = [];
+    snap.forEach(d => { if (d.id !== companyId) crewJobs.push({ id: d.id, ...d.data() }); });
+    crewJobs.sort((a, b) => String(a.name).localeCompare(String(b.name)));
+    const cur = crewJobs.find(j => j.id === workId());
+    if (cur) workCompany = cur;
+    else if (workId() !== companyId && !clockedIn && !snap.metadata.fromCache) { setWork(companyId); showToast('You’re no longer on that business’s crew'); return; }
+    renderWorkChip(); renderWorkPicker();
+  }, e => console.warn('crew jobs', e));
+}
+function setWork(cid) {
+  if (cid === workId()) return;
+  if (clockedIn) { showToast('Clock out first to switch businesses'); return; }
+  workCid = cid;
+  workCompany = cid === companyId ? company : (crewJobs.find(j => j.id === cid) || { name: 'Client' });
+  try { localStorage.setItem(workKey(), JSON.stringify({ cid, name: workCompany.name || '' })); } catch (e) {}
+  if (unsubPins) { unsubPins(); unsubPins = null; }
+  Object.values(markers).forEach(m => map.removeLayer(m)); markers = {}; pins = {};
+  pathLayers.forEach(l => map.removeLayer(l)); pathLayers = []; pathsOn = false;
+  closeSheet(); clearRoute(true);
+  didInitialView = false; neighborhoodYears = []; renderZonePolygons();
+  updateStats(); subscribePins(); loadNeighborhoodYears(); loadAreas();
+  renderWorkChip(); renderWorkPicker();
+  showToast(cid === companyId ? `Back to ${company.name || 'your company'}` : `Hanging for ${workCompany.name}`);
+}
+function renderWorkChip() {
+  const away = workId() !== companyId;
+  $('work-chip').classList.toggle('on', away);
+  $('work-chip').textContent = away ? `For ${workCompany?.name || 'client'}` : '';
+}
+function renderWorkPicker() {
+  const show = crewJobs.length > 0 || workId() !== companyId;
+  $('work-picker').style.display = show ? 'flex' : 'none';
+  updateClockUI();
+  if (!show) return;
+  const opts = [{ id: companyId, name: company.name || 'My company' }, ...crewJobs];
+  if (!opts.some(o => o.id === workId())) opts.push({ id: workId(), name: workCompany?.name || 'Client' });
+  const wrap = $('work-chips'); wrap.innerHTML = '';
+  opts.forEach(o => {
+    const b = document.createElement('button');
+    b.className = 'chip' + (o.id === workId() ? ' active' : '');
+    b.textContent = o.name + (o.status && o.status !== 'active' ? ` (${o.status})` : '');
+    b.disabled = clockedIn && o.id !== workId();
+    b.addEventListener('click', () => setWork(o.id));
+    wrap.appendChild(b);
+  });
+  $('work-hint').textContent = clockedIn ? 'Clock out to switch businesses.' : 'Every house you mark goes on this business’s map.';
+}
+$('work-chip').addEventListener('click', openShifts);
+
+async function checkAdmin() {
+  try { isAdminUser = (await getDoc(doc(db, 'admins', myUid()))).exists(); } catch (e) { isAdminUser = false; }
+  if (profile) $('menu-doorline').style.display = isAdminUser && !isClient() ? 'flex' : 'none';
+}
+
+// Routes: zip codes and drawn neighborhoods the client wants hung, in settings/areas
+// → { list: [{ id, kind: 'zip', zip, name } | { id, kind: 'draw', name, points: [{lat,lng}] }] }.
+const AREA_COLOR = '#06b6d4';
+const areasDoc = () => doc(db, 'companies', workId(), 'settings', 'areas');
+async function loadAreas() {
+  const cid = workId();
+  let list = [];
+  try { const d = await getDoc(areasDoc()); list = d.exists() ? (d.data().list || []) : []; }
+  catch (e) { console.warn('areas', e); }
+  if (cid !== workId()) return;
+  areas = list; renderAreas();
+  // No hangers yet: show the routes instead (the first pins to arrive take over the view).
+  if (!didInitialView && !Object.keys(pins).length) fitAreas();
+}
+function saveAreas() {
+  return setDoc(areasDoc(), { list: areas, updatedAt: serverTimestamp(), updatedBy: myUid() })
+    .catch(e => showToast('Couldn’t save routes (' + (e.code || 'error') + ')'));
+}
+async function loadZipShape(zip) {
+  if (zip in zipShapes) return;
+  zipShapes[zip] = null; // loading
+  const gj = await fetchZipGeoJSON(zip);
+  if (!gj) { delete zipShapes[zip]; return; }
+  zipShapes[zip] = { gj, box: geoBox(gj) };
+  renderAreas();
+  if (!didInitialView && !Object.keys(pins).length) fitAreas();
+  if ($('areas-panel').classList.contains('open')) renderAreaList();
+  if ($('hangers-panel').classList.contains('open')) renderHangers();
+}
+function areaLayer(a) {
+  const style = { color: AREA_COLOR, weight: 2.5, fillColor: AREA_COLOR, fillOpacity: 0.07, interactive: false };
+  if (a.kind === 'zip') return zipShapes[a.zip] ? L.geoJSON(zipShapes[a.zip].gj, { style, interactive: false }) : null;
+  return a.points?.length >= 3 ? L.polygon(a.points.map(p => [p.lat, p.lng]), style) : null;
+}
+function renderAreas() {
+  areaLayers.forEach(l => map.removeLayer(l)); areaLayers = [];
+  areas.forEach(a => {
+    const layer = areaLayer(a);
+    if (!layer) { if (a.kind === 'zip') loadZipShape(a.zip); return; }
+    layer.addTo(map);
+    const label = L.divIcon({ html: `<div style="background:${AREA_COLOR};color:#fff;padding:3px 8px;border-radius:10px;font-size:11px;font-weight:700;white-space:nowrap">${esc(a.name)}</div>`, className: '', iconAnchor: [0, 0] });
+    areaLayers.push(layer, L.marker(layer.getBounds().getCenter(), { icon: label, interactive: false }).addTo(map));
+  });
+}
+function areaBounds(a) { const l = areaLayer(a); return l ? l.getBounds() : null; }
+function fitAreas() {
+  const b = areas.map(areaBounds).filter(Boolean);
+  if (b.length) map.invalidateSize();
+  if (b.length) map.fitBounds(b.reduce((acc, x) => acc.extend(x), L.latLngBounds(b[0].getSouthWest(), b[0].getNorthEast())).pad(0.05));
+}
+// GeoJSON is [lng, lat].
+function geoBox(g) {
+  const box = [Infinity, Infinity, -Infinity, -Infinity];
+  const walk = c => { if (typeof c[0] === 'number') { box[0] = Math.min(box[0], c[1]); box[1] = Math.min(box[1], c[0]); box[2] = Math.max(box[2], c[1]); box[3] = Math.max(box[3], c[0]); } else c.forEach(walk); };
+  const geo = x => { if (!x) return; if (x.type === 'FeatureCollection') x.features.forEach(geo); else if (x.type === 'Feature') geo(x.geometry); else if (x.coordinates) walk(x.coordinates); };
+  geo(g); return box;
+}
+function ringHas(lat, lng, ring) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const xi = ring[i][0], yi = ring[i][1], xj = ring[j][0], yj = ring[j][1];
+    if (((yi > lat) !== (yj > lat)) && (lng < (xj - xi) * (lat - yi) / (yj - yi) + xi)) inside = !inside;
+  }
+  return inside;
+}
+function geoHas(lat, lng, g) {
+  if (!g) return false;
+  if (g.type === 'FeatureCollection') return g.features.some(f => geoHas(lat, lng, f));
+  if (g.type === 'Feature') return geoHas(lat, lng, g.geometry);
+  if (g.type === 'Polygon') return ringHas(lat, lng, g.coordinates[0]) && !g.coordinates.slice(1).some(h => ringHas(lat, lng, h));
+  if (g.type === 'MultiPolygon') return g.coordinates.some(c => geoHas(lat, lng, { type: 'Polygon', coordinates: c }));
+  return false;
+}
+function areaHas(a, p) {
+  if (a.kind === 'zip') {
+    const z = zipShapes[a.zip];
+    if (!z) return new RegExp(`\\b${a.zip}\\b`).test(p.addr || ''); // shape not loaded yet: go by the address
+    return p.lat >= z.box[0] && p.lat <= z.box[2] && p.lng >= z.box[1] && p.lng <= z.box[3] && geoHas(p.lat, p.lng, z.gj);
+  }
+  return a.points?.length >= 3 && pointInPolygon(p.lat, p.lng, a.points.map(q => [q.lat, q.lng]));
+}
+const hungAt = p => p.hangerAt || p.ts || 0;
+const hangerPins = () => Object.values(pins).filter(p => p.status === 'hanger');
+function areaCounts() {
+  const list = hangerPins();
+  return areas.map(a => list.filter(p => areaHas(a, p)).length);
+}
+function areaRowHtml(a, n, removable) {
+  return `<div class="area-row" data-id="${esc(a.id)}"><span class="a-swatch" style="background:${AREA_COLOR}"></span>
+    <div class="a-info"><div class="m-name">${esc(a.name)}</div><div class="m-email">${a.kind === 'zip' ? 'Zip code' : 'Neighborhood'} · ${n.toLocaleString()} hung</div></div>
+    ${removable ? `<button class="m-remove" data-remove="${esc(a.id)}">Remove</button>` : `<div class="a-count">${n.toLocaleString()}</div>`}</div>`;
+}
+function wireAreaRows(wrap, panelId) {
+  wrap.querySelectorAll('.area-row').forEach(row => row.addEventListener('click', e => {
+    const a = areas.find(x => x.id === row.dataset.id); if (!a) return;
+    if (e.target.dataset.remove) {
+      if (!confirm(`Remove ${a.name} from your routes?`)) return;
+      areas = areas.filter(x => x.id !== a.id); saveAreas(); renderAreas(); renderAreaList(); return;
+    }
+    const b = areaBounds(a); if (!b) { showToast('Still loading that boundary'); return; }
+    $(panelId).classList.remove('open'); map.fitBounds(b.pad(0.05));
+  }));
+}
+function renderAreaList() {
+  const counts = areaCounts(), wrap = $('area-list');
+  wrap.innerHTML = areas.length ? areas.map((a, i) => areaRowHtml(a, counts[i], true)).join('') : '<div class="empty">No routes yet. Add a zip code or draw a neighborhood.</div>';
+  wireAreaRows(wrap, 'areas-panel');
+}
+function openAreas() { renderAreaList(); $('areas-panel').classList.add('open'); }
+async function addAreaZip() {
+  const zip = $('area-zip-input').value.trim();
+  if (!/^\d{5}$/.test(zip)) { showToast('Enter a 5-digit zip code'); return; }
+  if (areas.some(a => a.kind === 'zip' && a.zip === zip)) { showToast(`${zip} is already a route`); return; }
+  $('area-zip-input').value = ''; $('area-zip-input').blur();
+  areas.push({ id: Date.now().toString(36), kind: 'zip', zip, name: zip, addedAt: Date.now(), addedBy: myUid() });
+  saveAreas(); renderAreaList();
+  showToast(`${zip} added`);
+  await loadZipShape(zip);
+  if (!zipShapes[zip]) showToast(`${zip} is saved, but its boundary didn’t load. It’ll show on the map later.`);
+}
+$('areas-btn').addEventListener('click', openAreas);
+$('area-zip-add').addEventListener('click', addAreaZip);
+$('area-zip-input').addEventListener('keydown', e => { if (e.key === 'Enter') addAreaZip(); });
+$('area-zip-input').addEventListener('input', e => { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 5); });
+$('area-draw-btn').addEventListener('click', () => { $('areas-panel').classList.remove('open'); startDrawing(false, true); });
+
+// Client's "Your door hangers" panel.
+function renderHangers() {
+  const list = hangerPins().sort((a, b) => hungAt(b) - hungAt(a));
+  const week = Date.now() - 7 * 86400000, month = getRangeMs('month');
+  $('hp-total').textContent = list.length.toLocaleString();
+  const card = (v, l) => `<div class="metric-card"><div class="mc-val">${v}</div><div class="mc-label">${l}</div></div>`;
+  $('hp-stats').innerHTML = card(list.filter(p => hungAt(p) >= week).length.toLocaleString(), 'Last 7 days')
+    + card(list.filter(p => hungAt(p) >= month).length.toLocaleString(), 'This month') + card(areas.length, 'Routes');
+  const counts = areaCounts();
+  $('hp-areas').innerHTML = areas.length ? areas.map((a, i) => areaRowHtml(a, counts[i], false)).join('') : '<div class="empty">No routes yet. Add zip codes or neighborhoods under Routes.</div>';
+  wireAreaRows($('hp-areas'), 'hangers-panel');
+  $('hp-recent').innerHTML = list.length ? list.slice(0, 25).map(p => `<div class="ep-row"><div class="ep-addr">${esc(p.addr || 'Address loading')}</div><div class="ep-date">${hungAt(p) ? new Date(hungAt(p)).toLocaleDateString('en-US', { month:'short', day:'numeric' }) : ''}</div></div>`).join('')
+    + (list.length > 25 ? `<div class="empty">+ ${(list.length - 25).toLocaleString()} more in the CSV</div>` : '') : '<div class="empty">No door hangers yet</div>';
+}
+function openHangers() { renderHangers(); $('hangers-panel').classList.add('open'); }
+$('hangers-btn').addEventListener('click', openHangers);
+$('client-count').addEventListener('click', openHangers);
+function downloadHangerCsv() {
+  const rows = hangerPins().sort((a, b) => hungAt(b) - hungAt(a));
+  if (!rows.length) { showToast('No door hangers yet'); return; }
+  const lines = ['Address,Status,Date Added,Note,Year Built,Latitude,Longitude'];
+  rows.forEach(p => lines.push([p.addr, LABELS[p.status], hungAt(p) ? new Date(hungAt(p)).toLocaleDateString('en-US', { month:'2-digit', day:'2-digit', year:'numeric' }) : '', '', p.yearBuilt, p.lat.toFixed(6), p.lng.toFixed(6)].map(csvEsc).join(',')));
+  downloadCsv(lines, `door_hangers_${new Date().toISOString().slice(0, 10)}.csv`); showToast('CSV downloaded');
+}
+$('hp-csv').addEventListener('click', downloadHangerCsv);
+
+// Walk paths: the crew's GPS trails from shifts saved to this company. Split wherever the
+// pace is faster than walking, so drives between streets don't show as walked.
+function trailSegments(t) {
+  const segs = []; let cur = [], prev = null;
+  String(t || '').split(';').forEach(s => {
+    const [lat, lng, sec] = s.split(',').map(Number);
+    if (!isFinite(lat) || !isFinite(lng)) return;
+    const p = { lat, lng, t: sec };
+    if (prev) {
+      const d = distBetween(prev, p), dt = p.t - prev.t;
+      if (dt > 0 ? d / dt > 4 : d > 150) { if (cur.length > 1) segs.push(cur); cur = []; }
+    }
+    cur.push([lat, lng]); prev = p;
+  });
+  if (cur.length > 1) segs.push(cur);
+  return segs;
+}
+$('paths-btn').addEventListener('click', async () => {
+  pathsOn = !pathsOn;
+  $('paths-btn').classList.toggle('active', pathsOn);
+  pathLayers.forEach(l => map.removeLayer(l)); pathLayers = [];
+  if (!pathsOn) return;
+  try {
+    const snap = await getDocs(collection(db, 'companies', workId(), 'shifts'));
+    const list = []; snap.forEach(d => list.push(d.data()));
+    list.sort((a, b) => (b.clockIn || 0) - (a.clockIn || 0));
+    if (!pathsOn) return;
+    list.slice(0, 150).forEach(s => {
+      const segs = trailSegments(s.trail);
+      if (segs.length) pathLayers.push(L.polyline(segs, { color: '#4f6ef7', weight: 4, opacity: 0.55, interactive: false }).addTo(map));
+    });
+    showToast(pathLayers.length ? `Showing ${pathLayers.length} walk${pathLayers.length === 1 ? '' : 's'}` : 'No walk paths yet');
+  } catch (e) { showToast('Couldn’t load walk paths (' + (e.code || 'error') + ')'); }
+});
+
+// Admin: Doorline clients — approve them and choose who on your team hangs for each.
+async function openDoorline() { $('doorline-panel').classList.add('open'); await loadDoorline(); }
+$('doorline-refresh-btn').addEventListener('click', loadDoorline);
+async function loadDoorline() {
+  const wrap = $('doorline-list');
+  wrap.innerHTML = '<div class="empty">Loading…</div>';
+  let clients = [], team = [];
+  try {
+    const [snap, members] = await Promise.all([getDocs(query(collection(db, 'companies'), where('doorline', '==', true))), fetchMembers()]);
+    snap.forEach(d => clients.push({ id: d.id, ...d.data() }));
+    team = members;
+  } catch (e) { wrap.innerHTML = `<div class="empty">Couldn’t load clients (${esc(e.code || e.message)})</div>`; return; }
+  const order = { pending: 0, active: 1, paused: 2, declined: 3 };
+  clients.sort((a, b) => (order[a.status || 'active'] ?? 1) - (order[b.status || 'active'] ?? 1) || String(a.name).localeCompare(String(b.name)));
+  wrap.innerHTML = clients.length ? '' : '<div class="empty">No Doorline clients yet. Businesses that answer “Yes, through Doorline Hangers” when they sign up show up here.</div>';
+  clients.forEach(c => {
+    const box = document.createElement('div'); box.className = 'box'; box.style.cssText = 'display:flex;flex-direction:column;gap:10px';
+    const render = () => {
+      const st = c.status || 'active', crew = c.crew || [];
+      const actions = { pending: [['active', 'Approve'], ['declined', 'Decline']], active: [['paused', 'Pause']], paused: [['active', 'Resume']], declined: [['active', 'Approve']] }[st] || [];
+      box.innerHTML = `<div><div class="m-name">${esc(c.name || 'Unnamed')}<span class="status-tag ${esc(st)}">${esc(st)}</span></div>
+        <div class="m-email">${esc([c.ownerName, c.phone, c.ownerEmail].filter(Boolean).join(' · '))}</div></div>
+        ${actions.length ? `<div style="display:flex;gap:8px">${actions.map(([s, l]) => `<button class="secondary-btn" data-status="${s}">${l}</button>`).join('')}</div>` : ''}
+        <div class="label" style="margin:0">Hangs for them</div>
+        <div class="chips">${team.map(m => `<button class="chip${crew.includes(m.uid) ? ' active' : ''}" data-uid="${esc(m.uid)}">${esc(m.name || m.email)}</button>`).join('') || '<div class="hint">Invite your crew to your own company first (Account → Team).</div>'}</div>`;
+      box.querySelectorAll('[data-status]').forEach(b => b.addEventListener('click', async () => {
+        const status = b.dataset.status;
+        busy(b, true, 'Saving…');
+        try { await updateDoc(doc(db, 'companies', c.id), { status, statusAt: serverTimestamp(), statusBy: myUid() }); c.status = status; render(); showToast(`${c.name}: ${status}`); }
+        catch (e) { busy(b, false); showToast('Couldn’t update (' + (e.code || 'error') + ')'); }
+      }));
+      box.querySelectorAll('[data-uid]').forEach(b => b.addEventListener('click', async () => {
+        const uid = b.dataset.uid, on = !(c.crew || []).includes(uid);
+        b.disabled = true;
+        try {
+          await updateDoc(doc(db, 'companies', c.id), { crew: on ? arrayUnion(uid) : arrayRemove(uid) });
+          c.crew = on ? [...(c.crew || []), uid] : (c.crew || []).filter(x => x !== uid);
+          render();
+        } catch (e) { b.disabled = false; showToast('Couldn’t update crew (' + (e.code || 'error') + ')'); }
+      }));
+    };
+    render(); wrap.appendChild(box);
+  });
 }
 
 // ── Zip code overlay ──────────────────────────────────────

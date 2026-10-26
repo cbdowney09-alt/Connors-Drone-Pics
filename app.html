@@ -751,7 +751,7 @@ const csvEsc = v => `"${String(v ?? '').replace(/"/g,'""')}"`;
 // ── State ─────────────────────────────────────────────────
 let currentUser = null, profile = null, companyId = null, company = {};
 let pins = {}, markers = {}, neighborhoodYears = [], shifts = [];
-let unsubPins = null, unsubCompany = null;
+let unsubPins = [], unsubCompany = null, pinsBy = {};
 let hiddenStatuses = new Set(), currentPinId = null, noteDebounce = null, yearDebounce = null;
 let roofingMode = false, zonePolygonLayers = [];
 let drawingMode = false, drawingForRoute = false, drawnPoints = [], drawnPolyline = null, drawnPolygon = null, drawnMarkers = [];
@@ -762,14 +762,17 @@ let locateMarker = null, didInitialView = false;
 // Doorline Hangers: a door hanger distribution service. Businesses that sign up through it are
 // "Doorline clients" (companies/{id}.doorline): their owner sees only where hangers went and picks
 // the routes. Doorline's own crew (employees of the admin's company) are listed in the client's
-// `crew` field and hang for it: `workCid` is the company whose pins the map shows and writes to
-// (the client they picked under "Hanging for"); `companyId` stays their own company.
-let workCid = null, workCompany = null, crewJobs = [], isAdminUser = false;
+// `crew` field and hang for it: `workCids` are the clients picked under "Hanging for" (one or
+// more; empty = their own company). The map shows those clients' pins merged, and every door
+// marked is written to each of them. `companyId` stays their own company.
+let workCids = [], workNames = {}, crewJobs = [], isAdminUser = false;
 let areas = [], areaLayers = [], zipShapes = {}, pathLayers = [], pathsOn = false;
 let drawingForArea = false, setupDoorline = null, unsubJobs = null;
 const isOwner = () => profile?.role === 'owner';
 const isClient = () => !!company?.doorline;
-const workId = () => workCid || companyId;
+const workIds = () => workCids.length ? workCids : [companyId];
+const workId = () => workIds()[0]; // the first one: zones, routes and walk paths
+const workLabel = () => workCids.length ? workCids.map(c => workNames[c] || 'Client').join(' + ') : (company.name || 'your company');
 const myUid = () => currentUser?.uid;
 
 // ── Screens ───────────────────────────────────────────────
@@ -1014,14 +1017,14 @@ function enterApp() {
 }
 
 function leaveApp() {
-  if (unsubPins) { unsubPins(); unsubPins = null; }
+  unsubPins.forEach(u => u()); unsubPins = []; pinsBy = {};
   if (unsubCompany) { unsubCompany(); unsubCompany = null; }
   Object.values(markers).forEach(m => map.removeLayer(m)); markers = {}; pins = {};
   zonePolygonLayers.forEach(l => map.removeLayer(l)); zonePolygonLayers = [];
   areaLayers.forEach(l => map.removeLayer(l)); areaLayers = []; areas = [];
   pathLayers.forEach(l => map.removeLayer(l)); pathLayers = []; pathsOn = false; $('paths-btn').classList.remove('active');
   if (unsubJobs) { unsubJobs(); unsubJobs = null; }
-  workCid = null; workCompany = null; crewJobs = []; isAdminUser = false;
+  workCids = []; workNames = {}; crewJobs = []; isAdminUser = false;
   $('menu-doorline').style.display = 'none'; $('work-picker').style.display = 'none'; $('work-chip').classList.remove('on');
   clearRoute(true);
   if (drawingMode) stopDrawing();
@@ -1049,20 +1052,30 @@ window.addEventListener('offline', () => setSync('offline'));
 window.addEventListener('online', () => setSync('ok'));
 
 // ── Data layer ────────────────────────────────────────────
-const pinsCol = () => collection(db, 'companies', workId(), 'pins');
 function normalizePin(d) {
   return { ...d, lat: Number(d.lat), lng: Number(d.lng), status: LABELS[d.status] ? d.status : 'none', note: d.note || '', yearBuilt: d.yearBuilt || '', addr: d.addr || '', ts: typeof d.ts === 'number' ? d.ts : 0 };
 }
+// Hanging for several clients at once: each one's pins are kept in pinsBy[cid], and the map
+// shows the newest copy of each house (pins[id]).
+function mergePin(id) {
+  let best = null;
+  workIds().forEach(cid => { const p = pinsBy[cid]?.[id]; if (p && (!best || (p.ts || 0) >= (best.ts || 0))) best = p; });
+  if (best) { pins[id] = { ...best, id }; addOrUpdateMarker(id); }
+  else { if (markers[id]) { map.removeLayer(markers[id]); delete markers[id]; } delete pins[id]; }
+}
 function subscribePins() {
-  if (unsubPins) unsubPins();
-  unsubPins = onSnapshot(pinsCol(), { includeMetadataChanges: true }, snap => {
+  unsubPins.forEach(u => u()); unsubPins = []; pinsBy = {};
+  workIds().forEach(cid => {
+  pinsBy[cid] = {};
+  unsubPins.push(onSnapshot(collection(db, 'companies', cid, 'pins'), { includeMetadataChanges: true }, snap => {
+    if (!pinsBy[cid]) return;
     snap.docChanges().forEach(ch => {
       const id = ch.doc.id;
-      if (ch.type === 'removed') { if (markers[id]) { map.removeLayer(markers[id]); delete markers[id]; } delete pins[id]; return; }
+      if (ch.type === 'removed') { delete pinsBy[cid][id]; mergePin(id); return; }
       const p = normalizePin(ch.doc.data());
       if (!isFinite(p.lat) || !isFinite(p.lng)) return;
-      pins[id] = { ...p, id };
-      addOrUpdateMarker(id);
+      pinsBy[cid][id] = p;
+      mergePin(id);
     });
     updateStats();
     if (!didInitialView && Object.keys(pins).length) {
@@ -1074,14 +1087,21 @@ function subscribePins() {
     if (snap.metadata.hasPendingWrites) setSync('pending');
     else setSync(navigator.onLine ? 'ok' : 'offline');
     if (clockedIn) updateLiveHangers();
-  }, err => { console.error(err); setSync('error'); showToast('Sync error: ' + (err.code || err.message)); });
+  }, err => { console.error(err); setSync('error'); showToast('Sync error: ' + (err.code || err.message)); }));
+  });
+}
+// Writes go to every company being worked for. One that doesn't have this house yet gets the
+// whole pin (pins[id] already holds the change), so it never ends up with a partial record.
+function pinWrite(cid, id, data) {
+  const { id: _, updatedAt, ...full } = pins[id] || {};
+  return { ...(pinsBy[cid]?.[id] ? {} : full), ...data, updatedBy: myUid(), updatedAt: serverTimestamp() };
 }
 function savePin(id, data) {
-  return setDoc(doc(db, 'companies', workId(), 'pins', id), { ...data, updatedBy: myUid(), updatedAt: serverTimestamp() }, { merge: true })
+  return Promise.all(workIds().map(cid => setDoc(doc(db, 'companies', cid, 'pins', id), pinWrite(cid, id, data), { merge: true })))
     .catch(e => { console.error(e); setSync('error'); showToast('Couldn\u2019t save (' + (e.code || 'error') + ')'); });
 }
 function deletePinFromDb(id) {
-  return deleteDoc(doc(db, 'companies', workId(), 'pins', id)).catch(e => { setSync('error'); showToast('Couldn\u2019t delete (' + (e.code || 'error') + ')'); });
+  return Promise.all(workIds().map(cid => deleteDoc(doc(db, 'companies', cid, 'pins', id)))).catch(e => { setSync('error'); showToast('Couldn\u2019t delete (' + (e.code || 'error') + ')'); });
 }
 async function loadNeighborhoodYears() {
   const cid = workId();
@@ -2039,16 +2059,17 @@ async function placeSweepPins() {
   const all = Object.values(sweepCands), chosen = all.filter(c => c.on);
   if (!companyId) return;
   const now = Date.now(), ids = [];
-  for (let i = 0; i < chosen.length; i += 400) {
+  const per = Math.max(1, Math.floor(400 / workIds().length)); // a batch holds 500 writes
+  for (let i = 0; i < chosen.length; i += per) {
     const batch = writeBatch(db);
-    chosen.slice(i, i + 400).forEach(c => {
+    chosen.slice(i, i + per).forEach(c => {
       const id = c.lat.toFixed(6) + ',' + c.lng.toFixed(6);
       if (pins[id] || nearestPin(c)) return;
       const p = { lat: c.lat, lng: c.lng, addr: c.addr || `${c.lat.toFixed(4)}, ${c.lng.toFixed(4)}`, status: 'hanger', note: '', yearBuilt: getNeighborhoodYearForPoint(c.lat, c.lng),
         ts: now, createdBy: myUid(), createdAt: now, statusBy: myUid(), statusAt: now, hangerBy: myUid(), hangerAt: now, source: 'gps-sweep' };
       pins[id] = { ...p, id };
       addOrUpdateMarker(id); ids.push(id);
-      batch.set(doc(db, 'companies', workId(), 'pins', id), { ...p, updatedBy: myUid(), updatedAt: serverTimestamp() }, { merge: true });
+      workIds().forEach(cid => batch.set(doc(db, 'companies', cid, 'pins', id), { ...p, updatedBy: myUid(), updatedAt: serverTimestamp() }, { merge: true }));
     });
     batch.commit().catch(e => { console.error(e); setSync('error'); showToast('Couldn’t save street pins (' + (e.code || 'error') + ')'); });
   }
@@ -2123,7 +2144,7 @@ function startClockTimer() {
   tick(); clockTimerInterval = setInterval(tick, 1000);
 }
 function updateClockUI() {
-  $('clock-btn').textContent = clockedIn ? 'Clock out' : crewJobs.length ? `Clock in for ${workCompany?.name || company.name || 'your company'}` : 'Clock in';
+  $('clock-btn').textContent = clockedIn ? 'Clock out' : crewJobs.length ? `Clock in for ${workLabel()}` : 'Clock in';
   $('clock-btn').className = clockedIn ? 'clocked-in' : 'clocked-out';
   $('clock-status').textContent = clockedIn ? 'Clocked in' : 'Clocked out';
   $('clock-timer').classList.toggle('running', clockedIn);
@@ -2151,9 +2172,9 @@ function restoreClock() {
 }
 function clockIn() {
   clockedIn = true; clockInTime = Date.now();
-  try { localStorage.setItem(clockKey(), JSON.stringify({ time: clockInTime, work: workId(), workName: workCompany?.name || '' })); } catch (e) {}
+  try { localStorage.setItem(clockKey(), JSON.stringify({ time: clockInTime, works: workCids, names: workNames })); } catch (e) {}
   updateClockUI(); startClockTimer(); renderWorkPicker();
-  showToast(workId() !== companyId ? `Clocked in · hanging for ${workCompany?.name || 'client'}` : 'Clocked in');
+  showToast(workCids.length ? `Clocked in · hanging for ${workLabel()}` : 'Clocked in');
   sweepStart();
 }
 async function clockOut() {
@@ -2171,11 +2192,11 @@ async function clockOut() {
   updateClockUI(); renderShifts(); renderWorkPicker();
   showToast(`Shift saved: ${hangers} hangers · ${hangersPerHour}/hr`);
   const shiftErr = e => showToast('Shift couldn\u2019t sync (' + (e.code || 'error') + ')');
-  if (workId() !== companyId) {
-    // Hanging for a Doorline client: the client's copy gives them the walk path; ours keeps team metrics whole.
-    shift.forCompanyId = workId(); shift.forCompanyName = workCompany?.name || '';
-    const { forCompanyId, forCompanyName, ...clientShift } = shift;
-    addDoc(collection(db, 'companies', workId(), 'shifts'), clientShift).catch(shiftErr);
+  if (workCids.length) {
+    // Hanging for Doorline clients: each client's copy gives them the walk path; ours keeps team metrics whole.
+    const clientShift = { ...shift };
+    workCids.forEach(cid => addDoc(collection(db, 'companies', cid, 'shifts'), clientShift).catch(shiftErr));
+    Object.assign(shift, { forCompanyId: workCids[0], forCompanyIds: workCids.slice(), forCompanyName: workLabel() });
   }
   addDoc(collection(db, 'companies', companyId, 'shifts'), shift).catch(shiftErr);
   syncShiftToSheets(shift);
@@ -2412,14 +2433,16 @@ function renderMetrics() {
 // Crew side: "Hanging for" in the Shift panel picks which client's map they work on.
 const workKey = () => `knoxWork_${myUid()}`;
 function restoreWork() {
-  workCid = companyId; workCompany = company;
+  workCids = []; workNames = {};
   if (isClient()) return;
   let saved = null;
   try {
     const clock = JSON.parse(localStorage.getItem(clockKey()) || 'null');
-    saved = clock?.work ? { cid: clock.work, name: clock.workName } : JSON.parse(localStorage.getItem(workKey()) || 'null');
+    saved = clock?.works ? clock : clock?.work ? { works: [clock.work], names: { [clock.work]: clock.workName } } : JSON.parse(localStorage.getItem(workKey()) || 'null');
+    if (saved?.cid) saved = { works: [saved.cid], names: { [saved.cid]: saved.name } }; // saved before multi-select
   } catch (e) {}
-  if (saved?.cid && saved.cid !== companyId) { workCid = saved.cid; workCompany = { name: saved.name || 'Client' }; }
+  workCids = (saved?.works || []).filter(c => c && c !== companyId);
+  workNames = saved?.names || {};
   renderWorkChip();
 }
 // Clients this person is on the crew for. Live, so a new assignment shows up without a reload.
@@ -2430,49 +2453,58 @@ function watchCrewJobs() {
     crewJobs = [];
     snap.forEach(d => { if (d.id !== companyId) crewJobs.push({ id: d.id, ...d.data() }); });
     crewJobs.sort((a, b) => String(a.name).localeCompare(String(b.name)));
-    const cur = crewJobs.find(j => j.id === workId());
-    if (cur) workCompany = cur;
-    else if (workId() !== companyId && !clockedIn && !snap.metadata.fromCache) { setWork(companyId); showToast('You’re no longer on that business’s crew'); return; }
+    crewJobs.forEach(j => { workNames[j.id] = j.name || 'Client'; });
+    const still = workCids.filter(c => crewJobs.some(j => j.id === c));
+    if (still.length < workCids.length && !clockedIn && !snap.metadata.fromCache) {
+      showToast('You’re no longer on the crew for one of those businesses');
+      setWork(still); return;
+    }
     renderWorkChip(); renderWorkPicker();
   }, e => console.warn('crew jobs', e));
 }
-function setWork(cid) {
-  if (cid === workId()) return;
+// Picks the clients to hang for (empty = your own company), then reloads the map for them.
+function setWork(cids) {
   if (clockedIn) { showToast('Clock out first to switch businesses'); return; }
-  workCid = cid;
-  workCompany = cid === companyId ? company : (crewJobs.find(j => j.id === cid) || { name: 'Client' });
-  try { localStorage.setItem(workKey(), JSON.stringify({ cid, name: workCompany.name || '' })); } catch (e) {}
-  if (unsubPins) { unsubPins(); unsubPins = null; }
+  workCids = cids.filter(c => c !== companyId);
+  try { localStorage.setItem(workKey(), JSON.stringify({ works: workCids, names: workNames })); } catch (e) {}
   Object.values(markers).forEach(m => map.removeLayer(m)); markers = {}; pins = {};
   pathLayers.forEach(l => map.removeLayer(l)); pathLayers = []; pathsOn = false;
   closeSheet(); clearRoute(true);
   didInitialView = false; neighborhoodYears = []; renderZonePolygons();
   updateStats(); subscribePins(); loadNeighborhoodYears(); loadAreas();
   renderWorkChip(); renderWorkPicker();
-  showToast(cid === companyId ? `Back to ${company.name || 'your company'}` : `Hanging for ${workCompany.name}`);
+}
+function toggleWork(cid) {
+  if (clockedIn) { showToast('Clock out first to switch businesses'); return; }
+  if (cid === companyId) { if (workCids.length) { setWork([]); showToast(`Back to ${company.name || 'your company'}`); } return; }
+  const on = !workCids.includes(cid);
+  setWork(on ? [...workCids, cid] : workCids.filter(c => c !== cid));
+  showToast(workCids.length ? `Hanging for ${workLabel()}` : `Back to ${company.name || 'your company'}`);
 }
 function renderWorkChip() {
-  const away = workId() !== companyId;
-  $('work-chip').classList.toggle('on', away);
-  $('work-chip').textContent = away ? `For ${workCompany?.name || 'client'}` : '';
+  $('work-chip').classList.toggle('on', workCids.length > 0);
+  $('work-chip').textContent = workCids.length ? `For ${workLabel()}` : '';
 }
 function renderWorkPicker() {
-  const show = crewJobs.length > 0 || workId() !== companyId;
+  const show = crewJobs.length > 0 || workCids.length > 0;
   $('work-picker').style.display = show ? 'flex' : 'none';
   updateClockUI();
   if (!show) return;
   const opts = [{ id: companyId, name: company.name || 'My company' }, ...crewJobs];
-  if (!opts.some(o => o.id === workId())) opts.push({ id: workId(), name: workCompany?.name || 'Client' });
+  workCids.forEach(c => { if (!opts.some(o => o.id === c)) opts.push({ id: c, name: workNames[c] || 'Client' }); });
   const wrap = $('work-chips'); wrap.innerHTML = '';
   opts.forEach(o => {
+    const on = o.id === companyId ? !workCids.length : workCids.includes(o.id);
     const b = document.createElement('button');
-    b.className = 'chip' + (o.id === workId() ? ' active' : '');
-    b.textContent = o.name + (o.status && o.status !== 'active' ? ` (${o.status})` : '');
-    b.disabled = clockedIn && o.id !== workId();
-    b.addEventListener('click', () => setWork(o.id));
+    b.className = 'chip' + (on ? ' active' : '');
+    b.textContent = (on && o.id !== companyId ? '✓ ' : '') + o.name + (o.status && o.status !== 'active' ? ` (${o.status})` : '');
+    b.disabled = clockedIn && !on;
+    b.addEventListener('click', () => toggleWork(o.id));
     wrap.appendChild(b);
   });
-  $('work-hint').textContent = clockedIn ? 'Clock out to switch businesses.' : 'Every house you mark goes on this business’s map.';
+  $('work-hint').textContent = clockedIn ? 'Clock out to switch businesses.'
+    : workCids.length > 1 ? `Every house you mark goes on all ${workCids.length} businesses’ maps.`
+    : 'Tap more than one business if you’re carrying hangers for several. Every house you mark goes on each one’s map.';
 }
 $('work-chip').addEventListener('click', openShifts);
 
@@ -2486,17 +2518,19 @@ async function checkAdmin() {
 const AREA_COLOR = '#06b6d4';
 const areasDoc = () => doc(db, 'companies', workId(), 'settings', 'areas');
 async function loadAreas() {
-  const cid = workId();
-  let list = [];
-  try { const d = await getDoc(areasDoc()); list = d.exists() ? (d.data().list || []) : []; }
-  catch (e) { console.warn('areas', e); }
-  if (cid !== workId()) return;
-  areas = list; renderAreas();
+  const cids = workIds().slice(), key = cids.join();
+  const lists = await Promise.all(cids.map(async cid => {
+    try { const d = await getDoc(doc(db, 'companies', cid, 'settings', 'areas')); return (d.exists() ? (d.data().list || []) : []).map(a => ({ ...a, _cid: cid })); }
+    catch (e) { console.warn('areas', e); return []; }
+  }));
+  if (key !== workIds().join()) return;
+  areas = lists.flat(); renderAreas();
   // No hangers yet: show the routes instead (the first pins to arrive take over the view).
   if (!didInitialView && !Object.keys(pins).length) fitAreas();
 }
 function saveAreas() {
-  return setDoc(areasDoc(), { list: areas, updatedAt: serverTimestamp(), updatedBy: myUid() })
+  const list = areas.filter(a => (a._cid || workId()) === workId()).map(({ _cid, ...a }) => a);
+  return setDoc(areasDoc(), { list, updatedAt: serverTimestamp(), updatedBy: myUid() })
     .catch(e => showToast('Couldn’t save routes (' + (e.code || 'error') + ')'));
 }
 async function loadZipShape(zip) {

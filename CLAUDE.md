@@ -179,10 +179,11 @@ Doorline Hangers is the owner's door hanger distribution service. At company set
   addresses, and the crew's walk paths (shift `trail`s, split wherever the pace is faster than walking).
   **Routes**: zip codes (TIGERweb outlines) and drawn neighborhoods, saved in `settings/areas`. No shifts, metrics, team or invites.
 - **Crew**: the admin's own team. In Account → Doorline clients (admins only), the admin approves, pauses or resumes clients
-  and toggles who hangs for each one (the client's `crew` array of uids). Crew members see "Hanging for" in the Shift panel.
-  The chosen business is `workCid`; the pins, zones, routes and sweep all read and write there, while `companyId` stays their own.
-  It's locked while clocked in. On clock-out, the shift is saved to the client (walk path) and to the crew's company
-  (`forCompanyId`), so the admin's Team metrics count those hangers.
+  and toggles who hangs for each one (the client's `crew` array of uids). Crew members see "Hanging for" in the Shift panel,
+  a multi-select of the clients they're assigned to (`workCids`; empty means their own company, `companyId`). The map merges those
+  clients' pins (`pinsBy[cid]`, newest copy wins), and every door marked or swept is written to each of them. A client that
+  doesn't have the house yet gets the full pin (`pinWrite`). It's locked while clocked in. On clock-out, the shift goes to each
+  client (walk path) and to the crew's company (`forCompanyId`, `forCompanyIds`, `forCompanyName`), so Team metrics count the doors once.
 - Rules: `onCrew(cid)` gives the crew the same pins, shifts and settings access as members. Only an admin changes `crew` or `doorline`.
 - **iPhone app not done yet:** the native app ignores `doorline` and `crew`. Until it's updated, crew hanging for a client and
   client owners should use the website.

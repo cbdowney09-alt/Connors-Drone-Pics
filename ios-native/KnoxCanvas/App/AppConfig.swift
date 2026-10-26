@@ -23,7 +23,7 @@ enum AppConfig {
     /// Empty = no email (requests still show in the Admin screen). See admin/request-email.gs.
     static let requestWebhook = ""
     /// The web app; invite messages point new members here.
-    static let webAppURL = "https://connorsdronepics.com/app.html"
+    static let webAppURL = "https://knoxcanvas.app/app.html"
     static let inviteDays = 7
     static let defaultRoofCutoff = 2012
 }

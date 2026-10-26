@@ -116,6 +116,50 @@ await t('admin counts members of any company', assertSucceeds(getDocs(query(coll
 await t('admin reads any company pins (counts)', assertSucceeds(getDocs(collection(as('admin'), 'companies/other/pins'))));
 await t('admin reads owner profile', assertSucceeds(getDoc(doc(as('admin'), 'users/outsider'))));
 
+console.log('Doorline Hangers');
+await env.withSecurityRulesDisabled(async ctx => {
+  const db = ctx.firestore();
+  await setDoc(doc(db, 'companies/dlhq'), { name: 'Doorline Hangers', ownerId: 'dlowner', status: 'active' });
+  await setDoc(doc(db, 'users/dlowner'), { name: 'Connor', role: 'owner', companyId: 'dlhq' });
+  await setDoc(doc(db, 'users/crew1'), { name: 'Crew', role: 'employee', companyId: 'dlhq' });
+  await setDoc(doc(db, 'users/crew2'), { name: 'Crew Two', role: 'employee', companyId: 'dlhq' });
+  await setDoc(doc(db, 'companies/acme'), { name: 'Acme', ownerId: 'acmeowner', status: 'active', doorline: true, crew: ['crew1'] });
+  await setDoc(doc(db, 'users/acmeowner'), { name: 'A', role: 'owner', companyId: 'acme' });
+  await setDoc(doc(db, 'companies/acme/pins/1,1'), { status: 'hanger' });
+});
+{
+  const db = as('dlnew'); const b = writeBatch(db);
+  b.set(doc(db, 'companies/dlnewco'), { name: 'Client', ownerId: 'dlnew', status: 'pending', doorline: true });
+  b.set(doc(db, 'users/dlnew'), { name: 'C', role: 'owner', companyId: 'dlnewco' });
+  await t('request a Doorline client company', assertSucceeds(b.commit()));
+}
+await t('crew lists the clients they hang for', assertSucceeds(getDocs(query(collection(as('crew1'), 'companies'), where('crew', 'array-contains', 'crew1')))));
+await t('crew reads the client doc', assertSucceeds(getDoc(doc(as('crew1'), 'companies/acme'))));
+await t('crew reads client pins', assertSucceeds(getDocs(collection(as('crew1'), 'companies/acme/pins'))));
+await t('crew hangs for client', assertSucceeds(setDoc(doc(as('crew1'), 'companies/acme/pins/2,2'), { status: 'hanger', source: 'gps-sweep' })));
+await t('crew saves client shift (walk path)', assertSucceeds(setDoc(doc(as('crew1'), 'companies/acme/shifts/s1'), { userId: 'crew1', trail: '1,2,0' })));
+await t('crew saves home copy of shift', assertSucceeds(setDoc(doc(as('crew1'), 'companies/dlhq/shifts/s1'), { userId: 'crew1', forCompanyId: 'acme', hangers: 1 })));
+await t('client owner reads hangers', assertSucceeds(getDocs(collection(as('acmeowner'), 'companies/acme/pins'))));
+await t('client owner reads walk paths', assertSucceeds(getDocs(collection(as('acmeowner'), 'companies/acme/shifts'))));
+await t('client owner saves routes', assertSucceeds(setDoc(doc(as('acmeowner'), 'companies/acme/settings/areas'), { list: [{ id: 'a', kind: 'zip', zip: '37919', name: '37919' }] })));
+await t('crew reads routes', assertSucceeds(getDoc(doc(as('crew1'), 'companies/acme/settings/areas'))));
+await t('unassigned crew CANNOT read client', assertFails(getDoc(doc(as('crew2'), 'companies/acme'))));
+await t('unassigned crew CANNOT read client pins', assertFails(getDocs(collection(as('crew2'), 'companies/acme/pins'))));
+await t('unassigned crew CANNOT write client pins', assertFails(setDoc(doc(as('crew2'), 'companies/acme/pins/3,3'), { status: 'hanger' })));
+await t('crew CANNOT list all companies', assertFails(getDocs(collection(as('crew1'), 'companies'))));
+await t('crew CANNOT list another person\'s clients', assertFails(getDocs(query(collection(as('crew2'), 'companies'), where('crew', 'array-contains', 'crew1')))));
+await t('client owner CANNOT add crew', assertFails(updateDoc(doc(as('acmeowner'), 'companies/acme'), { crew: ['acmeowner', 'crew1'] })));
+await t('client owner CANNOT drop doorline', assertFails(updateDoc(doc(as('acmeowner'), 'companies/acme'), { doorline: false })));
+await t('crew CANNOT edit the client company', assertFails(updateDoc(doc(as('crew1'), 'companies/acme'), { name: 'x' })));
+await t('client owner CANNOT read Doorline team', assertFails(getDoc(doc(as('acmeowner'), 'users/crew1'))));
+await t('client owner CANNOT read Doorline pins', assertFails(getDocs(collection(as('acmeowner'), 'companies/dlhq/pins'))));
+await t('admin lists Doorline clients', assertSucceeds(getDocs(query(collection(as('admin'), 'companies'), where('doorline', '==', true)))));
+await t('admin assigns crew', assertSucceeds(updateDoc(doc(as('admin'), 'companies/acme'), { crew: ['crew1', 'crew2'] })));
+await t('newly assigned crew reads client pins', assertSucceeds(getDocs(collection(as('crew2'), 'companies/acme/pins'))));
+await t('admin pauses client', assertSucceeds(updateDoc(doc(as('admin'), 'companies/acme'), { status: 'paused' })));
+await t('crew CANNOT hang for a paused client', assertFails(setDoc(doc(as('crew1'), 'companies/acme/pins/4,4'), { status: 'hanger' })));
+await t('owner saves states (house data)', assertSucceeds(updateDoc(doc(as('owner1'), 'companies/legacy'), { states: ['TN'] })));
+
 console.log('Removing people and deleting accounts');
 await t('owner removes employee', assertSucceeds(deleteDoc(doc(as('owner1'), 'users/newemp'))));
 await t('owner CANNOT remove another company\'s employee', assertFails(deleteDoc(doc(as('owner1'), 'users/pemp'))));

@@ -9,6 +9,10 @@ rules_version = '2';
 //   Companies with no status (made before approvals) count as active.
 // - Members of a company that isn't active can still read the company doc (to see
 //   "waiting for approval" / "paused") but not its pins, shifts or settings.
+// - Doorline Hangers: businesses that sign up through it get `doorline: true`. The admin lists
+//   which people hang for each one in its `crew` array (uids); the crew can then read and write
+//   that company's pins, shifts and settings, the same as its own members. Only an admin can
+//   change `crew` or `doorline`.
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -23,6 +27,7 @@ service cloud.firestore {
     function companyDoc(cid) { return get(/databases/$(database)/documents/companies/$(cid)).data; }
     function isActive(cid) { return companyDoc(cid).get('status', 'active') == 'active'; }
     function ownsCompany(cid) { return signedIn() && companyDoc(cid).ownerId == me(); }
+    function onCrew(cid) { return signedIn() && me() in companyDoc(cid).get('crew', []); }
 
     // ── Admins: only readable by themselves; created by hand in the console ──
     match /admins/{uid} {
@@ -63,8 +68,10 @@ service cloud.firestore {
 
     // ── Companies ──
     match /companies/{cid} {
-      allow get: if isAdmin() || inCompany(cid) || (signedIn() && resource.data.ownerId == me());
-      allow list: if isAdmin();
+      allow get: if isAdmin() || inCompany(cid) || (signedIn() && resource.data.ownerId == me())
+        || (signedIn() && me() in resource.data.get('crew', []));
+      // Admin: everything. Crew: the Doorline clients they hang for (query: crew array-contains uid).
+      allow list: if isAdmin() || (signedIn() && me() in resource.data.get('crew', []));
 
       // Only as a pending request, owned by the person creating it, who has no company yet.
       allow create: if signedIn()
@@ -73,18 +80,18 @@ service cloud.firestore {
         && !exists(/databases/$(database)/documents/users/$(me()))
         && getAfter(/databases/$(database)/documents/users/$(me())).data.companyId == cid;
 
-      // Admin: anything (approve, pause, resume, decline). Owner: settings and states only, never status.
+      // Admin: anything (approve, pause, resume, decline, crew). Owner: settings and states only, never status.
       allow update: if isAdmin() || (signedIn() && resource.data.ownerId == me()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'sheetsUrl', 'roofCutoff', 'states']));
 
       allow delete: if isAdmin() || (signedIn() && resource.data.ownerId == me());
 
-      // Pins, shifts, settings: members of an active company. Admins can read (counts).
+      // Pins, shifts, settings: members (or Doorline crew) of an active company. Admins can read (counts).
       // `{coll}/{rest=**}` needs at least one segment; a bare `{sub=**}` would also match
       // the company doc itself and let members edit it (including its status).
       match /{coll}/{rest=**} {
-        allow read: if isAdmin() || (inCompany(cid) && isActive(cid));
-        allow write: if inCompany(cid) && isActive(cid);
+        allow read: if isAdmin() || ((inCompany(cid) || onCrew(cid)) && isActive(cid));
+        allow write: if (inCompany(cid) || onCrew(cid)) && isActive(cid);
       }
     }
 

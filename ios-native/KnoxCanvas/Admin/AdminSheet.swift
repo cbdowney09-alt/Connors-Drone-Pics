@@ -8,6 +8,9 @@ struct AdminSheet: View {
     @State private var toastText: String?
     @State private var team: [Member] = []
     @State private var savingCrew = Set<String>()
+    @State private var crewCode: (code: String, expires: Date)?
+    @State private var makingCode = false
+    @State private var confirmRemove: Member?
     private let homeCompanyId: String
     @Environment(\.openURL) private var openURL
 
@@ -28,6 +31,7 @@ struct AdminSheet: View {
                 } else if !admin.loaded {
                     ProgressView().tint(Theme.muted).frame(maxWidth: .infinity).padding(.vertical, 30)
                 } else {
+                    crewSection
                     section("Requests", .pending, empty: "No new requests")
                     section("Active", .active, empty: "No active companies")
                     section("Paused", .paused, empty: nil)
@@ -42,8 +46,22 @@ struct AdminSheet: View {
         }
         .animation(.easeInOut(duration: 0.2), value: toastText)
         .onAppear { admin.start() }
-        .task { team = (try? await TeamStore.fetchMembers(companyId: homeCompanyId)) ?? [] }
+        .task {
+            guard !homeCompanyId.isEmpty else { return }
+            team = (try? await TeamStore.fetchMembers(companyId: homeCompanyId)) ?? []
+        }
         .onDisappear { admin.stop() }
+        .confirmationDialog("Remove \(confirmRemove?.display ?? "") from the Doorline crew?",
+                            isPresented: Binding(get: { confirmRemove != nil }, set: { if !$0 { confirmRemove = nil } }),
+                            titleVisibility: .visible, presenting: confirmRemove) { m in
+            Button("Remove", role: .destructive) {
+                Task {
+                    do { try await admin.removeCrew(m); toast("Removed") } catch { toast(error.localizedDescription) }
+                }
+            }
+        } message: { _ in
+            Text("They lose access to every business.")
+        }
         .confirmationDialog(confirmTitle, isPresented: Binding(get: { confirm != nil }, set: { if !$0 { confirm = nil } }),
                             titleVisibility: .visible, presenting: confirm) { c in
             Button(actionLabel(c.1, from: c.0.company.status), role: c.1 == .active ? nil : .destructive) { apply(c.0, c.1) }
@@ -115,15 +133,65 @@ struct AdminSheet: View {
         .overlay(RoundedRectangle(cornerRadius: 14).stroke(c.status == .pending ? PinStatus.hanger.color.opacity(0.7) : Theme.border))
     }
 
+    /// Crew invites and the crew who joined with one.
+    @ViewBuilder
+    private var crewSection: some View {
+        Text("DOORLINE CREW").font(.system(size: 13, weight: .bold)).foregroundStyle(Theme.muted).padding(.top, 10)
+        VStack(alignment: .leading, spacing: 10) {
+            Text("A crew invite puts someone on your Doorline crew without joining any company. They create an account, choose \u{201C}Join my team\u{201D} and enter the code. Then pick the businesses they hang for below.")
+                .font(.system(size: 14)).foregroundStyle(Theme.muted)
+            KnoxButton(title: "Invite to Doorline crew", busyTitle: "Generating\u{2026}", busy: makingCode) {
+                makingCode = true
+                Task {
+                    defer { makingCode = false }
+                    do { crewCode = try await admin.createCrewInvite() } catch { toast(error.localizedDescription) }
+                }
+            }
+            if let crewCode {
+                VStack(spacing: 6) {
+                    Text(crewCode.code).font(.system(size: 30, weight: .heavy, design: .monospaced)).tracking(4).foregroundStyle(Theme.accent)
+                        .textSelection(.enabled)
+                    Text("Expires \(crewCode.expires.formatted(.dateTime.month(.abbreviated).day())) \u{00B7} works once")
+                        .font(.system(size: 14)).foregroundStyle(Theme.muted)
+                    ShareLink(item: AdminStore.crewInviteMessage(code: crewCode.code)) {
+                        Label("Share code", systemImage: "square.and.arrow.up").font(.system(size: 16, weight: .semibold))
+                            .frame(maxWidth: .infinity, minHeight: 46)
+                            .background(Theme.field, in: RoundedRectangle(cornerRadius: 10))
+                    }
+                    .foregroundStyle(Theme.text)
+                }
+                .frame(maxWidth: .infinity)
+            }
+        }
+        .padding(14)
+        .background(Theme.card, in: RoundedRectangle(cornerRadius: 14))
+        ForEach(admin.crewOnly) { m in
+            let n = admin.rows.filter { $0.company.crew.contains(m.uid) }.count
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(m.display).font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.text)
+                    Text(n == 0 ? "Not assigned yet" : "Hangs for \(n) business\(n == 1 ? "" : "es")")
+                        .font(.system(size: 14)).foregroundStyle(Theme.muted)
+                }
+                Spacer()
+                Button("Remove") { confirmRemove = m }
+                    .font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.error).frame(minHeight: 44)
+            }
+            .padding(.horizontal, 14).padding(.vertical, 6)
+            .background(Theme.card, in: RoundedRectangle(cornerRadius: 12))
+        }
+    }
+
     /// Tap a name to have them hang for this business (they see it under "Hanging for").
     @ViewBuilder
     private func crew(_ r: AdminStore.Row) -> some View {
         Text("HANGS FOR THEM").font(.system(size: 12, weight: .bold)).foregroundStyle(Theme.muted).padding(.top, 4)
-        if team.isEmpty {
-            Text("Invite your crew to your own company first (Account \u{2192} Team).").font(.system(size: 14)).foregroundStyle(Theme.muted)
+        let people = team + admin.crewOnly
+        if people.isEmpty {
+            Text("Invite your crew first (Invite to Doorline crew, above).").font(.system(size: 14)).foregroundStyle(Theme.muted)
         } else {
             FlowLayout(spacing: 8) {
-                ForEach(team) { m in
+                ForEach(people) { m in
                     let on = r.company.crew.contains(m.uid), key = r.id + m.uid
                     Button {
                         savingCrew.insert(key)

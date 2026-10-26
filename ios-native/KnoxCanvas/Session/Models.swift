@@ -5,11 +5,13 @@ import FirebaseFirestore
 struct UserProfile {
     var name: String
     var email: String
-    var role: String          // "owner" | "employee"
+    var role: String          // "owner" | "employee" | "crew" (Doorline crew, no company)
     var companyId: String?
     var companyName: String
 
     var isOwner: Bool { role == "owner" }
+    /// Joined with a Doorline crew invite: belongs to no company, works only assigned clients.
+    var isCrewOnly: Bool { role == "crew" }
 
     init(_ d: [String: Any]) {
         name = d["name"] as? String ?? ""

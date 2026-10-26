@@ -14,6 +14,8 @@ final class SessionStore {
         case setup
         /// The company is pending approval, paused or declined.
         case locked(Company.Status)
+        /// Doorline crew (no company) not assigned to any business yet.
+        case crewWaiting
         case ready
     }
 
@@ -30,6 +32,8 @@ final class SessionStore {
 
     /// A Doorline client: the simple view (where hangers went, routes), no shifts or metrics.
     var isClient: Bool { company?.doorline == true }
+    /// Doorline crew with no company of their own: `companyId` is nil and `workIds` never empty in the app.
+    var isCrewOnly: Bool { profile?.isCrewOnly == true }
     /// Doorline: the client businesses this person is on the crew for (live).
     private(set) var crewJobs: [(id: String, company: Company)] = []
     /// The clients picked under "Hanging for" (empty = your own company). Every door marked goes
@@ -60,6 +64,17 @@ final class SessionStore {
         do {
             let snap = try await db.collection("users").document(user.uid).getDocument()
             let p = snap.data().map(UserProfile.init)
+            if let p, p.isCrewOnly {
+                // Opens the map once the crew-jobs listener finds a business they're assigned to.
+                profile = p
+                companyId = nil
+                company = Company(["name": "Doorline Hangers crew"])
+                phase = .loading("Loading your businesses\u{2026}")
+                restoreWork(user.uid)
+                watchCrewJobs(user.uid)
+                Task { await checkAdmin(user.uid) }
+                return
+            }
             guard let p, let cid = p.companyId else { phase = .setup; return }
             profile = p
             companyId = cid
@@ -153,11 +168,31 @@ final class SessionStore {
         guard !isClient else { return }
         jobsListener = db.collection("companies").whereField("crew", arrayContains: uid)
             .addSnapshotListener { [weak self] snap, error in
-                guard let self, let snap else { if let error { print("crew jobs:", error) }; return }
+                guard let self else { return }
+                guard let snap else {
+                    if let error {
+                        print("crew jobs:", error)
+                        if isCrewOnly && phase != .ready { phase = .loadError("Couldn\u{2019}t load your businesses (\(error.localizedDescription)).") }
+                    }
+                    return
+                }
                 crewJobs = snap.documents.filter { $0.documentID != self.companyId }
                     .map { (id: $0.documentID, company: Company($0.data(), fallbackName: "Client")) }
                     .sorted { $0.company.name.localizedCompare($1.company.name) == .orderedAscending }
                 for j in crewJobs { workNames[j.id] = j.company.name }
+                if isCrewOnly {
+                    if crewJobs.isEmpty {
+                        // Ask the server before saying "not assigned"; mid-shift, let the shift finish.
+                        if snap.metadata.isFromCache && phase != .ready { return }
+                        if phase != .ready || !workLocked { workIds = []; phase = .crewWaiting }
+                        return
+                    }
+                    workIds = workIds.filter { id in self.crewJobs.contains { $0.id == id } }
+                    if workIds.isEmpty, let first = crewJobs.first { workIds = [first.id] }
+                    saveWork()
+                    if phase != .ready { phase = .ready }
+                    return
+                }
                 // Taken off a business's crew: drop it, unless mid-shift (the shift finishes first).
                 let still = workIds.filter { id in self.crewJobs.contains { $0.id == id } }
                 if still.count < workIds.count, !workLocked, !snap.metadata.isFromCache {
@@ -172,7 +207,10 @@ final class SessionStore {
     func toggleWork(_ id: String) {
         guard !workLocked else { toast = "Clock out first to switch businesses"; return }
         if id == companyId { workIds = [] }
-        else if workIds.contains(id) { workIds.removeAll { $0 == id } }
+        else if workIds.contains(id) {
+            if isCrewOnly && workIds.count == 1 { toast = "Pick at least one business"; return }
+            workIds.removeAll { $0 == id }
+        }
         else { workIds.append(id) }
         saveWork()
     }
@@ -346,10 +384,13 @@ final class SessionStore {
             guard let expires = d["expiresAt"] as? Timestamp, expires.dateValue() >= Date() else {
                 throw Friendly("That code has expired. Ask your manager for a new one.")
             }
-            joinedName = d["companyName"] as? String ?? ""
+            // A Doorline crew invite joins no company; the admin assigns the businesses they hang for.
+            let crew = d["crew"] as? Bool == true
+            joinedName = crew ? "the Doorline Hangers crew" : d["companyName"] as? String ?? ""
             let batch = db.batch()
-            batch.setData(["name": name, "email": user.email ?? "", "role": "employee",
-                           "companyId": d["companyId"] as? String ?? "", "companyName": joinedName,
+            batch.setData(["name": name, "email": user.email ?? "", "role": crew ? "crew" : "employee",
+                           "companyId": crew ? "" : d["companyId"] as? String ?? "",
+                           "companyName": crew ? "Doorline Hangers crew" : joinedName,
                            "inviteCode": code, "createdAt": FieldValue.serverTimestamp()],
                           forDocument: db.collection("users").document(user.uid))
             batch.deleteDocument(db.collection("invites").document(code))

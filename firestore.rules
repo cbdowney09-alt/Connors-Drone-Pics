@@ -13,6 +13,8 @@ rules_version = '2';
 //   which people hang for each one in its `crew` array (uids); the crew can then read and write
 //   that company's pins, shifts and settings, the same as its own members. Only an admin can
 //   change `crew` or `doorline`.
+// - Doorline crew members can also belong to no company at all: they join with a crew invite
+//   (`invites/{code}.crew == true`, made only by an admin) and get `role: 'crew'`, `companyId: ''`.
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -22,7 +24,7 @@ service cloud.firestore {
 
     function myProfile() { return get(/databases/$(database)/documents/users/$(me())).data; }
     function hasProfile() { return signedIn() && exists(/databases/$(database)/documents/users/$(me())); }
-    function inCompany(cid) { return hasProfile() && myProfile().get('companyId', '') == cid; }
+    function inCompany(cid) { return cid != '' && hasProfile() && myProfile().get('companyId', '') == cid; }
 
     function companyDoc(cid) { return get(/databases/$(database)/documents/companies/$(cid)).data; }
     function isActive(cid) { return companyDoc(cid).get('status', 'active') == 'active'; }
@@ -39,10 +41,12 @@ service cloud.firestore {
     match /users/{uid} {
       // Yourself, anyone in your company (team list, names on the map), or an admin.
       allow get: if signedIn() && (me() == uid || inCompany(resource.data.get('companyId', '')) || isAdmin());
-      allow list: if isAdmin() || (hasProfile() && resource.data.get('companyId', '') == myProfile().get('companyId', '-'));
+      allow list: if isAdmin() || (hasProfile() && myProfile().get('companyId', '') != ''
+        && resource.data.get('companyId', '') == myProfile().get('companyId', '-'));
 
       // Owner: in the same batch as a new pending company they own.
       // Employee: with a valid, unexpired invite for that company, deleted in the same batch.
+      // Doorline crew: with a valid crew invite (no company), deleted in the same batch.
       allow create: if signedIn() && me() == uid && (
         (request.resource.data.role == 'owner'
           && getAfter(/databases/$(database)/documents/companies/$(request.resource.data.companyId)).data.ownerId == uid
@@ -52,6 +56,14 @@ service cloud.firestore {
           && request.resource.data.inviteCode is string
           && exists(/databases/$(database)/documents/invites/$(request.resource.data.inviteCode))
           && get(/databases/$(database)/documents/invites/$(request.resource.data.inviteCode)).data.companyId == request.resource.data.companyId
+          && get(/databases/$(database)/documents/invites/$(request.resource.data.inviteCode)).data.expiresAt > request.time
+          && !existsAfter(/databases/$(database)/documents/invites/$(request.resource.data.inviteCode)))
+        ||
+        (request.resource.data.role == 'crew'
+          && request.resource.data.get('companyId', '') == ''
+          && request.resource.data.inviteCode is string
+          && exists(/databases/$(database)/documents/invites/$(request.resource.data.inviteCode))
+          && get(/databases/$(database)/documents/invites/$(request.resource.data.inviteCode)).data.get('crew', false) == true
           && get(/databases/$(database)/documents/invites/$(request.resource.data.inviteCode)).data.expiresAt > request.time
           && !existsAfter(/databases/$(database)/documents/invites/$(request.resource.data.inviteCode)))
       );
@@ -99,11 +111,14 @@ service cloud.firestore {
     match /invites/{code} {
       allow get: if signedIn();
       allow list: if false;
-      allow create: if signedIn()
-        && request.resource.data.companyId is string
-        && ownsCompany(request.resource.data.companyId)
-        && isActive(request.resource.data.companyId)
-        && request.resource.data.createdBy == me();
+      allow create: if signedIn() && request.resource.data.createdBy == me() && (
+        (request.resource.data.get('crew', false) != true
+          && request.resource.data.companyId is string
+          && ownsCompany(request.resource.data.companyId)
+          && isActive(request.resource.data.companyId))
+        ||
+        // Doorline crew invite: admins only.
+        (request.resource.data.get('crew', false) == true && isAdmin()));
       // The person joining deletes it (single use); the owner can too.
       allow delete: if signedIn();
       allow update: if false;

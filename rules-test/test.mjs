@@ -158,6 +158,52 @@ await t('admin assigns crew', assertSucceeds(updateDoc(doc(as('admin'), 'compani
 await t('newly assigned crew reads client pins', assertSucceeds(getDocs(collection(as('crew2'), 'companies/acme/pins'))));
 await t('admin pauses client', assertSucceeds(updateDoc(doc(as('admin'), 'companies/acme'), { status: 'paused' })));
 await t('crew CANNOT hang for a paused client', assertFails(setDoc(doc(as('crew1'), 'companies/acme/pins/4,4'), { status: 'hanger' })));
+console.log('Doorline crew (no company)');
+await env.withSecurityRulesDisabled(async ctx => {
+  const db = ctx.firestore();
+  await setDoc(doc(db, 'invites/CREWCODE'), { crew: true, companyId: '', createdBy: 'admin', expiresAt: Timestamp.fromMillis(Date.now() + 86400000) });
+  await setDoc(doc(db, 'invites/OLDCREW1'), { crew: true, companyId: '', createdBy: 'admin', expiresAt: Timestamp.fromMillis(Date.now() - 1000) });
+  await setDoc(doc(db, 'users/crewx'), { name: 'Other crew', role: 'crew', companyId: '' });
+});
+await t('admin makes a crew invite', assertSucceeds(setDoc(doc(as('admin'), 'invites/CREWNEW1'), { crew: true, companyId: '', createdBy: 'admin', expiresAt: Timestamp.fromMillis(Date.now() + 1e8) })));
+await t('owner CANNOT make a crew invite', assertFails(setDoc(doc(as('owner1'), 'invites/CREWBAD1'), { crew: true, companyId: '', createdBy: 'owner1', expiresAt: Timestamp.fromMillis(Date.now() + 1e8) })));
+await t('owner CANNOT sneak crew onto a company invite', assertFails(setDoc(doc(as('owner1'), 'invites/CREWBAD2'), { crew: true, companyId: 'legacy', createdBy: 'owner1', expiresAt: Timestamp.fromMillis(Date.now() + 1e8) })));
+{
+  const db = as('newcrew'); const b = writeBatch(db);
+  b.set(doc(db, 'users/newcrew'), { name: 'New', role: 'crew', companyId: '', inviteCode: 'CREWCODE' });
+  b.delete(doc(db, 'invites/CREWCODE'));
+  await t('join the crew with a crew invite', assertSucceeds(b.commit()));
+}
+{
+  const db = as('latecrew'); const b = writeBatch(db);
+  b.set(doc(db, 'users/latecrew'), { name: 'L', role: 'crew', companyId: '', inviteCode: 'OLDCREW1' });
+  b.delete(doc(db, 'invites/OLDCREW1'));
+  await t('CANNOT join the crew with an expired code', assertFails(b.commit()));
+}
+{
+  const db = as('fakecrew'); const b = writeBatch(db);
+  b.set(doc(db, 'users/fakecrew'), { name: 'F', role: 'crew', companyId: '', inviteCode: 'NEWCODE1' });
+  b.delete(doc(db, 'invites/NEWCODE1'));
+  await t('CANNOT join the crew with a company invite', assertFails(b.commit()));
+}
+{
+  const db = as('crewjump'); const b = writeBatch(db);
+  b.set(doc(db, 'users/crewjump'), { name: 'J', role: 'crew', companyId: 'legacy', inviteCode: 'CREWNEW1' });
+  b.delete(doc(db, 'invites/CREWNEW1'));
+  await t('CANNOT use a crew invite to get into a company', assertFails(b.commit()));
+}
+await t('crew reads own profile', assertSucceeds(getDoc(doc(as('newcrew'), 'users/newcrew'))));
+await t('crew CANNOT read another crew member', assertFails(getDoc(doc(as('newcrew'), 'users/crewx'))));
+await t('crew CANNOT list crew members', assertFails(getDocs(query(collection(as('newcrew'), 'users'), where('companyId', '==', '')))));
+await t('crew CANNOT give self a company', assertFails(setDoc(doc(as('newcrew'), 'users/newcrew'), { companyId: 'legacy' }, { merge: true })));
+await t('unassigned crew CANNOT read client pins', assertFails(getDocs(collection(as('newcrew'), 'companies/acme/pins'))));
+await t('admin lists the crew', assertSucceeds(getDocs(query(collection(as('admin'), 'users'), where('role', '==', 'crew')))));
+await t('admin resumes client for crew test', assertSucceeds(updateDoc(doc(as('admin'), 'companies/acme'), { status: 'active', crew: ['crew1', 'newcrew'] })));
+await t('assigned crew (no company) hangs for client', assertSucceeds(setDoc(doc(as('newcrew'), 'companies/acme/pins/5,5'), { status: 'hanger' })));
+await t('assigned crew finds their clients', assertSucceeds(getDocs(query(collection(as('newcrew'), 'companies'), where('crew', 'array-contains', 'newcrew')))));
+await t('employee still lists own team', assertSucceeds(getDocs(query(collection(as('crew1'), 'users'), where('companyId', '==', 'dlhq')))));
+await t('admin removes a crew member', assertSucceeds(deleteDoc(doc(as('admin'), 'users/crewx'))));
+
 await t('owner saves states (house data)', assertSucceeds(updateDoc(doc(as('owner1'), 'companies/legacy'), { states: ['TN'] })));
 
 console.log('Removing people and deleting accounts');

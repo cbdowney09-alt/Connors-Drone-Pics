@@ -654,7 +654,22 @@ body.is-client #sheet .status-btn,body.is-client #sheet .sheet-row,body.is-clien
   <div id="doorline-panel" class="panel">
     <div class="panel-header"><button class="panel-back" data-close="doorline-panel" aria-label="Back"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg></button><h2>Doorline clients</h2><button class="panel-action-btn" id="doorline-refresh-btn">↻ Refresh</button></div>
     <div class="panel-body">
-      <div class="hint">Businesses that signed up through Doorline Hangers. Tap names to choose who on your team hangs for each one. They'll see that business under “Hanging for” when they clock in.</div>
+      <div class="section-title">Doorline crew</div>
+      <div class="box" style="display:flex;flex-direction:column;gap:10px">
+        <div class="hint">A crew invite puts someone on your Doorline crew without joining any company. They create an account, choose “Join my team” and enter the code. Then pick the businesses they hang for below.</div>
+        <button class="primary-btn" id="crew-invite-btn">Invite to Doorline crew</button>
+        <div id="crew-invite-box" style="display:none;text-align:center">
+          <div id="crew-invite-code" style="font-size:30px;font-weight:800;letter-spacing:5px;color:var(--accent);margin:6px 0">--------</div>
+          <div class="hint" id="crew-invite-expiry"></div>
+          <div style="display:flex;gap:8px;margin-top:10px">
+            <button class="secondary-btn" id="crew-invite-copy">Copy</button>
+            <button class="secondary-btn" id="crew-invite-share">Share</button>
+          </div>
+        </div>
+      </div>
+      <div id="crew-list" style="display:flex;flex-direction:column;gap:8px"></div>
+      <div class="section-title">Clients</div>
+      <div class="hint">Businesses that signed up through Doorline Hangers. Tap names to choose who hangs for each one. They'll see that business under “Hanging for” when they clock in.</div>
       <div id="doorline-list" style="display:flex;flex-direction:column;gap:12px"></div>
     </div>
   </div>
@@ -770,6 +785,10 @@ let areas = [], areaLayers = [], zipShapes = {}, pathLayers = [], pathsOn = fals
 let drawingForArea = false, setupDoorline = null, unsubJobs = null;
 const isOwner = () => profile?.role === 'owner';
 const isClient = () => !!company?.doorline;
+// Doorline crew who joined with a crew invite belong to no company: they only work the clients
+// they're assigned to (companyId is null, workCids is never empty while they're in the app).
+const isCrewOnly = () => profile?.role === 'crew';
+let crewInApp = false;
 const workIds = () => workCids.length ? workCids : [companyId];
 const workId = () => workIds()[0]; // the first one: zones, routes and walk paths
 const workLabel = () => workCids.length ? workCids.map(c => workNames[c] || 'Client').join(' + ') : (company.name || 'your company');
@@ -871,8 +890,15 @@ async function loadSession(user) {
   showLoading('Loading your account…');
   try {
     const snap = await getDoc(doc(db, 'users', user.uid));
-    if (!snap.exists() || !snap.data().companyId) { showSetup(); return; }
-    profile = snap.data();
+    const d = snap.exists() ? snap.data() : null;
+    if (d?.role === 'crew') {
+      profile = d; companyId = null; company = { name: 'Doorline Hangers crew' };
+      showLoading('Loading your businesses…');
+      crewInApp = false; watchCrewJobs(); // opens the map once they're assigned to a business
+      return;
+    }
+    if (!d || !d.companyId) { showSetup(); return; }
+    profile = d;
     companyId = profile.companyId;
     try {
       const c = await getDoc(doc(db, 'companies', companyId));
@@ -940,12 +966,15 @@ $('setup-join-btn').addEventListener('click', async () => {
     const d = inv.data();
     if (!d.expiresAt || d.expiresAt.toMillis() < Date.now()) { $('setup-err').textContent = 'That code has expired. Ask your manager for a new one.'; return; }
     const batch = writeBatch(db);
-    batch.set(doc(db, 'users', currentUser.uid), { name, email: currentUser.email || '', role: 'employee', companyId: d.companyId, companyName: d.companyName || '', inviteCode: code, createdAt: serverTimestamp() });
+    batch.set(doc(db, 'users', currentUser.uid), d.crew === true
+      // Doorline crew invite: no company; the admin assigns them to the businesses they hang for.
+      ? { name, email: currentUser.email || '', role: 'crew', companyId: '', companyName: 'Doorline Hangers crew', inviteCode: code, createdAt: serverTimestamp() }
+      : { name, email: currentUser.email || '', role: 'employee', companyId: d.companyId, companyName: d.companyName || '', inviteCode: code, createdAt: serverTimestamp() });
     batch.delete(doc(db, 'invites', code));
     await batch.commit();
     pendingName = '';
     await loadSession(currentUser);
-    showToast(`You joined ${d.companyName || 'the team'}`);
+    showToast(d.crew === true ? 'You joined the Doorline Hangers crew' : `You joined ${d.companyName || 'the team'}`);
   } catch (e) {
     console.error(e);
     $('setup-err').textContent = e.code === 'permission-denied' ? 'That code couldn\u2019t be used. It may have expired or already been used.' : `Couldn\u2019t join (${e.code || e.message}).`;
@@ -1012,7 +1041,7 @@ function enterApp() {
   loadShifts();
   restoreClock();
   setSync(navigator.onLine ? 'ok' : 'offline');
-  watchCrewJobs();
+  if (!isCrewOnly()) watchCrewJobs(); // crew-only: already running (it opened the app)
   checkAdmin();
 }
 
@@ -1024,6 +1053,7 @@ function leaveApp() {
   areaLayers.forEach(l => map.removeLayer(l)); areaLayers = []; areas = [];
   pathLayers.forEach(l => map.removeLayer(l)); pathLayers = []; pathsOn = false; $('paths-btn').classList.remove('active');
   if (unsubJobs) { unsubJobs(); unsubJobs = null; }
+  crewInApp = false;
   workCids = []; workNames = {}; crewJobs = []; isAdminUser = false;
   $('menu-doorline').style.display = 'none'; $('work-picker').style.display = 'none'; $('work-chip').classList.remove('on');
   clearRoute(true);
@@ -1117,7 +1147,8 @@ function saveNeighborhoodYears() {
 }
 async function loadShifts() {
   try {
-    const snap = await getDocs(query(collection(db, 'companies', companyId, 'shifts'), where('userId', '==', myUid())));
+    // Crew with no company: their history is in the (first) business they hang for.
+    const snap = await getDocs(query(collection(db, 'companies', companyId || workId(), 'shifts'), where('userId', '==', myUid())));
     shifts = []; snap.forEach(d => shifts.push({ ...d.data(), id: d.id }));
     shifts.sort((a, b) => b.clockIn - a.clockIn);
   } catch (e) { console.warn('shifts', e); }
@@ -1213,7 +1244,7 @@ $('overlay').addEventListener('click', closeSheet);
 $('sheet-close').addEventListener('click', closeSheet);
 
 document.querySelectorAll('.status-btn').forEach(btn => btn.addEventListener('click', () => {
-  if (!currentPinId || !companyId || isClient()) return;
+  if (!currentPinId || !workId() || isClient()) return;
   const id = currentPinId, status = btn.dataset.status, now = Date.now();
   const upd = { status, ts: now, statusBy: myUid(), statusAt: now };
   if (status === 'hanger') { upd.hangerBy = myUid(); upd.hangerAt = now; }
@@ -1295,7 +1326,7 @@ map.on('click', e => {
     drawnMarkers.push(L.circleMarker([lat, lng], { radius: 6, color: '#4f6ef7', fillColor: '#4f6ef7', fillOpacity: 1, weight: 2 }).addTo(map));
     updateDrawingLayers(); return;
   }
-  if (!companyId || isClient()) return; // Doorline clients look; the crew places pins
+  if (!workId() || isClient()) return; // Doorline clients look; the crew places pins
   openSheet(createPin(lat, lng));
 });
 
@@ -1646,7 +1677,7 @@ function setGpsPill(state) {
 }
 
 function sweepStart() {
-  if (sweepOn || !companyId) return;
+  if (sweepOn || !workId()) return;
   sweepOn = true;
   // Pick the trail back up if the app was reloaded mid-shift.
   try {
@@ -1800,7 +1831,7 @@ function sweepFlushSeg() {
 }
 
 async function processSweepQueue() {
-  if (sweepBusy || !sweepQueue.length || !companyId) return;
+  if (sweepBusy || !sweepQueue.length || !workId()) return;
   if (!navigator.onLine) return; // retried by the 30 s timer / 'online' event
   sweepBusy = true;
   let added = 0;
@@ -2057,7 +2088,7 @@ function renderSweepList() {
 
 async function placeSweepPins() {
   const all = Object.values(sweepCands), chosen = all.filter(c => c.on);
-  if (!companyId) return;
+  if (!workId()) return;
   const now = Date.now(), ids = [];
   const per = Math.max(1, Math.floor(400 / workIds().length)); // a batch holds 500 writes
   for (let i = 0; i < chosen.length; i += per) {
@@ -2198,7 +2229,7 @@ async function clockOut() {
     workCids.forEach(cid => addDoc(collection(db, 'companies', cid, 'shifts'), clientShift).catch(shiftErr));
     Object.assign(shift, { forCompanyId: workCids[0], forCompanyIds: workCids.slice(), forCompanyName: workLabel() });
   }
-  addDoc(collection(db, 'companies', companyId, 'shifts'), shift).catch(shiftErr);
+  if (companyId) addDoc(collection(db, 'companies', companyId, 'shifts'), shift).catch(shiftErr);
   syncShiftToSheets(shift);
 }
 $('clock-btn').addEventListener('click', () => { clockedIn ? clockOut() : clockIn(); });
@@ -2443,6 +2474,10 @@ function restoreWork() {
   } catch (e) {}
   workCids = (saved?.works || []).filter(c => c && c !== companyId);
   workNames = saved?.names || {};
+  if (isCrewOnly()) {
+    workCids = workCids.filter(c => crewJobs.some(j => j.id === c));
+    if (!workCids.length && crewJobs.length) workCids = [crewJobs[0].id];
+  }
   renderWorkChip();
 }
 // Clients this person is on the crew for. Live, so a new assignment shows up without a reload.
@@ -2454,18 +2489,31 @@ function watchCrewJobs() {
     snap.forEach(d => { if (d.id !== companyId) crewJobs.push({ id: d.id, ...d.data() }); });
     crewJobs.sort((a, b) => String(a.name).localeCompare(String(b.name)));
     crewJobs.forEach(j => { workNames[j.id] = j.name || 'Client'; });
+    if (isCrewOnly()) {
+      if (!crewJobs.length) {
+        if (snap.metadata.fromCache && !crewInApp) return; // ask the server before saying "not assigned"
+        if (!crewInApp) { showCrewWaiting(); return; }
+        if (!clockedIn) { const u = currentUser; leaveApp(); currentUser = u; loadSession(u); return; } // taken off every business
+      } else if (!crewInApp) {
+        crewInApp = true; enterApp(); return;
+      }
+    }
     const still = workCids.filter(c => crewJobs.some(j => j.id === c));
     if (still.length < workCids.length && !clockedIn && !snap.metadata.fromCache) {
       showToast('You’re no longer on the crew for one of those businesses');
       setWork(still); return;
     }
     renderWorkChip(); renderWorkPicker();
-  }, e => console.warn('crew jobs', e));
+  }, e => {
+    console.warn('crew jobs', e);
+    if (isCrewOnly() && !crewInApp) showLoadingError(`Couldn\u2019t load your businesses (${e.code || e.message}).`);
+  });
 }
 // Picks the clients to hang for (empty = your own company), then reloads the map for them.
 function setWork(cids) {
   if (clockedIn) { showToast('Clock out first to switch businesses'); return; }
   workCids = cids.filter(c => c !== companyId);
+  if (isCrewOnly() && !workCids.length && crewJobs.length) workCids = [crewJobs[0].id];
   try { localStorage.setItem(workKey(), JSON.stringify({ works: workCids, names: workNames })); } catch (e) {}
   Object.values(markers).forEach(m => map.removeLayer(m)); markers = {}; pins = {};
   pathLayers.forEach(l => map.removeLayer(l)); pathLayers = []; pathsOn = false;
@@ -2478,8 +2526,17 @@ function toggleWork(cid) {
   if (clockedIn) { showToast('Clock out first to switch businesses'); return; }
   if (cid === companyId) { if (workCids.length) { setWork([]); showToast(`Back to ${company.name || 'your company'}`); } return; }
   const on = !workCids.includes(cid);
+  if (!on && isCrewOnly() && workCids.length === 1) { showToast('Pick at least one business'); return; }
   setWork(on ? [...workCids, cid] : workCids.filter(c => c !== cid));
   showToast(workCids.length ? `Hanging for ${workLabel()}` : `Back to ${company.name || 'your company'}`);
+}
+function showCrewWaiting() {
+  $('locked-icon').textContent = '🚪';
+  $('locked-title').textContent = 'You\u2019re on the Doorline crew';
+  $('locked-msg').textContent = 'As soon as you\u2019re assigned to a business, its map opens here on its own. Nothing to do until then.';
+  $('locked-email').textContent = SUPPORT_EMAIL; $('locked-email').href = 'mailto:' + SUPPORT_EMAIL;
+  $('locked-startover').style.display = 'none';
+  showScreen('locked-screen');
 }
 function renderWorkChip() {
   $('work-chip').classList.toggle('on', workCids.length > 0);
@@ -2490,11 +2547,11 @@ function renderWorkPicker() {
   $('work-picker').style.display = show ? 'flex' : 'none';
   updateClockUI();
   if (!show) return;
-  const opts = [{ id: companyId, name: company.name || 'My company' }, ...crewJobs];
+  const opts = [...(isCrewOnly() ? [] : [{ id: companyId, name: company.name || 'My company' }]), ...crewJobs];
   workCids.forEach(c => { if (!opts.some(o => o.id === c)) opts.push({ id: c, name: workNames[c] || 'Client' }); });
   const wrap = $('work-chips'); wrap.innerHTML = '';
   opts.forEach(o => {
-    const on = o.id === companyId ? !workCids.length : workCids.includes(o.id);
+    const on = o.id === companyId && !isCrewOnly() ? !workCids.length : workCids.includes(o.id);
     const b = document.createElement('button');
     b.className = 'chip' + (on ? ' active' : '');
     b.textContent = (on && o.id !== companyId ? '✓ ' : '') + o.name + (o.status && o.status !== 'active' ? ` (${o.status})` : '');
@@ -2703,17 +2760,62 @@ $('paths-btn').addEventListener('click', async () => {
 });
 
 // Admin: Doorline clients — approve them and choose who on your team hangs for each.
+// Crew who joined with a crew invite (no company). Removing one also takes them off every client.
+function renderCrewList(crewOnly, clients) {
+  const wrap = $('crew-list'); wrap.innerHTML = '';
+  crewOnly.forEach(m => {
+    const n = clients.filter(c => (c.crew || []).includes(m.uid)).length;
+    const row = document.createElement('div'); row.className = 'member-row';
+    row.innerHTML = `<div class="m-info"><div class="m-name">${esc(m.name || 'Unnamed')}</div><div class="m-email">${esc(m.email || '')} · ${n ? `hangs for ${n} business${n === 1 ? '' : 'es'}` : 'not assigned yet'}</div></div>`;
+    const rm = document.createElement('button'); rm.className = 'm-remove'; rm.textContent = 'Remove';
+    rm.addEventListener('click', async () => {
+      if (!confirm(`Remove ${m.name || m.email} from the Doorline crew? They'll lose access to every business.`)) return;
+      try {
+        await Promise.all(clients.filter(c => (c.crew || []).includes(m.uid)).map(c => updateDoc(doc(db, 'companies', c.id), { crew: arrayRemove(m.uid) })));
+        await deleteDoc(doc(db, 'users', m.uid));
+        showToast('Removed'); loadDoorline();
+      } catch (e) { showToast('Couldn\u2019t remove (' + (e.code || 'error') + ')'); }
+    });
+    row.appendChild(rm); wrap.appendChild(row);
+  });
+}
+$('crew-invite-btn').addEventListener('click', async () => {
+  busy($('crew-invite-btn'), true, 'Generating…');
+  try {
+    const code = makeInviteCode();
+    const expiresAt = Timestamp.fromMillis(Date.now() + INVITE_DAYS * 86400000);
+    await setDoc(doc(db, 'invites', code), { crew: true, companyId: '', companyName: 'Doorline Hangers crew', createdBy: myUid(), createdAt: serverTimestamp(), expiresAt });
+    $('crew-invite-code').textContent = code;
+    $('crew-invite-expiry').textContent = `Expires ${expiresAt.toDate().toLocaleDateString('en-US', { month:'short', day:'numeric' })} · works once`;
+    $('crew-invite-box').style.display = 'block';
+  } catch (e) { showToast('Couldn\u2019t create invite (' + (e.code || 'error') + ')'); }
+  finally { busy($('crew-invite-btn'), false); }
+});
+const crewInviteMessage = code => `Join the Doorline Hangers crew on KnoxCanvas: open ${location.origin}/app.html (or the KnoxCanvas iPhone app), create an account, choose "Join my team", and enter code ${code}`;
+$('crew-invite-copy').addEventListener('click', () => {
+  const code = $('crew-invite-code').textContent;
+  navigator.clipboard?.writeText(code).then(() => showToast('Code copied'), () => showToast(code));
+});
+$('crew-invite-share').addEventListener('click', async () => {
+  const text = crewInviteMessage($('crew-invite-code').textContent);
+  if (navigator.share) { try { await navigator.share({ text }); } catch (e) {} }
+  else navigator.clipboard?.writeText(text).then(() => showToast('Invite message copied'));
+});
 async function openDoorline() { $('doorline-panel').classList.add('open'); await loadDoorline(); }
 $('doorline-refresh-btn').addEventListener('click', loadDoorline);
 async function loadDoorline() {
   const wrap = $('doorline-list');
   wrap.innerHTML = '<div class="empty">Loading…</div>';
-  let clients = [], team = [];
+  let clients = [], team = [], crewOnly = [];
   try {
-    const [snap, members] = await Promise.all([getDocs(query(collection(db, 'companies'), where('doorline', '==', true))), fetchMembers()]);
+    const [snap, members, crewSnap] = await Promise.all([getDocs(query(collection(db, 'companies'), where('doorline', '==', true))), fetchMembers(),
+      getDocs(query(collection(db, 'users'), where('role', '==', 'crew')))]);
     snap.forEach(d => clients.push({ id: d.id, ...d.data() }));
-    team = members;
+    crewSnap.forEach(d => crewOnly.push({ uid: d.id, ...d.data() }));
+    crewOnly.sort((a, b) => String(a.name).localeCompare(String(b.name)));
+    team = [...members, ...crewOnly];
   } catch (e) { wrap.innerHTML = `<div class="empty">Couldn’t load clients (${esc(e.code || e.message)})</div>`; return; }
+  renderCrewList(crewOnly, clients);
   const order = { pending: 0, active: 1, paused: 2, declined: 3 };
   clients.sort((a, b) => (order[a.status || 'active'] ?? 1) - (order[b.status || 'active'] ?? 1) || String(a.name).localeCompare(String(b.name)));
   wrap.innerHTML = clients.length ? '' : '<div class="empty">No Doorline clients yet. Businesses that answer “Yes, through Doorline Hangers” when they sign up show up here.</div>';

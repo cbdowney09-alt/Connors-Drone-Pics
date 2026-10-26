@@ -13,11 +13,14 @@ final class AdminStore {
     }
 
     private(set) var rows: [Row] = []
+    /// Doorline crew who joined with a crew invite (no company).
+    private(set) var crewOnly: [Member] = []
     private(set) var loadError: String?
     private(set) var loaded = false
     let uid: String
     private let db = Firestore.firestore()
     private var listener: ListenerRegistration?
+    private var crewListener: ListenerRegistration?
     private var counted = Set<String>()
 
     init(uid: String) { self.uid = uid }
@@ -37,11 +40,55 @@ final class AdminStore {
             for r in rows where !counted.contains(r.id) { counted.insert(r.id); Task { await self.count(r.id) } }
             Task { await self.fillOwners() }
         }
+        crewListener = db.collection("users").whereField("role", isEqualTo: "crew").addSnapshotListener { [weak self] snap, error in
+            guard let self, let snap else { if let error { print("crew list:", error) }; return }
+            crewOnly = snap.documents.map { d in
+                let x = d.data()
+                return Member(uid: d.documentID, name: x["name"] as? String ?? "", email: x["email"] as? String ?? "", role: "crew")
+            }.sorted { $0.display.localizedCompare($1.display) == .orderedAscending }
+        }
     }
 
     func stop() {
         listener?.remove()
         listener = nil
+        crewListener?.remove()
+        crewListener = nil
+    }
+
+    /// A one-time code that puts someone on the Doorline crew without joining any company.
+    func createCrewInvite() async throws -> (code: String, expires: Date) {
+        let code = TeamStore.makeInviteCode()
+        let expires = Date().addingTimeInterval(Double(AppConfig.inviteDays) * 86_400)
+        do {
+            try await TeamStore.serverWrite {
+                try await self.db.collection("invites").document(code).setData([
+                    "crew": true, "companyId": "", "companyName": "Doorline Hangers crew", "createdBy": self.uid,
+                    "createdAt": FieldValue.serverTimestamp(), "expiresAt": Timestamp(date: expires),
+                ])
+            }
+        } catch let e as Friendly { throw e }
+        catch { throw Friendly("Couldn\u{2019}t create invite (\(TeamStore.describe(error)))") }
+        return (code, expires)
+    }
+
+    /// Takes them off every client, then removes their profile (they're back to "Set up your account").
+    func removeCrew(_ m: Member) async throws {
+        let clients = rows.filter { $0.company.crew.contains(m.uid) }.map(\.id)
+        let db = db
+        do {
+            try await TeamStore.serverWrite {
+                for id in clients {
+                    try await db.collection("companies").document(id).updateData(["crew": FieldValue.arrayRemove([m.uid])])
+                }
+                try await db.collection("users").document(m.uid).delete()
+            }
+        } catch let e as Friendly { throw e }
+        catch { throw Friendly("Couldn\u{2019}t remove (\(TeamStore.describe(error)))") }
+    }
+
+    static func crewInviteMessage(code: String) -> String {
+        "Join the Doorline Hangers crew on KnoxCanvas: get the KnoxCanvas app (or open \(AppConfig.webAppURL)), create an account, choose \"Join my team\", and enter code \(code)"
     }
 
     func rows(_ status: Company.Status) -> [Row] {

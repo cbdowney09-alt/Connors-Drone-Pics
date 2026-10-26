@@ -186,6 +186,10 @@ Doorline Hangers is the owner's door hanger distribution service. At company set
   doesn't have the house yet gets the full pin (`pinWrite`). It's locked while clocked in. On clock-out, the shift goes to each
   client (walk path) and to the crew's company (`forCompanyId`, `forCompanyIds`, `forCompanyName`), so Team metrics count the doors once.
 - Rules: `onCrew(cid)` gives the crew the same pins, shifts and settings access as members. Only an admin changes `crew` or `doorline`.
+- **Crew with no company:** the admin's "Invite to Doorline crew" makes `invites/{code}.crew = true` (admins only). Joining with it
+  saves `users/{uid}` as `role: 'crew', companyId: ''`. Until they're on some client's `crew` they see a "You're on the Doorline crew"
+  waiting screen; then the app opens with `workCids`/`workIds` always holding at least one client (`isCrewOnly()`; no "own company" chip).
+  Their shifts go only to the clients. `inCompany('')` is always false, so crew can't read each other's profiles.
 - **iPhone app (2.2.0):** same features. `SessionStore` watches the crew jobs and keeps `workIds` (UserDefaults `knoxWork_<uid>`,
   locked while clocked in). `HomeView` rebuilds `PinStore`/`ShiftStore` when they change. `PinStore` merges `pinsBy` and writes to every
   work company. `Doorline/` has `DoorlineStore` (routes in `settings/areas`, walk paths) and the Hangers / Routes / "Hanging for" views.

@@ -5,6 +5,8 @@ import SwiftUI
 struct LockedView: View {
     @Environment(SessionStore.self) private var session
     let status: Company.Status
+    /// Doorline crew not assigned to a business yet.
+    var crewWaiting = false
     @State private var busy = false
     @State private var error = ""
 
@@ -45,7 +47,8 @@ struct LockedView: View {
     private var company: String { session.company?.name ?? "Your company" }
 
     private var icon: String {
-        switch status {
+        if crewWaiting { return "door.left.hand.open" }
+        return switch status {
         case .pending: "hourglass"
         case .paused: "pause.circle.fill"
         default: "xmark.circle.fill"
@@ -61,7 +64,8 @@ struct LockedView: View {
     }
 
     private var title: String {
-        switch status {
+        if crewWaiting { return "You\u{2019}re on the Doorline crew" }
+        return switch status {
         case .pending: "Request sent"
         case .paused: "\(company) is paused"
         default: "Request not approved"
@@ -69,6 +73,7 @@ struct LockedView: View {
     }
 
     private var message: String {
+        if crewWaiting { return "As soon as you\u{2019}re assigned to a business, its map opens here on its own. Nothing to do until then." }
         switch status {
         case .pending:
             let phone = session.company?.phone ?? ""

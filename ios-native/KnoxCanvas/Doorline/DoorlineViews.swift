@@ -235,7 +235,9 @@ struct HangingForPicker: View {
         VStack(alignment: .leading, spacing: 8) {
             heading("Hanging for")
             FlowLayout(spacing: 8) {
-                chip(session.company?.name ?? "My company", id: home, on: session.workIds.isEmpty)
+                if !session.isCrewOnly {
+                    chip(session.company?.name ?? "My company", id: home, on: session.workIds.isEmpty)
+                }
                 ForEach(session.crewJobs, id: \.id) { j in
                     let suffix = j.company.status == .active ? "" : " (\(j.company.status.rawValue))"
                     chip(j.company.name + suffix, id: j.id, on: session.workIds.contains(j.id))

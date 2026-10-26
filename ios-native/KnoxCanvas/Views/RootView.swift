@@ -12,6 +12,7 @@ struct RootView: View {
             case .signedOut: AuthView()
             case .setup: SetupView()
             case .locked(let status): LockedView(status: status)
+            case .crewWaiting: LockedView(status: .pending, crewWaiting: true)
             case .ready: HomeView()
             }
         }

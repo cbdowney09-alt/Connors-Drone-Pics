@@ -70,7 +70,10 @@ final class ShiftStore {
     var clockedIn: Bool { clockInTime != nil }
     private var localKey: String { "knoxClock_\(uid)" }
     private var userDoc: DocumentReference { db.collection("users").document(uid) }
-    private var shiftsCol: CollectionReference { db.collection("companies").document(companyId).collection("shifts") }
+    /// Where this user's history lives: their company, or for Doorline crew with no company,
+    /// the first business they hang for.
+    private var historyId: String { companyId.isEmpty ? (clientIds.first ?? "") : companyId }
+    private var shiftsCol: CollectionReference { db.collection("companies").document(historyId).collection("shifts") }
 
     func start() async {
         await restore()
@@ -147,13 +150,14 @@ final class ShiftStore {
             data["forCompanyIds"] = clientIds
             data["forCompanyName"] = clientLabel
         }
-        let ref = shiftsCol.document()
-        shifts.insert(Shift(id: ref.documentID, data: data), at: 0)
+        // Crew with no company of their own: the clients' copies (above) are the record.
+        let ref = companyId.isEmpty ? nil : shiftsCol.document()
+        shifts.insert(Shift(id: ref?.documentID ?? UUID().uuidString, data: data), at: 0)
         clockInTime = nil
         UserDefaults.standard.removeObject(forKey: localKey)
         writeRemote(nil)
         toast?("Shift saved: \(hangers) hangers \u{00B7} \(Self.perHourText(perHour))/hr")
-        ref.setData(data) { [weak self] error in
+        ref?.setData(data) { [weak self] error in
             if let error { self?.toast?("Shift couldn\u{2019}t sync (\(error.localizedDescription))") }
         }
         syncToSheets(data)
@@ -179,6 +183,7 @@ final class ShiftStore {
     // MARK: History
 
     private func loadShifts() async {
+        guard !historyId.isEmpty else { return }
         do {
             let snap = try await shiftsCol.whereField("userId", isEqualTo: uid).getDocuments()
             let loaded = snap.documents.map { Shift(id: $0.documentID, data: $0.data()) }

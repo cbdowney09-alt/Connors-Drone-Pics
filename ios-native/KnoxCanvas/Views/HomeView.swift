@@ -20,7 +20,9 @@ struct HomeView: View {
             } else { Theme.bg.ignoresSafeArea() }
         }
         .task(id: storeKey) {
-            guard let cid = session.companyId, let uid = session.user?.uid else { return }
+            // Doorline crew with no company work only their assigned businesses (cid is "").
+            let cid = session.companyId ?? ""
+            guard let uid = session.user?.uid, !cid.isEmpty || !session.workIds.isEmpty else { return }
             shifts?.pause()
             store?.stop()
             let sheets = session.company?.sheetsUrl ?? ""
@@ -35,7 +37,7 @@ struct HomeView: View {
             shifts = sh
             people = pe
             doorline = dl
-            Task { await pe.load(companyId: cid) }
+            if !cid.isEmpty { Task { await pe.load(companyId: cid) } }
             Task { await dl.load() }
             await sh.start()
         }

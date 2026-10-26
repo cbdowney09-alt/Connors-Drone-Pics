@@ -8,28 +8,38 @@ struct HomeView: View {
     @State private var store: PinStore?
     @State private var shifts: ShiftStore?
     @State private var people: People?
+    @State private var doorline: DoorlineStore?
+
+    /// A Doorline crew member picking other businesses under "Hanging for" gets new stores.
+    private var storeKey: String { "\(session.companyId ?? "")|\(session.workIds.joined(separator: ","))" }
 
     var body: some View {
         Group {
-            if let store, let shifts, let people {
-                MapScreen(store: store, shifts: shifts, people: people)
+            if let store, let shifts, let people, let doorline {
+                MapScreen(store: store, shifts: shifts, people: people, doorline: doorline)
             } else { Theme.bg.ignoresSafeArea() }
         }
-        .task(id: session.companyId) {
+        .task(id: storeKey) {
             guard let cid = session.companyId, let uid = session.user?.uid else { return }
+            shifts?.pause()
             store?.stop()
             let sheets = session.company?.sheetsUrl ?? ""
-            let s = PinStore(companyId: cid, uid: uid, sheetsUrl: sheets)
+            let work = session.isClient ? [] : session.workIds
+            let s = PinStore(companyId: cid, workIds: work, uid: uid, sheetsUrl: sheets)
             s.start()
-            let sh = ShiftStore(companyId: cid, uid: uid, userName: session.profile?.name ?? "", sheetsUrl: sheets, pins: s)
+            let sh = ShiftStore(companyId: cid, clientIds: work, clientLabel: session.workLabel, uid: uid,
+                                userName: session.profile?.name ?? "", sheetsUrl: sheets, pins: s)
             let pe = People(uid: uid, selfName: session.profile?.name ?? "")
+            let dl = DoorlineStore(workIds: s.workIds, uid: uid)
             store = s
             shifts = sh
             people = pe
+            doorline = dl
             Task { await pe.load(companyId: cid) }
+            Task { await dl.load() }
             await sh.start()
         }
-        .onDisappear { shifts?.pause(); store?.stop(); store = nil; shifts = nil; people = nil }
+        .onDisappear { shifts?.pause(); store?.stop(); store = nil; shifts = nil; people = nil; doorline = nil }
         // Owner edited company settings: new Sheets syncs go to the new URL.
         .onChange(of: session.company?.sheetsUrl) { _, url in
             store?.sheetsUrl = url ?? ""
@@ -45,7 +55,10 @@ struct MapScreen: View {
     @Bindable var store: PinStore
     let shifts: ShiftStore
     let people: People
+    let doorline: DoorlineStore
     @State private var controller = MapController()
+    @State private var pathsOn = false
+    @State private var framedRoutes = false
     @State private var search = AddressSearch()
     @State private var query = ""
     @FocusState private var searchFocused: Bool
@@ -59,7 +72,7 @@ struct MapScreen: View {
     @AppStorage("knoxBasemap") private var basemapRaw = Basemap.street.rawValue
     @AppStorage("knoxColorBy") private var colorByRaw = ColorBy.status.rawValue
 
-    enum Panel: String, Identifiable { case shift, layers, account, sweep, team, metrics, route, export, admin, houseData, companyStates; var id: String { rawValue } }
+    enum Panel: String, Identifiable { case shift, layers, account, sweep, team, metrics, route, export, admin, houseData, companyStates, hangers, routes; var id: String { rawValue } }
 
     private var basemap: Basemap { Basemap(rawValue: basemapRaw) ?? .street }
     private var colorBy: ColorBy { ColorBy(rawValue: colorByRaw) ?? .status }
@@ -71,7 +84,7 @@ struct MapScreen: View {
                        colorBy: colorBy, people: people, peopleVersion: people.version,
                        hasFrame: store.initialFrame != nil,
                        sweep: shifts.sweep, sweepVersion: shifts.sweep.version,
-                       tools: tools, toolsKey: toolsKey,
+                       tools: tools, toolsKey: toolsKey, doorline: doorline,
                        onTapPin: { open($0) }, onTapCandidate: { shifts.sweep.toggle($0) }, onTapMap: tapMap)
                 .ignoresSafeArea()
 
@@ -84,8 +97,10 @@ struct MapScreen: View {
                 } else {
                     searchCard
                     if searchFocused && !search.results.isEmpty { suggestions } else {
-                        chips
-                        if colorBy == .person { peopleChips }
+                        if session.isClient { clientCount } else {
+                            chips
+                            if colorBy == .person { peopleChips }
+                        }
                         statusRow
                     }
                 }
@@ -100,22 +115,33 @@ struct MapScreen: View {
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                         .padding(.bottom, 10)
                 }
-                TabBar(clockInTime: shifts.clockInTime, drawing: tools.drawing == .zone, select: tab)
+                TabBar(clockInTime: shifts.clockInTime, drawing: tools.drawing == .zone, client: session.isClient, select: tab)
             }
         }
         .animation(.easeInOut(duration: 0.2), value: toastText)
         .onChange(of: store.version, initial: true) { people.update(from: store.pins) }
         .onChange(of: session.company?.states ?? [], initial: false) { _, codes in packs.ensure(codes) }
+        .onChange(of: shifts.clockedIn, initial: true) { _, on in session.workLocked = on }
+        .onChange(of: pathsOn) { _, on in
+            if on { Task { showToast(await doorline.showPaths()) } } else { doorline.hidePaths() }
+        }
+        // No hangers yet: show the routes instead.
+        .onChange(of: doorline.version) {
+            guard !framedRoutes, store.pins.isEmpty, let r = doorline.allBounds else { return }
+            framedRoutes = true
+            controller.show(r)
+        }
         .task { await setUpHouseData() }
         .animation(.easeInOut(duration: 0.25), value: shifts.sweep.candidates.isEmpty)
-        .onAppear {
+        // Again whenever the stores are replaced (a crew member switched businesses).
+        .onChange(of: ObjectIdentifier(store), initial: true) {
             controller.onMessage = { showToast($0) }
             store.toast = { showToast($0) }
             shifts.toast = { showToast($0) }
             shifts.sweep.toast = { showToast($0) }
         }
         .sheet(item: $selected) { sel in
-            PinSheet(store: store, people: people, pinId: sel.id, toast: showToast) { selected = nil }
+            PinSheet(store: store, people: people, pinId: sel.id, readOnly: session.isClient, toast: showToast) { selected = nil }
                 .presentationDetents([.fraction(0.62), .large])
                 .presentationDragIndicator(.visible)
                 .presentationBackground(Theme.bg)
@@ -147,7 +173,7 @@ struct MapScreen: View {
             case .export:
                 ExportSheet(pins: store).presentationDetents([.large])
             case .admin:
-                AdminSheet(uid: store.uid).presentationDetents([.large])
+                AdminSheet(uid: store.uid, homeCompanyId: store.companyId).presentationDetents([.large])
             case .houseData:
                 HouseDataSheet(companyStates: session.company?.states ?? []).presentationDetents([.large])
             case .companyStates:
@@ -159,6 +185,23 @@ struct MapScreen: View {
                 }
                 .presentationDetents([.large])
                 .interactiveDismissDisabled(false)
+            case .hangers:
+                HangersSheet(pins: store, doorline: doorline, pathsOn: $pathsOn, show: { r in
+                    panel = nil
+                    controller.show(r)
+                }, toast: showToast)
+                .presentationDetents([.large])
+            case .routes:
+                RoutesSheet(pins: store, doorline: doorline, draw: {
+                    panel = nil
+                    selected = nil
+                    zoneName = ""
+                    tools.startDrawing(.area)
+                }, show: { r in
+                    panel = nil
+                    controller.show(r)
+                }, toast: showToast)
+                .presentationDetents([.medium, .large])
             case .team:
                 TeamSheet(companyId: store.companyId, uid: store.uid).presentationDetents([.large])
             case .metrics:
@@ -233,6 +276,7 @@ struct MapScreen: View {
         Task {
             guard let (c, label) = await search.resolve(r) else { showToast("No matches"); return }
             controller.center(on: c, meters: 120)
+            if session.isClient { return } // clients look; the crew places pins
             let id = store.createPin(at: c, addr: label)
             try? await Task.sleep(for: .milliseconds(250))
             open(id)
@@ -240,6 +284,28 @@ struct MapScreen: View {
     }
 
     // MARK: Filters and status
+
+    /// Doorline client: one count instead of the status filters.
+    private var clientCount: some View {
+        let n = store.counts[.hanger] ?? 0
+        return HStack {
+            Button { panel = .hangers } label: {
+                HStack(spacing: 8) {
+                    Circle().fill(PinStatus.hanger.color).frame(width: 10, height: 10)
+                    Text("\(n)").monospacedDigit().foregroundStyle(PinStatus.hanger.color)
+                    Text(n == 1 ? "door hanger" : "door hangers").foregroundStyle(Theme.text)
+                }
+                .font(.system(size: 16, weight: .bold))
+                .padding(.horizontal, 15).frame(height: 40)
+                .background(Theme.card, in: Capsule())
+                .overlay(Capsule().stroke(.white.opacity(0.08)))
+                .shadow(color: .black.opacity(0.3), radius: 6, y: 2)
+            }
+            .buttonStyle(.plain)
+            Spacer()
+        }
+        .padding(.horizontal, 12)
+    }
 
     private var chips: some View {
         let counts = store.counts
@@ -281,7 +347,7 @@ struct MapScreen: View {
     }
 
     @ViewBuilder private var statusRow: some View {
-        if store.sync != .ok || shifts.clockedIn || packs.isDownloading {
+        if store.sync != .ok || shifts.clockedIn || packs.isDownloading || !session.workIds.isEmpty {
             HStack(spacing: 6) {
                 if let (code, p) = packs.progress.first {
                     Button { panel = .houseData } label: {
@@ -308,6 +374,13 @@ struct MapScreen: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel("Open shift")
                 }
+                if !session.workIds.isEmpty {
+                    Button { panel = .shift } label: {
+                        StatusPill(text: "For \(session.workLabel)", color: PinStatus.hanger.color).lineLimit(1)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Hanging for \(session.workLabel)")
+                }
                 Spacer()
             }
             .padding(.horizontal, 12)
@@ -327,12 +400,13 @@ struct MapScreen: View {
 
     /// Read here so SwiftUI updates the map when any tool layer changes.
     private var toolsKey: String {
-        "\(tools.drawVersion)-\(tools.routeVersion)-\(tools.zipVersion)-\(tools.showZones)-\(store.zonesVersion)"
+        "\(tools.drawVersion)-\(tools.routeVersion)-\(tools.zipVersion)-\(tools.showZones)-\(store.zonesVersion)-\(doorline.version)-\(doorline.pathsVersion)"
     }
 
     /// Downloads the company's states. With none picked yet, the owner is asked once, and
     /// everyone else gets the state they're standing in.
     private func setUpHouseData() async {
+        guard !session.isClient else { return } // clients don't canvass
         await packs.loadManifest()
         let codes = session.company?.states ?? []
         if !codes.isEmpty { packs.ensure(codes); return }
@@ -357,6 +431,15 @@ struct MapScreen: View {
     private func finishDrawing() {
         let poly = tools.drawn
         guard poly.count >= 3 else { showToast("Tap at least 3 points"); return }
+        if tools.drawing == .area {
+            let trimmed = zoneName.trimmingCharacters(in: .whitespaces)
+            let name = trimmed.isEmpty ? "Neighborhood \(doorline.drawnCount + 1)" : trimmed
+            doorline.addDrawn(name: name, points: poly)
+            tools.stopDrawing()
+            panel = .routes
+            showToast("\u{201C}\(name)\u{201D} added")
+            return
+        }
         if tools.drawing == .route {
             tools.setRouteZone(poly, pins: store)
             tools.stopDrawing()
@@ -376,6 +459,7 @@ struct MapScreen: View {
     private func tapMap(_ c: CLLocationCoordinate2D) {
         if searchFocused { searchFocused = false; return }
         if tools.drawing != .off { tools.addPoint(c); return }
+        if session.isClient { return } // clients look; the crew places pins
         open(store.createPin(at: c))
     }
 
@@ -396,6 +480,8 @@ struct MapScreen: View {
         case .zone: if tools.drawing == .off { startDrawing(forRoute: false) } else { tools.stopDrawing() }
         case .layers: panel = .layers
         case .account: panel = .account
+        case .hangers: panel = .hangers
+        case .routes: if tools.drawing == .off { panel = .routes } else { tools.stopDrawing() }
         }
     }
 
@@ -466,20 +552,27 @@ private struct StatusPill: View {
 }
 
 struct TabBar: View {
-    enum Tab: CaseIterable { case shift, route, zone, layers, account }
+    enum Tab: CaseIterable { case shift, route, zone, layers, account, hangers, routes }
     let clockInTime: Int64?
     var drawing = false
+    /// Doorline client: Hangers / Routes / Layers / Account.
+    var client = false
     let select: (Tab) -> Void
 
     var body: some View {
         HStack(spacing: 0) {
-            // While on shift the tab shows the running time, like the web.
-            TimelineView(.periodic(from: .now, by: 15)) { ctx in
-                let label = clockInTime.map { ShiftFormat.short(Int64(ctx.date.timeIntervalSince1970 * 1000) - $0) } ?? "Clock in"
-                item(.shift, label, "timer", active: clockInTime != nil)
+            if client {
+                item(.hangers, "Hangers", "house")
+                item(.routes, "Routes", "pentagon")
+            } else {
+                // While on shift the tab shows the running time, like the web.
+                TimelineView(.periodic(from: .now, by: 15)) { ctx in
+                    let label = clockInTime.map { ShiftFormat.short(Int64(ctx.date.timeIntervalSince1970 * 1000) - $0) } ?? "Clock in"
+                    item(.shift, label, "timer", active: clockInTime != nil)
+                }
+                item(.route, "Route", "point.topleft.down.to.point.bottomright.curvepath")
+                item(.zone, "Zone", "pentagon", active: drawing)
             }
-            item(.route, "Route", "point.topleft.down.to.point.bottomright.curvepath")
-            item(.zone, "Zone", "pentagon", active: drawing)
             item(.layers, "Layers", "square.3.layers.3d")
             item(.account, "Account", "person.crop.circle")
         }
@@ -521,18 +614,22 @@ struct AccountSheet: View {
                 row("Email", session.user?.email)
                 row("Company", session.company?.name)
                 row("Role", session.profile?.role)
-                if session.profile?.isOwner == true {
+                if session.profile?.isOwner == true && !session.isClient {
                     Text("OWNER TOOLS").font(.system(size: 13, weight: .bold)).foregroundStyle(Theme.muted).padding(.top, 8)
                     menuItem("Team and company settings", "person.2.fill") { open(.team) }
                     menuItem("Team metrics", "chart.bar.fill") { open(.metrics) }
                 }
                 if session.isAdmin {
                     Text("KNOXCANVAS").font(.system(size: 13, weight: .bold)).foregroundStyle(Theme.muted).padding(.top, 8)
-                    menuItem("Admin: companies", "building.2.fill") { open(.admin) }
+                    menuItem("Admin: companies and Doorline crews", "building.2.fill") { open(.admin) }
                 }
                 Text("DATA").font(.system(size: 13, weight: .bold)).foregroundStyle(Theme.muted).padding(.top, 8)
-                menuItem("House data (states)", "house.fill") { open(.houseData) }
-                menuItem("Export pins (CSV)", "square.and.arrow.up") { open(.export) }
+                if session.isClient {
+                    menuItem("Your door hangers (CSV)", "house.fill") { open(.hangers) }
+                } else {
+                    menuItem("House data (states)", "house.fill") { open(.houseData) }
+                    menuItem("Export pins (CSV)", "square.and.arrow.up") { open(.export) }
+                }
                 KnoxButton(title: "Sign out", style: .ghost) {
                     if clockedIn { confirmSignOut = true } else { session.signOut() }
                 }

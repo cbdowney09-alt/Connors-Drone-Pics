@@ -39,6 +39,11 @@ struct Company {
     var requestedAt: Date?
     /// States the company works in ("TN"); every phone on the team downloads their house data.
     var states: [String]
+    /// Signed up through Doorline Hangers (a door hanger distribution service): the owner sees
+    /// only where hangers went and picks routes. Set at signup; only an admin can change it.
+    var doorline: Bool
+    /// Doorline: the people (uids) who hang for this business. Set by the admin.
+    var crew: [String]
 
     init(_ d: [String: Any], fallbackName: String = "Your company") {
         name = d["name"] as? String ?? fallbackName
@@ -51,5 +56,7 @@ struct Company {
         phone = d["phone"] as? String ?? ""
         requestedAt = (d["requestedAt"] as? Timestamp)?.dateValue() ?? (d["createdAt"] as? Timestamp)?.dateValue()
         states = d["states"] as? [String] ?? []
+        doorline = d["doorline"] as? Bool ?? false
+        crew = d["crew"] as? [String] ?? []
     }
 }

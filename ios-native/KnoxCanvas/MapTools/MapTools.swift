@@ -9,13 +9,16 @@ import MapKit
 final class MapTools {
     // MARK: Drawing
 
-    enum Drawing: Equatable { case off, zone, route }
+    /// `area`: a Doorline client outlining a neighborhood they want hung.
+    enum Drawing: Equatable { case off, zone, route, area }
     private(set) var drawing = Drawing.off
     private(set) var drawn: [CLLocationCoordinate2D] = []
     private(set) var drawVersion = 0
 
-    func startDrawing(forRoute: Bool) {
-        drawing = forRoute ? .route : .zone
+    func startDrawing(forRoute: Bool) { startDrawing(forRoute ? .route : .zone) }
+
+    func startDrawing(_ mode: Drawing) {
+        drawing = mode
         drawn = []
         drawVersion &+= 1
     }

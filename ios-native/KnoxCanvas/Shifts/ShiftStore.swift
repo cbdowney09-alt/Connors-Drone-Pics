@@ -11,9 +11,17 @@ struct Shift: Identifiable {
     var hangersPerHour: Double
     var userId: String
     var userName: String
+    /// Doorline: hung for these client businesses (the crew's own copy of the shift).
+    var forCompanyId: String?
+    var forCompanyName: String
+    /// The GPS walk path, "lat,lng,seconds;…".
+    var trail: String
 
     init(id: String, data d: [String: Any]) {
         self.id = id
+        forCompanyId = d["forCompanyId"] as? String
+        forCompanyName = d["forCompanyName"] as? String ?? ""
+        trail = d["trail"] as? String ?? ""
         userId = d["userId"] as? String ?? ""
         userName = d["userName"] as? String ?? ""
         clockIn = (d["clockIn"] as? NSNumber)?.int64Value ?? 0
@@ -34,6 +42,9 @@ final class ShiftStore {
     var toast: ((String) -> Void)?
 
     let companyId: String
+    /// Doorline clients being hung for (empty = your own company only), and their names.
+    let clientIds: [String]
+    let clientLabel: String
     let uid: String
     var userName: String
     var sheetsUrl: String
@@ -45,8 +56,10 @@ final class ShiftStore {
     /// Same limit as the web: a shift left open longer than this is dropped on restore.
     private static let maxShiftMs: Int64 = 16 * 3_600_000
 
-    init(companyId: String, uid: String, userName: String, sheetsUrl: String, pins: PinStore) {
+    init(companyId: String, clientIds: [String] = [], clientLabel: String = "", uid: String, userName: String, sheetsUrl: String, pins: PinStore) {
         self.companyId = companyId
+        self.clientIds = clientIds
+        self.clientLabel = clientLabel
         self.uid = uid
         self.userName = userName
         self.sheetsUrl = sheetsUrl
@@ -105,7 +118,7 @@ final class ShiftStore {
         UserDefaults.standard.set(NSNumber(value: now), forKey: localKey)
         writeRemote(now)
         sweep.start(clockIn: now)
-        toast?("Clocked in")
+        toast?(clientIds.isEmpty ? "Clocked in" : "Clocked in \u{00B7} hanging for \(clientLabel)")
     }
 
     func clockOut() {
@@ -115,7 +128,7 @@ final class ShiftStore {
         let hours = Double(duration) / 3_600_000
         let perHour = hours > 0 ? (Double(hangers) / hours * 10).rounded() / 10 : 0
         let summary = sweep.shiftSummary(since: start)
-        let data: [String: Any] = [
+        var data: [String: Any] = [
             "clockIn": start, "clockOut": end, "durationMs": duration, "hangers": hangers,
             // JS stores whole numbers as integers; match it so both apps write the same type.
             "hangersPerHour": perHour == perHour.rounded() ? NSNumber(value: Int(perHour)) : NSNumber(value: perHour),
@@ -123,6 +136,17 @@ final class ShiftStore {
             "trail": summary.trail, "trailMeters": summary.meters, "gpsHangers": gpsHangersSince(start),
         ]
         sweep.stop(keepSaved: false)
+        if !clientIds.isEmpty {
+            // Each client's copy gives them the walk path; ours keeps team metrics whole.
+            for cid in clientIds {
+                db.collection("companies").document(cid).collection("shifts").addDocument(data: data) { [weak self] error in
+                    if let error { self?.toast?("Shift couldn\u{2019}t sync (\(error.localizedDescription))") }
+                }
+            }
+            data["forCompanyId"] = clientIds[0]
+            data["forCompanyIds"] = clientIds
+            data["forCompanyName"] = clientLabel
+        }
         let ref = shiftsCol.document()
         shifts.insert(Shift(id: ref.documentID, data: data), at: 0)
         clockInTime = nil

@@ -207,6 +207,7 @@ struct Metrics {
                 p.status == .hanger && Self.ms(p.raw["hangerAt"], or: p.ts) >= since
                     && test((p.raw["hangerBy"] as? String) ?? (p.raw["updatedBy"] as? String))
             }.count
+                + allShifts.filter { $0.forCompanyId != nil && $0.clockIn >= since && test($0.userId) }.reduce(0) { $0 + $1.hangers }
         }
         let fShifts = allShifts.filter { $0.clockIn >= since && match($0.userId) }
         hangers = hangersFor(match)

@@ -28,9 +28,21 @@ final class SessionStore {
     /// Has an `admins/{uid}` doc: sees the Admin screen (approve, pause, resume companies).
     var isAdmin = false
 
+    /// A Doorline client: the simple view (where hangers went, routes), no shifts or metrics.
+    var isClient: Bool { company?.doorline == true }
+    /// Doorline: the client businesses this person is on the crew for (live).
+    private(set) var crewJobs: [(id: String, company: Company)] = []
+    /// The clients picked under "Hanging for" (empty = your own company). Every door marked goes
+    /// to each of them. Saved per user so it survives a relaunch; locked while clocked in.
+    private(set) var workIds: [String] = []
+    private(set) var workNames: [String: String] = [:]
+    /// Set while clocked in: the selection can't change mid-shift.
+    var workLocked = false
+
     private let db = Firestore.firestore()
     private var authHandle: AuthStateDidChangeListenerHandle?
     private var companyListener: ListenerRegistration?
+    private var jobsListener: ListenerRegistration?
 
     func start() {
         guard authHandle == nil else { return }
@@ -59,6 +71,8 @@ final class SessionStore {
             }
             phase = company?.status == .active ? .ready : .locked(company?.status ?? .pending)
             watchCompany(cid)
+            restoreWork(user.uid)
+            watchCrewJobs(user.uid)
             Task { await checkAdmin(user.uid) }
         } catch {
             switch firestoreCode(error) {
@@ -99,6 +113,12 @@ final class SessionStore {
     private func leave() {
         companyListener?.remove()
         companyListener = nil
+        jobsListener?.remove()
+        jobsListener = nil
+        crewJobs = []
+        workIds = []
+        workNames = [:]
+        workLocked = false
         isAdmin = false
         profile = nil
         companyId = nil
@@ -108,6 +128,58 @@ final class SessionStore {
     func signOut() {
         GIDSignIn.sharedInstance.signOut()
         try? Auth.auth().signOut()
+    }
+
+    // MARK: - Doorline crew ("Hanging for")
+
+    private func workKey(_ uid: String) -> String { "knoxWork_\(uid)" }
+
+    private func restoreWork(_ uid: String) {
+        guard !isClient else { workIds = []; return }
+        let saved = UserDefaults.standard.dictionary(forKey: workKey(uid))
+        workIds = (saved?["works"] as? [String] ?? []).filter { $0 != companyId }
+        workNames = saved?["names"] as? [String: String] ?? [:]
+    }
+
+    private func saveWork() {
+        guard let uid = user?.uid else { return }
+        UserDefaults.standard.set(["works": workIds, "names": workNames], forKey: workKey(uid))
+    }
+
+    private func watchCrewJobs(_ uid: String) {
+        jobsListener?.remove()
+        jobsListener = nil
+        crewJobs = []
+        guard !isClient else { return }
+        jobsListener = db.collection("companies").whereField("crew", arrayContains: uid)
+            .addSnapshotListener { [weak self] snap, error in
+                guard let self, let snap else { if let error { print("crew jobs:", error) }; return }
+                crewJobs = snap.documents.filter { $0.documentID != self.companyId }
+                    .map { (id: $0.documentID, company: Company($0.data(), fallbackName: "Client")) }
+                    .sorted { $0.company.name.localizedCompare($1.company.name) == .orderedAscending }
+                for j in crewJobs { workNames[j.id] = j.company.name }
+                // Taken off a business's crew: drop it, unless mid-shift (the shift finishes first).
+                let still = workIds.filter { id in self.crewJobs.contains { $0.id == id } }
+                if still.count < workIds.count, !workLocked, !snap.metadata.isFromCache {
+                    workIds = still
+                    toast = "You\u{2019}re no longer on the crew for one of those businesses"
+                }
+                saveWork()
+            }
+    }
+
+    /// Tap a business under "Hanging for". Your own company clears the picks.
+    func toggleWork(_ id: String) {
+        guard !workLocked else { toast = "Clock out first to switch businesses"; return }
+        if id == companyId { workIds = [] }
+        else if workIds.contains(id) { workIds.removeAll { $0 == id } }
+        else { workIds.append(id) }
+        saveWork()
+    }
+
+    /// "Acme Pest Control + Beta Lawn Care", or your company's name.
+    var workLabel: String {
+        workIds.isEmpty ? (company?.name ?? "your company") : workIds.map { workNames[$0] ?? "Client" }.joined(separator: " + ")
     }
 
     /// After the owner saves company settings.
@@ -230,14 +302,16 @@ final class SessionStore {
 
     /// Requests a new company. It starts `pending`; the admin approves it in the Admin screen
     /// (and gets an email if `AppConfig.requestWebhook` is set).
-    func createCompany(name: String, companyName: String, phone: String) async throws {
+    func createCompany(name: String, companyName: String, phone: String, doorline: Bool) async throws {
         guard let user else { return }
         let companyRef = db.collection("companies").document()
         let batch = db.batch()
-        batch.setData(["name": companyName, "ownerId": user.uid, "roofCutoff": AppConfig.defaultRoofCutoff,
+        var company: [String: Any] = ["name": companyName, "ownerId": user.uid, "roofCutoff": AppConfig.defaultRoofCutoff,
                        "sheetsUrl": "", "createdAt": FieldValue.serverTimestamp(),
                        "status": Company.Status.pending.rawValue, "ownerName": name, "ownerEmail": user.email ?? "",
-                       "phone": phone, "requestedAt": FieldValue.serverTimestamp()], forDocument: companyRef)
+                       "phone": phone, "requestedAt": FieldValue.serverTimestamp()]
+        if doorline { company["doorline"] = true }
+        batch.setData(company, forDocument: companyRef)
         batch.setData(["name": name, "email": user.email ?? "", "role": "owner", "companyId": companyRef.documentID,
                        "companyName": companyName, "createdAt": FieldValue.serverTimestamp()],
                       forDocument: db.collection("users").document(user.uid))

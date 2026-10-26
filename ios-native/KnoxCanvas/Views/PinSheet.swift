@@ -5,6 +5,8 @@ struct PinSheet: View {
     let store: PinStore
     let people: People
     let pinId: String
+    /// Doorline client: the address and when the hanger was left, nothing to change.
+    var readOnly = false
     var toast: (String) -> Void
     var close: () -> Void
 
@@ -23,7 +25,13 @@ struct PinSheet: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 10) {
-                if let pin {
+                if let pin, readOnly {
+                    Text(pin.addr.isEmpty ? "Address loading" : pin.addr)
+                        .font(.system(size: 20, weight: .bold)).foregroundStyle(Theme.text)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(hungText(pin)).font(.system(size: 17, weight: .semibold)).foregroundStyle(PinStatus.hanger.color)
+                    KnoxButton(title: "Done", action: close).padding(.top, 8)
+                } else if let pin {
                     header(pin)
                     ForEach(PinStatus.allCases) { s in statusButton(s, active: pin.status == s) }
                     details
@@ -77,6 +85,13 @@ struct PinSheet: View {
             .foregroundStyle(Theme.accent)
         }
         .padding(.bottom, 4)
+    }
+
+    private func hungText(_ p: Pin) -> String {
+        guard p.status == .hanger else { return "Not hung yet" }
+        let n = (p.raw["hangerAt"] as? NSNumber)?.int64Value ?? 0
+        let at = n != 0 ? n : p.ts
+        return at > 0 ? "Door hanger left \(ShiftFormat.date(at)), \(ShiftFormat.time(at))" : "Door hanger left"
     }
 
     /// "Hung by Jake · Oct 12, 2026"

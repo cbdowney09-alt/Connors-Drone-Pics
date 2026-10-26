@@ -3,8 +3,12 @@ import Network
 import CoreLocation
 import FirebaseFirestore
 
-/// Live pins for one company, plus every pin write. Mirrors app.html's data layer
-/// (subscribePins, savePin, createPin, syncToSheets, neighborhood years).
+/// Live pins, plus every pin write. Mirrors app.html's data layer (subscribePins, savePin,
+/// createPin, syncToSheets, neighborhood years).
+///
+/// Doorline crew can hang for several client businesses at once (`workIds`): each one's pins are
+/// kept in `pinsBy`, the map shows the newest copy of each house, and every write goes to all of
+/// them. Normally `workIds` is just the user's own company.
 @MainActor @Observable
 final class PinStore {
     enum Sync: Equatable { case ok, pending, offline, error }
@@ -22,38 +26,54 @@ final class PinStore {
     var routeStart: (coordinate: CLLocationCoordinate2D, addr: String)?
     var toast: ((String) -> Void)?
 
+    /// The user's own company (team, metrics, settings).
     let companyId: String
+    /// The companies whose pins this map shows and writes to.
+    let workIds: [String]
     let uid: String
     var sheetsUrl: String
 
     private let db = Firestore.firestore()
-    private var listener: ListenerRegistration?
-    private var hasPendingWrites = false
+    private var listeners: [ListenerRegistration] = []
+    private var pinsBy: [String: [String: Pin]] = [:]
+    private var pendingIn = Set<String>()
+    private var hasPendingWrites: Bool { !pendingIn.isEmpty }
     private var online = true
     private var listenError = false
     private let monitor = NWPathMonitor()
     private var didFrame = false
 
-    init(companyId: String, uid: String, sheetsUrl: String) {
+    init(companyId: String, workIds: [String] = [], uid: String, sheetsUrl: String) {
         self.companyId = companyId
+        self.workIds = workIds.isEmpty ? [companyId] : workIds
         self.uid = uid
         self.sheetsUrl = sheetsUrl
     }
 
-    private var pinsCol: CollectionReference { db.collection("companies").document(companyId).collection("pins") }
+    /// The first company worked for: zones go there.
+    var primaryId: String { workIds[0] }
+    private func pinsCol(_ cid: String) -> CollectionReference { db.collection("companies").document(cid).collection("pins") }
     private var zonesDoc: DocumentReference {
-        db.collection("companies").document(companyId).collection("settings").document("neighborhoodYears")
+        db.collection("companies").document(primaryId).collection("settings").document("neighborhoodYears")
     }
 
     func start() {
-        guard listener == nil else { return }
+        guard listeners.isEmpty else { return }
         monitor.pathUpdateHandler = { [weak self] path in
             Task { @MainActor in self?.online = path.status == .satisfied; self?.updateSync() }
         }
         monitor.start(queue: .global(qos: .utility))
 
-        listener = pinsCol.addSnapshotListener(includeMetadataChanges: true) { [weak self] snap, error in
-            guard let self else { return }
+        for cid in workIds {
+            pinsBy[cid] = [:]
+            listeners.append(pinsCol(cid).addSnapshotListener(includeMetadataChanges: true) { [weak self] snap, error in
+                self?.received(cid, snap, error)
+            })
+        }
+        Task { await loadZones() }
+    }
+
+    private func received(_ cid: String, _ snap: QuerySnapshot?, _ error: Error?) {
             if let error {
                 print("pins listener:", error)
                 listenError = true
@@ -65,23 +85,27 @@ final class PinStore {
             listenError = false
             for ch in snap.documentChanges {
                 let id = ch.document.documentID
-                if ch.type == .removed { pins[id] = nil; continue }
-                if let p = Pin(id: id, data: ch.document.data()) { pins[id] = p }
+                if ch.type == .removed { pinsBy[cid]?[id] = nil }
+                else if let p = Pin(id: id, data: ch.document.data()) { pinsBy[cid]?[id] = p }
+                merge(id)
             }
-            hasPendingWrites = snap.metadata.hasPendingWrites
+            if snap.metadata.hasPendingWrites { pendingIn.insert(cid) } else { pendingIn.remove(cid) }
             version &+= 1
             updateSync()
             if !didFrame && !pins.isEmpty {
                 didFrame = true
                 initialFrame = pins.values.sorted { $0.ts > $1.ts }.prefix(150).map(\.coordinate)
             }
-        }
-        Task { await loadZones() }
+    }
+
+    /// The newest copy of a house across the companies worked for.
+    private func merge(_ id: String) {
+        pins[id] = workIds.compactMap { pinsBy[$0]?[id] }.max { $0.ts < $1.ts }
     }
 
     func stop() {
-        listener?.remove()
-        listener = nil
+        listeners.forEach { $0.remove() }
+        listeners = []
         monitor.cancel()
     }
 
@@ -100,14 +124,18 @@ final class PinStore {
     /// Merge-writes like the web's savePin. Doesn't wait for the server: Firestore queues the
     /// write offline and the snapshot listener shows it immediately.
     func save(_ id: String, _ data: [String: Any]) {
-        var d = data
-        d["updatedBy"] = uid
-        d["updatedAt"] = FieldValue.serverTimestamp()
-        pinsCol.document(id).setData(d, merge: true) { [weak self] error in
-            guard let error, let self else { return }
-            print("save pin:", error)
-            sync = .error
-            toast?("Couldn\u{2019}t save (\(error.localizedDescription))")
+        for cid in workIds {
+            // A company that doesn't have this house yet gets the whole pin, never a partial record.
+            var d: [String: Any] = pinsBy[cid]?[id] == nil ? (pins[id]?.raw ?? [:]) : [:]
+            d.merge(data) { $1 }
+            d["updatedBy"] = uid
+            d["updatedAt"] = FieldValue.serverTimestamp()
+            pinsCol(cid).document(id).setData(d, merge: true) { [weak self] error in
+                guard let error, let self else { return }
+                print("save pin:", error)
+                sync = .error
+                toast?("Couldn\u{2019}t save (\(error.localizedDescription))")
+            }
         }
     }
 
@@ -129,6 +157,7 @@ final class PinStore {
                 let a = await Geocoder.address(for: c)
                 guard pins[id] != nil else { return }
                 pins[id]?.addr = a
+                pins[id]?.raw["addr"] = a
                 version &+= 1
                 save(id, ["addr": a])
             }
@@ -165,10 +194,12 @@ final class PinStore {
     func delete(_ id: String) {
         pins[id] = nil
         version &+= 1
-        pinsCol.document(id).delete { [weak self] error in
-            guard let error, let self else { return }
-            sync = .error
-            toast?("Couldn\u{2019}t delete (\(error.localizedDescription))")
+        for cid in workIds {
+            pinsCol(cid).document(id).delete { [weak self] error in
+                guard let error, let self else { return }
+                sync = .error
+                toast?("Couldn\u{2019}t delete (\(error.localizedDescription))")
+            }
         }
         postToSheets(["action": "delete", "id": id])
     }
@@ -184,10 +215,11 @@ final class PinStore {
     func createSweepPins(_ houses: [Candidate]) -> Int {
         let now = nowMs()
         var placed: [Pin] = []
-        for chunkStart in stride(from: 0, to: houses.count, by: 400) {
+        let per = max(1, 400 / workIds.count) // a batch holds 500 writes
+        for chunkStart in stride(from: 0, to: houses.count, by: per) {
             let batch = db.batch()
             var any = false
-            for c in houses[chunkStart..<min(chunkStart + 400, houses.count)] {
+            for c in houses[chunkStart..<min(chunkStart + per, houses.count)] {
                 let id = Pin.makeId(lat: c.lat, lng: c.lng)
                 if pins[id] != nil || hasPin(near: c.lat, c.lng, within: SWEEP.dupRadius) { continue }
                 let coord = CLLocationCoordinate2D(latitude: c.lat, longitude: c.lng)
@@ -204,7 +236,7 @@ final class PinStore {
                 var d = data
                 d["updatedBy"] = uid
                 d["updatedAt"] = FieldValue.serverTimestamp()
-                batch.setData(d, forDocument: pinsCol.document(id), merge: true)
+                for cid in workIds { batch.setData(d, forDocument: pinsCol(cid).document(id), merge: true) }
                 any = true
             }
             guard any else { continue }

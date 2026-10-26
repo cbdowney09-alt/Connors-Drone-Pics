@@ -337,6 +337,8 @@ struct PinMapView: UIViewRepresentable {
     let tools: MapTools
     /// Changes whenever any tool layer or the saved zones change.
     let toolsKey: String
+    /// Doorline routes and walk paths (their versions are part of `toolsKey`).
+    var doorline: DoorlineStore?
     var onTapPin: (String) -> Void
     var onTapCandidate: (String) -> Void
     var onTapMap: (CLLocationCoordinate2D) -> Void
@@ -406,17 +408,21 @@ struct PinMapView: UIViewRepresentable {
         private var trailLine: MKPolyline?
         private var trailCount = 0
         private var lastSweepVersion = -1
+        /// The stores are replaced when a Doorline crew member switches businesses; start over then.
+        private var lastStore: ObjectIdentifier?
+        private var lastSweep: ObjectIdentifier?
 
         /// Overlays and badges for one tool, swapped out as a group.
         private struct Layer {
             var overlays: [MKOverlay] = []
             var badges: [BadgeAnnotation] = []
         }
-        private enum Style { case draw, drawLine, routeZone, routeLine, zone, zip(UIColor) }
+        private enum Style { case draw, drawLine, routeZone, routeLine, zone, zip(UIColor), area, walk }
         private var styles: [ObjectIdentifier: Style] = [:]
         private var drawLayer = Layer(), routeLayer = Layer(), zoneLayer = Layer(), zipLayer = Layer()
+        private var areaLayer = Layer(), walkLayer = Layer()
         private var lastDraw = -1, lastRoute = -1, lastZip = -1
-        private var lastZones = ""
+        private var lastZones = "", lastAreas = "", lastWalks = ""
 
         init(_ parent: PinMapView) { self.parent = parent }
 
@@ -438,6 +444,7 @@ struct PinMapView: UIViewRepresentable {
         /// Diffs the store's pins against the map's annotations.
         func syncAnnotations(_ map: MKMapView) {
             let store = parent.store, people = parent.people, byPerson = parent.colorBy == .person
+            if lastStore != ObjectIdentifier(store) { lastStore = ObjectIdentifier(store); lastVersion = -1 }
             guard store.version != lastVersion || store.hidden != lastHidden || parent.colorBy != lastColorBy
                     || people.version != lastPeople else { return }
             lastVersion = store.version
@@ -540,6 +547,7 @@ struct PinMapView: UIViewRepresentable {
         /// Candidate rings and the walked trail.
         func syncSweep(_ map: MKMapView) {
             let sweep = parent.sweep
+            if lastSweep != ObjectIdentifier(sweep) { lastSweep = ObjectIdentifier(sweep); lastSweepVersion = -1; trailCount = -1 }
             guard sweep.version != lastSweepVersion else { return }
             lastSweepVersion = sweep.version
 
@@ -596,7 +604,7 @@ struct PinMapView: UIViewRepresentable {
                 }
                 replace(&routeLayer, with: l, on: map)
             }
-            let zonesKey = "\(t.showZones)-\(parent.store.zonesVersion)"
+            let zonesKey = "\(t.showZones)-\(parent.store.zonesVersion)-\(ObjectIdentifier(parent.store).hashValue)"
             if zonesKey != lastZones {
                 lastZones = zonesKey
                 var l = Layer()
@@ -624,6 +632,29 @@ struct PinMapView: UIViewRepresentable {
                     l.badges.append(BadgeAnnotation(Self.center(of: rect), .label(z.code, z.color)))
                 }
                 replace(&zipLayer, with: l, on: map)
+            }
+            let d = parent.doorline
+            let areasKey = d.map { "\(ObjectIdentifier($0).hashValue)-\($0.version)" } ?? ""
+            if areasKey != lastAreas {
+                lastAreas = areasKey
+                var l = Layer()
+                for a in d?.areas ?? [] {
+                    guard let polys = d?.shapes[a.id], !polys.isEmpty else { continue }
+                    var rect = MKMapRect.null
+                    for p in polys {
+                        l.overlays.append(styled(p, .area))
+                        rect = rect.union(p.boundingMapRect)
+                    }
+                    l.badges.append(BadgeAnnotation(Self.center(of: rect), .label(a.name, Self.zoneColor)))
+                }
+                replace(&areaLayer, with: l, on: map)
+            }
+            let walksKey = d.map { "\(ObjectIdentifier($0).hashValue)-\($0.pathsVersion)" } ?? ""
+            if walksKey != lastWalks {
+                lastWalks = walksKey
+                var l = Layer()
+                for seg in d?.paths ?? [] { l.overlays.append(styled(MKPolyline(coordinates: seg, count: seg.count), .walk)) }
+                replace(&walkLayer, with: l, on: map)
             }
         }
 
@@ -680,6 +711,11 @@ struct PinMapView: UIViewRepresentable {
                 r.strokeColor = orange.withAlphaComponent(0.75)
             case .zone: set(Self.zoneColor, width: 2.5, fill: 0.1, dashed: false)
             case let .zip(c): set(c, width: 2, fill: 0.08, dashed: true)
+            case .area: set(Self.zoneColor, width: 2.5, fill: 0.07, dashed: false)
+            case .walk:
+                set(accent, width: 4, fill: 0, dashed: false)
+                r.strokeColor = accent.withAlphaComponent(0.6)
+                r.lineCap = .round
             }
             return r
         }

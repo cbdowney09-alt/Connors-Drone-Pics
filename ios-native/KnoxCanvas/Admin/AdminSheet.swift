@@ -1,14 +1,19 @@
 import SwiftUI
 
-/// KnoxCanvas admin: company requests, active teams and paused teams.
+/// KnoxCanvas admin: company requests, active teams and paused teams. Doorline clients also
+/// list the admin's own team, to choose who hangs for them.
 struct AdminSheet: View {
     @State private var admin: AdminStore
     @State private var confirm: (AdminStore.Row, Company.Status)?
     @State private var toastText: String?
+    @State private var team: [Member] = []
+    @State private var savingCrew = Set<String>()
+    private let homeCompanyId: String
     @Environment(\.openURL) private var openURL
 
-    init(uid: String) {
+    init(uid: String, homeCompanyId: String) {
         _admin = State(initialValue: AdminStore(uid: uid))
+        self.homeCompanyId = homeCompanyId
     }
 
     var body: some View {
@@ -37,6 +42,7 @@ struct AdminSheet: View {
         }
         .animation(.easeInOut(duration: 0.2), value: toastText)
         .onAppear { admin.start() }
+        .task { team = (try? await TeamStore.fetchMembers(companyId: homeCompanyId)) ?? [] }
         .onDisappear { admin.stop() }
         .confirmationDialog(confirmTitle, isPresented: Binding(get: { confirm != nil }, set: { if !$0 { confirm = nil } }),
                             titleVisibility: .visible, presenting: confirm) { c in
@@ -62,7 +68,14 @@ struct AdminSheet: View {
     private func row(_ r: AdminStore.Row) -> some View {
         let c = r.company
         return VStack(alignment: .leading, spacing: 8) {
-            Text(c.name).font(.system(size: 18, weight: .bold)).foregroundStyle(Theme.text)
+            HStack(spacing: 8) {
+                Text(c.name).font(.system(size: 18, weight: .bold)).foregroundStyle(Theme.text)
+                if c.doorline {
+                    Text("Doorline").font(.system(size: 12, weight: .bold)).foregroundStyle(PinStatus.hanger.color)
+                        .padding(.horizontal, 8).padding(.vertical, 3)
+                        .background(PinStatus.hanger.color.opacity(0.15), in: Capsule())
+                }
+            }
             VStack(alignment: .leading, spacing: 3) {
                 if !c.ownerName.isEmpty || !c.ownerEmail.isEmpty {
                     Text([c.ownerName, c.ownerEmail].filter { !$0.isEmpty }.joined(separator: " \u{00B7} "))
@@ -94,11 +107,43 @@ struct AdminSheet: View {
                     small(c.status == .paused ? "Resume" : "Approve", "play.fill", PinStatus.interest.color) { confirm = (r, .active) }
                 }
             }
+            if c.doorline { crew(r) }
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.card, in: RoundedRectangle(cornerRadius: 14))
         .overlay(RoundedRectangle(cornerRadius: 14).stroke(c.status == .pending ? PinStatus.hanger.color.opacity(0.7) : Theme.border))
+    }
+
+    /// Tap a name to have them hang for this business (they see it under "Hanging for").
+    @ViewBuilder
+    private func crew(_ r: AdminStore.Row) -> some View {
+        Text("HANGS FOR THEM").font(.system(size: 12, weight: .bold)).foregroundStyle(Theme.muted).padding(.top, 4)
+        if team.isEmpty {
+            Text("Invite your crew to your own company first (Account \u{2192} Team).").font(.system(size: 14)).foregroundStyle(Theme.muted)
+        } else {
+            FlowLayout(spacing: 8) {
+                ForEach(team) { m in
+                    let on = r.company.crew.contains(m.uid), key = r.id + m.uid
+                    Button {
+                        savingCrew.insert(key)
+                        Task {
+                            defer { savingCrew.remove(key) }
+                            do { try await admin.setCrew(r.id, member: m.uid, on: !on) } catch { toast(error.localizedDescription) }
+                        }
+                    } label: {
+                        Text(m.display).font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(on ? .white : Theme.muted)
+                            .padding(.horizontal, 14).frame(minHeight: 40)
+                            .background(on ? Theme.accent : Theme.field, in: Capsule())
+                            .contentShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(savingCrew.contains(key))
+                    .accessibilityAddTraits(on ? .isSelected : [])
+                }
+            }
+        }
     }
 
     private func small(_ title: String, _ icon: String, _ bg: Color, action: @escaping () -> Void) -> some View {

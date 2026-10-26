@@ -171,7 +171,7 @@ Anyone can download the app and make a login, but **new companies are requests**
 - Both apps watch the company doc. Approval opens the map right away, and a pause drops the team to the locked screen.
   Paused data stays. The rules block pins, shifts and settings unless the company is active.
 
-## Doorline Hangers (added Oct 2026, website only so far)
+## Doorline Hangers (added Oct 2026)
 
 Doorline Hangers is the owner's door hanger distribution service. At company setup the owner answers
 "Are you signing up through Doorline Hangers?" Yes saves `doorline: true` on the company.
@@ -186,8 +186,10 @@ Doorline Hangers is the owner's door hanger distribution service. At company set
   doesn't have the house yet gets the full pin (`pinWrite`). It's locked while clocked in. On clock-out, the shift goes to each
   client (walk path) and to the crew's company (`forCompanyId`, `forCompanyIds`, `forCompanyName`), so Team metrics count the doors once.
 - Rules: `onCrew(cid)` gives the crew the same pins, shifts and settings access as members. Only an admin changes `crew` or `doorline`.
-- **iPhone app not done yet:** the native app ignores `doorline` and `crew`. Until it's updated, crew hanging for a client and
-  client owners should use the website.
+- **iPhone app (2.2.0):** same features. `SessionStore` watches the crew jobs and keeps `workIds` (UserDefaults `knoxWork_<uid>`,
+  locked while clocked in). `HomeView` rebuilds `PinStore`/`ShiftStore` when they change. `PinStore` merges `pinsBy` and writes to every
+  work company. `Doorline/` has `DoorlineStore` (routes in `settings/areas`, walk paths) and the Hangers / Routes / "Hanging for" views.
+  Client owners get the Hangers / Routes tab bar and a read-only pin sheet. The admin screen tags Doorline clients and toggles their crew.
 
 ## Known open issues
 

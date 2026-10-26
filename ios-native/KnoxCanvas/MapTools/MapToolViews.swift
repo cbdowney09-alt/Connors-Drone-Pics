@@ -11,11 +11,14 @@ struct DrawToolbar: View {
     @FocusState private var focus: Bool
 
     var body: some View {
-        let forRoute = tools.drawing == .route
+        let forRoute = tools.drawing == .route, forArea = tools.drawing == .area
         VStack(alignment: .leading, spacing: 10) {
-            Text(forRoute ? "Outline the area to route \u{2014} tap its corners" : "Outline a neighborhood \u{2014} tap its corners")
+            Text(forArea ? "Outline the neighborhood you want hung \u{2014} tap its corners"
+                 : forRoute ? "Outline the area to route \u{2014} tap its corners" : "Outline a neighborhood \u{2014} tap its corners")
                 .font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.accent)
-            if !forRoute {
+            if forArea {
+                small("Neighborhood name", text: $name, keyboard: .default)
+            } else if !forRoute {
                 HStack(spacing: 8) {
                     small("Year built", text: $year, keyboard: .numberPad)
                     small("Name (optional)", text: $name, keyboard: .default)
@@ -25,7 +28,7 @@ struct DrawToolbar: View {
             HStack(spacing: 8) {
                 button("Undo", Theme.field, enabled: !tools.drawn.isEmpty) { tools.undoPoint() }
                 button("Cancel", Theme.field) { focus = false; cancel() }
-                button(forRoute ? "\u{2713} Use zone" : "\u{2713} Save zone", Theme.accent, enabled: tools.drawn.count >= 3) {
+                button(forArea ? "\u{2713} Add route" : forRoute ? "\u{2713} Use zone" : "\u{2713} Save zone", Theme.accent, enabled: tools.drawn.count >= 3) {
                     focus = false
                     finish()
                 }

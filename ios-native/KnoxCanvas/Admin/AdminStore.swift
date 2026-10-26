@@ -75,6 +75,18 @@ final class AdminStore {
         }
     }
 
+    /// Doorline: who on the admin's team hangs for this client (its `crew` list).
+    func setCrew(_ id: String, member: String, on: Bool) async throws {
+        do {
+            try await TeamStore.serverWrite {
+                try await self.db.collection("companies").document(id).updateData([
+                    "crew": on ? FieldValue.arrayUnion([member]) : FieldValue.arrayRemove([member]),
+                ])
+            }
+        } catch let e as Friendly { throw e }
+        catch { throw Friendly("Couldn\u{2019}t update crew (\(TeamStore.describe(error)))") }
+    }
+
     func set(_ id: String, _ status: Company.Status) async throws {
         do {
             try await TeamStore.serverWrite {

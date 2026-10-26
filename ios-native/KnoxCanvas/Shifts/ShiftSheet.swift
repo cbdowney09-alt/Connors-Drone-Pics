@@ -2,6 +2,7 @@ import SwiftUI
 
 /// The web's Shifts panel: clock card with a live timer, then shift history and CSV export.
 struct ShiftSheet: View {
+    @Environment(SessionStore.self) private var session
     let shifts: ShiftStore
     @State private var confirmClockOut = false
     @State private var exportURL: URL?
@@ -23,6 +24,9 @@ struct ShiftSheet: View {
                         }
                         .foregroundStyle(Theme.accent)
                     }
+                }
+                if !session.crewJobs.isEmpty || !session.workIds.isEmpty {
+                    HangingForPicker(clockedIn: shifts.clockedIn)
                 }
                 clockCard
                 sweepSetting
@@ -94,8 +98,10 @@ struct ShiftSheet: View {
                     if shifts.clockedIn { confirmClockOut = true }
                     else { UIImpactFeedbackGenerator(style: .medium).impactOccurred(); shifts.clockIn() }
                 } label: {
-                    Text(start == nil ? "Clock in" : "Clock out")
+                    Text(start != nil ? "Clock out" : session.crewJobs.isEmpty ? "Clock in" : "Clock in for \(session.workLabel)")
                         .font(.system(size: 20, weight: .bold))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 10)
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity, minHeight: 60)
                         .background(start == nil ? Self.green : Self.red, in: RoundedRectangle(cornerRadius: 14))

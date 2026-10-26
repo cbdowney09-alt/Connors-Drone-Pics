@@ -7,6 +7,8 @@ struct SetupView: View {
     @State private var companyName = ""
     @State private var code = ""
     @State private var phone = ""
+    /// "Are you signing up through Doorline Hangers?" Nil until they answer.
+    @State private var doorline: Bool?
     @State private var error = ""
     @State private var busy = false
 
@@ -39,7 +41,17 @@ struct SetupView: View {
                     } else {
                         KnoxField(placeholder: "Company name", text: $companyName, capitalization: .words)
                         KnoxField(placeholder: "Your phone number", text: $phone, content: .telephoneNumber, keyboard: .phonePad)
-                        hint("New companies are approved by KnoxCanvas. We\u{2019}ll call or text you to get set up. Once you\u{2019}re approved, you can invite your canvassers.")
+                        Text("Are you signing up through Doorline Hangers?")
+                            .font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.muted).padding(.top, 4)
+                        HStack(spacing: 8) {
+                            answer("No", value: false)
+                            answer("Yes", value: true)
+                        }
+                        if doorline == true {
+                            hint("Doorline Hangers hangs your door hangers for you. You\u{2019}ll see every door they\u{2019}ve been hung on, and pick the zip codes and neighborhoods you want covered.")
+                        } else {
+                            hint("New companies are approved by KnoxCanvas. We\u{2019}ll call or text you to get set up. Once you\u{2019}re approved, you can invite your canvassers.")
+                        }
                         KnoxButton(title: "Request access", busyTitle: "Sending…", busy: busy, action: create)
                     }
 
@@ -57,6 +69,20 @@ struct SetupView: View {
         }
     }
 
+    private func answer(_ title: String, value: Bool) -> some View {
+        let on = doorline == value
+        return Button { doorline = value; error = "" } label: {
+            Text(title).font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(on ? .white : Theme.muted)
+                .frame(maxWidth: .infinity, minHeight: 48)
+                .background(on ? Theme.accent : Theme.field, in: RoundedRectangle(cornerRadius: 12))
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(on ? .clear : Theme.border))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(on ? .isSelected : [])
+    }
+
     private func hint(_ s: String) -> some View {
         Text(s).font(.system(size: 14)).foregroundStyle(Theme.muted)
     }
@@ -68,7 +94,8 @@ struct SetupView: View {
         let p = phone.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty, !c.isEmpty else { error = "Enter your name and your company name."; return }
         guard p.filter(\.isNumber).count >= 10 else { error = "Enter a phone number so we can reach you."; return }
-        run { try await session.createCompany(name: trimmedName, companyName: c, phone: p) }
+        guard let doorline else { error = "Tell us whether you\u{2019}re signing up through Doorline Hangers."; return }
+        run { try await session.createCompany(name: trimmedName, companyName: c, phone: p, doorline: doorline) }
     }
 
     private func join() {

@@ -508,6 +508,7 @@ body.is-client #sheet .status-btn,body.is-client #sheet .sheet-row,body.is-clien
       <button class="menu-item owner-only" id="menu-team">👥 Team and company settings</button>
       <button class="menu-item owner-only" id="menu-metrics">📊 Team metrics</button>
       <button class="menu-item" id="menu-doorline" style="display:none">🚪 Doorline clients</button>
+      <button class="menu-item" id="menu-crewshifts" style="display:none">🕒 Doorline crew shifts</button>
       <button class="menu-item crew-only" id="menu-shifts">⏱ My shifts</button>
       <button class="menu-item crew-only" id="menu-export">⬇️ Export data (CSV)</button>
       <button class="menu-item client-only" id="menu-client-csv">⬇️ Download hanger addresses (CSV)</button>
@@ -671,6 +672,28 @@ body.is-client #sheet .status-btn,body.is-client #sheet .sheet-row,body.is-clien
       <div class="section-title">Clients</div>
       <div class="hint">Businesses that signed up through Doorline Hangers. Tap names to choose who hangs for each one. They'll see that business under “Hanging for” when they clock in.</div>
       <div id="doorline-list" style="display:flex;flex-direction:column;gap:12px"></div>
+    </div>
+  </div>
+
+  <!-- KnoxCanvas admin: every Doorline crew shift, across all clients -->
+  <div id="crewshifts-panel" class="panel">
+    <div class="panel-header"><button class="panel-back" data-close="crewshifts-panel" aria-label="Back"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg></button><h2>Crew shifts</h2><button class="panel-action-btn" id="crewshifts-refresh-btn">↻ Refresh</button></div>
+    <div class="panel-body">
+      <div class="chips" id="crewshifts-range">
+        <button class="chip" data-range="today">Today</button>
+        <button class="chip active" data-range="week">This week</button>
+        <button class="chip" data-range="month">This month</button>
+        <button class="chip" data-range="all">All time</button>
+      </div>
+      <div class="chips" id="crewshifts-people"></div>
+      <div class="metric-grid" id="crewshifts-summary"></div>
+      <div id="crewshifts-breakdown-wrap" style="display:flex;flex-direction:column;gap:8px">
+        <div class="section-title">By person</div>
+        <div id="crewshifts-breakdown" style="display:flex;flex-direction:column;gap:8px"></div>
+      </div>
+      <div class="section-title">Shifts <span class="hint" style="text-transform:none;letter-spacing:0">· tap one to see the walk on the map</span></div>
+      <div id="crewshifts-list" style="display:flex;flex-direction:column;gap:8px"></div>
+      <button class="secondary-btn" id="crewshifts-csv">Download shifts (CSV)</button>
     </div>
   </div>
 
@@ -1041,6 +1064,7 @@ function enterApp() {
   loadShifts();
   restoreClock();
   setSync(navigator.onLine ? 'ok' : 'offline');
+  setTimeout(retryAddresses, 8000); // after the pins have loaded
   if (!isCrewOnly()) watchCrewJobs(); // crew-only: already running (it opened the app)
   checkAdmin();
 }
@@ -1055,7 +1079,8 @@ function leaveApp() {
   if (unsubJobs) { unsubJobs(); unsubJobs = null; }
   crewInApp = false;
   workCids = []; workNames = {}; crewJobs = []; isAdminUser = false;
-  $('menu-doorline').style.display = 'none'; $('work-picker').style.display = 'none'; $('work-chip').classList.remove('on');
+  $('menu-doorline').style.display = 'none'; $('menu-crewshifts').style.display = 'none';
+  if (crewPathLayer) { map.removeLayer(crewPathLayer); crewPathLayer = null; } $('work-picker').style.display = 'none'; $('work-chip').classList.remove('on');
   clearRoute(true);
   if (drawingMode) stopDrawing();
   stopClockTimer(); clockedIn = false; clockInTime = null;
@@ -1326,15 +1351,24 @@ map.on('click', e => {
     drawnMarkers.push(L.circleMarker([lat, lng], { radius: 6, color: '#4f6ef7', fillColor: '#4f6ef7', fillOpacity: 1, weight: 2 }).addTo(map));
     updateDrawingLayers(); return;
   }
+  if (crewPathLayer) { map.removeLayer(crewPathLayer); crewPathLayer = null; return; } // tap hides a crew walk, no pin
   if (!workId() || isClient()) return; // Doorline clients look; the crew places pins
   openSheet(createPin(lat, lng));
 });
 
-async function reverseGeocode(lat, lng, id) {
+// Pin addresses: the nearest house in our address tiles first (free, and works offline once the
+// tile has been saved on this device), then Apple, then Google (billed), then OpenStreetMap.
+// With no answer at all the pin gets its coordinates, and retryAddresses() tries again later.
+// `retry`: a second try for an old pin, which is left alone unless a real address turns up.
+async function reverseGeocode(lat, lng, id, retry) {
   let addr = '';
+  try {
+    const near = await tileHousesNear([{ lat, lng }], 25);
+    if (near?.length) addr = near.reduce((a, b) => (b.dist < a.dist ? b : a)).addr;
+  } catch (e) {}
   // Apple first (free), then Google (billed). Both Workers answer in Google's format.
   // Apple without a house number only knows the street, so Google gets a turn then.
-  for (const proxy of [APPLE_GEO_PROXY, GEO_PROXY].filter(Boolean)) {
+  if (!addr && navigator.onLine) for (const proxy of [APPLE_GEO_PROXY, GEO_PROXY].filter(Boolean)) {
     try {
       const r = await fetch(`${proxy}?lat=${lat}&lng=${lng}`);
       const d = await r.json();
@@ -1346,7 +1380,7 @@ async function reverseGeocode(lat, lng, id) {
     } catch (e) {}
     if (addr) break;
   }
-  if (!addr) {
+  if (!addr && navigator.onLine) {
     try {
       const r = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&addressdetails=1&zoom=18`);
       const d = await r.json();
@@ -1357,13 +1391,31 @@ async function reverseGeocode(lat, lng, id) {
       }
     } catch (e) {}
   }
-  if (!addr) addr = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+  if (!addr) {
+    if (retry) return;
+    addr = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+  }
   if (pins[id]) {
     pins[id].addr = addr;
     savePin(id, { addr });
     if (currentPinId === id) { $('sheet-addr').textContent = addr; $('zillow-btn').href = zillowUrl(addr); }
   }
 }
+
+// Pins left with coordinates for an address (placed with no signal) or stuck on "Loading
+// address…" (the page closed first): look them up again once there's a connection. Only your
+// own pins, a few at a time, so every phone on the team doesn't redo the same houses.
+const COORD_ADDR = /^-?\d+\.\d+, -?\d+\.\d+$/;
+let addrRetrying = false;
+async function retryAddresses() {
+  if (addrRetrying || !navigator.onLine || !workId() || isClient()) return;
+  addrRetrying = true;
+  try {
+    const todo = Object.values(pins).filter(p => p.createdBy === myUid() && (COORD_ADDR.test(p.addr) || p.addr === 'Loading address\u2026')).slice(0, 25);
+    for (const p of todo) await reverseGeocode(p.lat, p.lng, p.id, true);
+  } finally { addrRetrying = false; }
+}
+window.addEventListener('online', () => { addrTiles.failedAt = 0; setTimeout(retryAddresses, 3000); });
 
 // ── Legend filters ────────────────────────────────────────
 document.querySelectorAll('#legend .legend-row').forEach(row => row.addEventListener('click', () => {
@@ -1974,11 +2026,11 @@ async function addrTile(key) {
 }
 // Houses within SWEEP.doorRadius of the line, or null when this area has no tiles (or they
 // can't be loaded), so the caller can fall back to Overpass.
-async function tileHousesNear(line) {
+async function tileHousesNear(line, radius) {
   if (!line.length) return [];
   const idx = await addrIndex();
   if (!idx) return null;
-  const r = SWEEP.doorRadius, first = line[0];
+  const r = radius || SWEEP.doorRadius, first = line[0];
   const dLat = (r + 5) / 111000, dLng = (r + 5) / (111000 * Math.cos(first.lat * Math.PI / 180));
   const lats = line.map(p => p.lat), lngs = line.map(p => p.lng);
   const minLat = Math.min(...lats) - dLat, maxLat = Math.max(...lats) + dLat;
@@ -2295,6 +2347,7 @@ $('menu-export').addEventListener('click', () => fromMenu(openExport));
 $('menu-team').addEventListener('click', () => fromMenu(openTeam));
 $('menu-metrics').addEventListener('click', () => fromMenu(openMetrics));
 $('menu-doorline').addEventListener('click', () => fromMenu(openDoorline));
+$('menu-crewshifts').addEventListener('click', () => fromMenu(openCrewShifts));
 $('menu-client-csv').addEventListener('click', () => fromMenu(downloadHangerCsv));
 
 // ── Team & settings (owner) ───────────────────────────────
@@ -2567,7 +2620,7 @@ $('work-chip').addEventListener('click', openShifts);
 
 async function checkAdmin() {
   try { isAdminUser = (await getDoc(doc(db, 'admins', myUid()))).exists(); } catch (e) { isAdminUser = false; }
-  if (profile) $('menu-doorline').style.display = isAdminUser && !isClient() ? 'flex' : 'none';
+  if (profile) $('menu-doorline').style.display = $('menu-crewshifts').style.display = isAdminUser && !isClient() ? 'flex' : 'none';
 }
 
 // Routes: zip codes and drawn neighborhoods the client wants hung, in settings/areas
@@ -2801,6 +2854,83 @@ $('crew-invite-share').addEventListener('click', async () => {
   if (navigator.share) { try { await navigator.share({ text }); } catch (e) {} }
   else navigator.clipboard?.writeText(text).then(() => showToast('Invite message copied'));
 });
+// Admin: every shift hung for a Doorline client, by anyone (your own team or crew with no
+// company). A shift hung for several clients at once is saved to each; it's shown once here.
+let crewShifts = [], crewShiftsRange = 'week', crewShiftsWho = 'all', crewPathLayer = null;
+async function openCrewShifts() { $('crewshifts-panel').classList.add('open'); await loadCrewShifts(); }
+$('crewshifts-refresh-btn').addEventListener('click', loadCrewShifts);
+document.querySelectorAll('#crewshifts-range .chip').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('#crewshifts-range .chip').forEach(x => x.classList.toggle('active', x === b));
+  crewShiftsRange = b.dataset.range; renderCrewShifts();
+}));
+async function loadCrewShifts() {
+  $('crewshifts-summary').innerHTML = '<div class="empty" style="grid-column:1/-1">Loading…</div>';
+  try {
+    const clients = []; (await getDocs(query(collection(db, 'companies'), where('doorline', '==', true)))).forEach(d => clients.push({ id: d.id, ...d.data() }));
+    const byKey = {};
+    await Promise.all(clients.map(async c => {
+      (await getDocs(collection(db, 'companies', c.id, 'shifts'))).forEach(d => {
+        const s = d.data(), key = `${s.userId}|${s.clockIn}`;
+        if (!byKey[key]) byKey[key] = { ...s, clients: [] };
+        byKey[key].clients.push(c.name || 'Client');
+      });
+    }));
+    crewShifts = Object.values(byKey).sort((a, b) => (b.clockIn || 0) - (a.clockIn || 0));
+  } catch (e) { $('crewshifts-summary').innerHTML = `<div class="empty" style="grid-column:1/-1">Couldn\u2019t load shifts (${esc(e.code || e.message)})</div>`; return; }
+  renderCrewShifts();
+}
+function crewShiftsShown() {
+  const since = getRangeMs(crewShiftsRange);
+  return crewShifts.filter(s => (s.clockIn || 0) >= since && (crewShiftsWho === 'all' || s.userId === crewShiftsWho));
+}
+function renderCrewShifts() {
+  const since = getRangeMs(crewShiftsRange);
+  const inRange = crewShifts.filter(s => (s.clockIn || 0) >= since);
+  // People who worked in this period, by name.
+  const people = {}; inRange.forEach(s => { people[s.userId] = s.userName || 'Unnamed'; });
+  if (crewShiftsWho !== 'all' && !people[crewShiftsWho]) crewShiftsWho = 'all';
+  const sel = $('crewshifts-people'); sel.innerHTML = '';
+  [['all', 'Everyone'], ...Object.entries(people).sort((a, b) => a[1].localeCompare(b[1]))].forEach(([uid, name]) => {
+    const b = document.createElement('button'); b.className = 'chip soft' + (crewShiftsWho === uid ? ' active' : ''); b.textContent = name;
+    b.addEventListener('click', () => { crewShiftsWho = uid; renderCrewShifts(); });
+    sel.appendChild(b);
+  });
+  const list = crewShiftsShown();
+  const hangers = list.reduce((a, s) => a + (s.hangers || 0), 0), hours = list.reduce((a, s) => a + (s.durationMs || 0), 0) / 3600000;
+  const miles = list.reduce((a, s) => a + (s.trailMeters || 0), 0) / 1609.34;
+  const card = (v, l, c) => `<div class="metric-card"><div class="mc-val"${c ? ` style="color:${c}"` : ''}>${v}</div><div class="mc-label">${l}</div></div>`;
+  $('crewshifts-summary').innerHTML = card(hangers.toLocaleString(), 'Hangers', 'var(--c-hanger)') + card(hours > 0 ? (hangers / hours).toFixed(1) : '—', 'Hangers/hr')
+    + card(hours.toFixed(1) + 'h', 'Hours') + card(list.length, 'Shifts') + card(miles.toFixed(1), 'Miles walked') + card(list.length ? Math.round(hangers / list.length) : '—', 'Per shift');
+  $('crewshifts-breakdown-wrap').style.display = crewShiftsWho === 'all' && Object.keys(people).length > 1 ? 'flex' : 'none';
+  $('crewshifts-breakdown').innerHTML = Object.entries(people).sort((a, b) => a[1].localeCompare(b[1])).map(([uid, name]) => {
+    const mine = list.filter(s => s.userId === uid), h = mine.reduce((a, s) => a + (s.hangers || 0), 0), hrs = mine.reduce((a, s) => a + (s.durationMs || 0), 0) / 3600000;
+    return `<div class="box"><div class="m-name" style="margin-bottom:8px">${esc(name)}</div><div class="trio"><div class="mini hi"><div class="v">${h}</div><div class="l">Hangers</div></div><div class="mini"><div class="v">${hrs > 0 ? (h / hrs).toFixed(1) : '—'}</div><div class="l">Per hour</div></div><div class="mini"><div class="v">${hrs.toFixed(1)}h</div><div class="l">Hours</div></div></div></div>`;
+  }).join('');
+  const wrap = $('crewshifts-list'); wrap.innerHTML = list.length ? '' : '<div class="empty">No shifts in this period</div>';
+  list.slice(0, 100).forEach(s => {
+    const row = document.createElement('div'); row.className = 'mshift-row'; row.style.cursor = 'pointer';
+    row.innerHTML = `<div style="min-width:0"><div class="mshift-name">${esc(s.userName || 'Unnamed')}</div><div class="mshift-date">${new Date(s.clockIn).toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' })} · ${formatTime(s.clockIn)}–${formatTime(s.clockOut || s.clockIn)} · ${formatDuration(s.durationMs || 0)}</div><div class="mshift-date">For ${esc(s.clients.join(' + '))}${s.trailMeters ? ` · ${(s.trailMeters / 1609.34).toFixed(1)} mi walked` : ''}</div></div><div><div class="mshift-hangers">${s.hangers || 0}</div><div class="mshift-rate">${s.hangersPerHour || 0}/hr</div></div>`;
+    row.addEventListener('click', () => showCrewPath(s));
+    wrap.appendChild(row);
+  });
+}
+// One shift's GPS walk on the map (walked stretches only). Tapping another replaces it.
+function showCrewPath(s) {
+  if (crewPathLayer) { map.removeLayer(crewPathLayer); crewPathLayer = null; }
+  const segs = trailSegments(s.trail);
+  if (!segs.length) { showToast('No GPS walk saved for this shift'); return; }
+  crewPathLayer = L.polyline(segs, { color: '#f59e0b', weight: 5, opacity: 0.85, interactive: false }).addTo(map);
+  $('crewshifts-panel').classList.remove('open'); $('menu-panel').classList.remove('open');
+  map.fitBounds(crewPathLayer.getBounds().pad(0.15));
+  showToast(`${s.userName || 'Walk'} · ${formatDate(s.clockIn)} · tap the map to hide`);
+}
+$('crewshifts-csv').addEventListener('click', () => {
+  const list = crewShiftsShown(); if (!list.length) { showToast('No shifts to export'); return; }
+  const lines = ['Date,Name,Clock In,Clock Out,Duration,Hangers,Hangers Per Hour,Miles Walked,For'];
+  list.forEach(s => lines.push([formatDate(s.clockIn), s.userName || '', formatTime(s.clockIn), formatTime(s.clockOut || s.clockIn), formatDuration(s.durationMs || 0), s.hangers || 0, s.hangersPerHour || 0, ((s.trailMeters || 0) / 1609.34).toFixed(2), s.clients.join(' + ')].map(csvEsc).join(',')));
+  downloadCsv(lines, `doorline_shifts_${new Date().toISOString().slice(0, 10)}.csv`); showToast('Shifts CSV downloaded');
+});
+
 async function openDoorline() { $('doorline-panel').classList.add('open'); await loadDoorline(); }
 $('doorline-refresh-btn').addEventListener('click', loadDoorline);
 async function loadDoorline() {

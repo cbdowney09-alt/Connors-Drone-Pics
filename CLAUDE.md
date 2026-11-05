@@ -190,6 +190,10 @@ Doorline Hangers is the owner's door hanger distribution service. At company set
   saves `users/{uid}` as `role: 'crew', companyId: ''`. Until they're on some client's `crew` they see a "You're on the Doorline crew"
   waiting screen; then the app opens with `workCids`/`workIds` always holding at least one client (`isCrewOnly()`; no "own company" chip).
   Their shifts go only to the clients. `inCompany('')` is always false, so crew can't read each other's profiles.
+- **Crew shifts (admin, website):** Account → Doorline crew shifts reads every Doorline client's `shifts`, shows a shift hung for
+  several clients once (same `userId` + `clockIn`), with totals, a per-person breakdown, a CSV, and the walk on the map (tap a shift).
+- **Pin addresses (website):** nearest house in the address tiles within 25 m first (free, works offline if the tile is cached),
+  then Apple, Google, Nominatim. Pins left with coordinates or "Loading address…" are retried when back online (`retryAddresses`, own pins only).
 - **iPhone app (2.2.0):** same features. `SessionStore` watches the crew jobs and keeps `workIds` (UserDefaults `knoxWork_<uid>`,
   locked while clocked in). `HomeView` rebuilds `PinStore`/`ShiftStore` when they change. `PinStore` merges `pinsBy` and writes to every
   work company. `Doorline/` has `DoorlineStore` (routes in `settings/areas`, walk paths) and the Hangers / Routes / "Hanging for" views.

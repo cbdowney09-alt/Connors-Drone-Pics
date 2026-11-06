@@ -29,14 +29,19 @@ it had already run. The iOS app loads the live URL, so it only picks up changes 
 - Data: Firebase project `knoxcanvas-a7bfe`. Firestore uses an offline persistent cache; auth is
   email/password plus Google (in the iOS app, Google sign-in runs natively; see GoogleSignIn.swift).
   - `users/{uid}` → `{ name, email, role: owner|employee, companyId, companyName }`
-  - `companies/{id}` → `{ name, ownerId, roofCutoff, sheetsUrl, status?, ownerName?, ownerEmail?, phone?, requestedAt?, statusAt?, statusBy?, states?, doorline?, crew? }`
+  - `companies/{id}` → `{ name, ownerId, roofCutoff, sheetsUrl, status?, ownerName?, ownerEmail?, phone?, requestedAt?, statusAt?, statusBy?, states?, doorline?, crew?, doorRadius? }`
+    - `doorRadius`: house detection distance (15/20/30/45 m, default 20), set by the owner only (billing is per door).
     - `status`: `pending` (new request) · `active` · `paused` · `declined`. **Missing means active**
       (companies made before approvals). Only an admin can change it.
   - `admins/{uid}` → exists = KnoxCanvas admin (approves, pauses, resumes companies). Added by hand in the console.
   - `companies/{id}/pins/{lat6,lng6}` → `{ lat, lng, addr, status, note, yearBuilt, ts, createdBy, statusBy, statusAt, hangerBy, hangerAt, source? }`
   - `companies/{id}/shifts/{auto}` → `{ clockIn, clockOut, durationMs, hangers, hangersPerHour, userId, userName, trail?, trailMeters?, gpsHangers? }`
   - `companies/{id}/settings/neighborhoodYears` → `{ zones: [...] }`
-  - `companies/{id}/settings/areas` → `{ list: [{ id, kind: 'zip', zip, name } | { id, kind: 'draw', name, points: [{lat,lng}] }] }` (Doorline client routes)
+  - `companies/{id}/settings/areas` → `{ list: [{ id, kind: 'zip', zip, name, assignees? } | { id, kind: 'draw', name, points: [{lat,lng}], assignees? }] }`
+    (Doorline client routes; for regular companies these are the owner's neighborhoods, `assignees` = uids who work each one)
+  - `companies/{id}/leads/{id}` → `{ pinId, addr, lat, lng, reason: friendly|roof|gutter|other, reasonLabel, homeowner, phone, note, by, byName, at, status: new|done, hasPhoto }`
+    and `companies/{id}/leadPhotos/{same id}` → `{ by, data: 'data:image/jpeg;base64,…' (~200 KB), at }` (hot leads)
+  - `users/{uid}.activeClockIn` (+ `activeWork`) → the open shift, written by the website and the iPhone app so a dead phone doesn't lose hours
   - Shifts may also have `forCompanyId`, `forCompanyName` (a Doorline crew shift, copied to the crew's own company)
   - `invites/{code}` → one-time join codes, expire in 7 days
 - Geocoding: Google Geocoding API behind the Cloudflare Worker
@@ -51,6 +56,9 @@ it had already run. The iOS app loads the live URL, so it only picks up changes 
   (TN + NC) are an older fallback that builds 2.0.0 and 2.0.1(2) still use. The sweep detects houses within
   `SWEEP.doorRadius` of each GPS step.
 - Zip overlays: Census TIGERweb, with Overpass as the fallback.
+- **Road tiles** (`docs/roads/v1/`, North Carolina, from U.S. Census TIGER/Line, public domain): the website uses them to fill GPS
+  gaps when the screen was off (see "Website gap filling" below). Built by `tools/address-tiles/roads.py` from the county
+  `tl_YYYY_SS*_roads.zip` files; same 0.05° grid as the address tiles; roads are cut per tile and meet at shared points.
 - Google Sheets: an Apps Script webhook (company setting `sheetsUrl`) receives hanger pins and shifts.
 
 Pin statuses (keep these five; exports and Sheets depend on them):
@@ -116,6 +124,13 @@ While a canvasser is **clocked in**, GPS builds a walking trail. Code is in the
   (`knox-addr-v1`) for offline use, and has the Shift-panel radius picker (`knoxDoorRadius` in localStorage) and the iPhone 2.0.1 driving
   checks (`sweepIsDriving`). Outside tile areas it falls back to Overpass/Google as before. In a browser, a Wake Lock keeps the screen on
   while clocked in (browsers stop GPS when the screen sleeps). `docs/manifest.webmanifest` lets Android Chrome install it (Account → Install).
+- **Website gap filling (Nov 2026):** two GPS dots ≥20 s and ≥30 m apart = the screen was off (browsers stop GPS). The website
+  never draws or detects across that straight line. `roadRoute()` snaps both dots to the nearest street (≤60 m) in the road tiles and
+  runs A* along real streets (no interstates or ramps). If the route is too long to have been walked in the time (`GAP.walkMax`
+  2.5 m/s), nothing is offered. Houses within `SWEEP.houseRadius` of the route **whose street matches the street walked** are shown
+  in a banner: "Is this the way you walked?" → Yes turns them into ordinary candidates (still toggleable before
+  "Mark N as hangers"), No drops them. Without road data it falls back to a straight line only when both ends are on the same street.
+  Pending routes are saved with the trail and asked about again at clock-out.
 - **Not yet field-tested against real OSM data.** It was tested only with simulated data. First real
   walks should check how many houses get found in Knoxville and Tennessee Ridge, and whether the
   Google fallback fills the gaps.
@@ -161,6 +176,24 @@ yet**. Expect to fix small Swift errors on the first build.
   - `window.__knoxGeoDeliver(coords)` / `__knoxGeoError(code,msg)`
 - `IS_NATIVE` in `app.html` is true when the `knox` handler exists.
 
+## Comfort Pros build (Nov 2026, website)
+
+- **Rules** (`firestore.rules`): pins can be removed only by the owner of a regular company, you, or whoever placed them;
+  a Doorline client can't change or remove pins or shifts at all (billed by the door). Shifts: only your own, numbers only.
+  Hot leads: canvassers create their own and see only theirs; the owner reads and updates all. Settings: owner only,
+  except `neighborhoodYears`. 139 emulator tests in `rules-test/`.
+- **Draft pins:** tapping the map makes a pin on that phone only; it's saved when a status, note, year or hot lead is added.
+- **House sheet:** "Hung by Jake · Nov 6" (`pinWho`), 🔥 Hot lead button, Remove only shown to people allowed to remove.
+- **Neighborhoods:** the Areas tab (was Zone; year-built zones moved to Layers for owners). Owners add zips or draw areas and tap
+  names to assign; progress = hangers inside / houses inside from the address tiles. Canvassers see theirs outlined.
+- **Hot leads:** photo shrunk to ~200 KB in the browser, saved in Firestore (works offline). Owner gets a live list and a toast;
+  email via the Apps Script in `admin/request-email.gs` (`REQUEST_WEBHOOK`), which looks the owner up in Firestore itself.
+- **Owner tools:** tap a shift in Team metrics to see the walk; set the detection distance in the Shift panel.
+- **Admin (you):** Account → Companies: approve, decline, pause, resume every company and see hangers this month / last month
+  (counted by `hangerAt`) for invoicing, with a CSV.
+- **Join links:** Share in Team sends `app.html?join=CODE`; the code is filled in and the visitor starts on Create an account.
+  Sign-up opens on "Join my team". Doorline clients sign up through `app.html?via=doorline` (the Doorline question is hidden otherwise).
+
 ## Company approval (added Oct 2026)
 
 Anyone can download the app and make a login, but **new companies are requests**:
@@ -203,7 +236,7 @@ Doorline Hangers is the owner's door hanger distribution service. At company set
 
 - Google login on the web (popup vs. redirect). The iOS app uses the native flow in `GoogleSignIn.swift` instead.
 - Zip boundary overlays sometimes don't load.
-- The clock-in state lives in `localStorage` only, so it's lost if the device storage is cleared. It should move to Firestore.
+- The website keeps the open shift in `localStorage` and in `users/{uid}.activeClockIn`; the walk trail is still on the phone only until clock-out.
 - Firestore rules live in `firestore.rules` (publish them in the Firebase console). After editing,
   run the emulator tests: `cd rules-test && npm install && npm test` (needs Java 11+). Never use a bare
   `{sub=**}` under `companies/{cid}`: it also matches the company doc and lets members edit `status`.

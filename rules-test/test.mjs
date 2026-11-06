@@ -206,6 +206,55 @@ await t('admin removes a crew member', assertSucceeds(deleteDoc(doc(as('admin'),
 
 await t('owner saves states (house data)', assertSucceeds(updateDoc(doc(as('owner1'), 'companies/legacy'), { states: ['TN'] })));
 
+console.log('Who can change what (Comfort Pros build)');
+await env.withSecurityRulesDisabled(async ctx => {
+  const db = ctx.firestore();
+  await setDoc(doc(db, 'users/emp2'), { name: 'Maria', role: 'employee', companyId: 'legacy' });
+  await setDoc(doc(db, 'companies/legacy/pins/9,9'), { status: 'hanger', createdBy: 'owner1' });
+  await setDoc(doc(db, 'companies/legacy/shifts/other'), { userId: 'emp2', hangers: 5, clockIn: 1 });
+  await setDoc(doc(db, 'companies/legacy/leads/L2'), { by: 'emp2', reason: 'roof' });
+  await setDoc(doc(db, 'companies/acme/pins/7,7'), { status: 'hanger', createdBy: 'crew1' });
+  await setDoc(doc(db, 'companies/acme/pins/8,8'), { status: 'hanger', createdBy: 'newcrew' });
+});
+await t('employee CANNOT delete a pin someone else placed', assertFails(deleteDoc(doc(as('emp1'), 'companies/legacy/pins/9,9'))));
+await t('employee CANNOT delete an old pin with no creator', assertFails(deleteDoc(doc(as('emp1'), 'companies/legacy/pins/35.000000,-84.000000'))));
+await t('employee places a pin', assertSucceeds(setDoc(doc(as('emp1'), 'companies/legacy/pins/6,6'), { status: 'none', createdBy: 'emp1' })));
+await t('employee removes their own pin', assertSucceeds(deleteDoc(doc(as('emp1'), 'companies/legacy/pins/6,6'))));
+await t('owner removes any pin', assertSucceeds(deleteDoc(doc(as('owner1'), 'companies/legacy/pins/9,9'))));
+await t('employee CANNOT save a shift as someone else', assertFails(setDoc(doc(as('emp1'), 'companies/legacy/shifts/fake'), { userId: 'emp2', hangers: 500 })));
+await t('employee CANNOT save a shift with code in the numbers', assertFails(setDoc(doc(as('emp1'), 'companies/legacy/shifts/xss'), { userId: 'emp1', hangers: '<img src=x onerror=alert(1)>' })));
+await t('employee CANNOT rewrite another person\'s shift', assertFails(setDoc(doc(as('emp1'), 'companies/legacy/shifts/other'), { userId: 'emp1', hangers: 0 })));
+await t('employee CANNOT delete a shift', assertFails(deleteDoc(doc(as('emp1'), 'companies/legacy/shifts/other'))));
+await t('owner deletes a shift', assertSucceeds(deleteDoc(doc(as('owner1'), 'companies/legacy/shifts/other'))));
+await t('employee CANNOT change neighborhood assignments', assertFails(setDoc(doc(as('emp1'), 'companies/legacy/settings/areas'), { list: [] })));
+await t('owner assigns neighborhoods', assertSucceeds(setDoc(doc(as('owner1'), 'companies/legacy/settings/areas'), { list: [{ id: 'n1', kind: 'draw', name: 'Myers Park', assignees: ['emp1'] }] })));
+await t('employee reads assignments', assertSucceeds(getDoc(doc(as('emp1'), 'companies/legacy/settings/areas'))));
+await t('owner sets the detection distance', assertSucceeds(updateDoc(doc(as('owner1'), 'companies/legacy'), { doorRadius: 20 })));
+await t('employee CANNOT set the detection distance', assertFails(updateDoc(doc(as('emp1'), 'companies/legacy'), { doorRadius: 45 })));
+await t('employee sends a hot lead', assertSucceeds(setDoc(doc(as('emp1'), 'companies/legacy/leads/L1'), { by: 'emp1', reason: 'roof', addr: '1 Main St' })));
+await t('employee sends the lead photo', assertSucceeds(setDoc(doc(as('emp1'), 'companies/legacy/leadPhotos/L1'), { by: 'emp1', data: 'data:image/jpeg;base64,xx' })));
+await t('employee CANNOT send a lead as someone else', assertFails(setDoc(doc(as('emp1'), 'companies/legacy/leads/L3'), { by: 'emp2' })));
+await t('employee reads own lead', assertSucceeds(getDoc(doc(as('emp1'), 'companies/legacy/leads/L1'))));
+await t('employee lists own leads', assertSucceeds(getDocs(query(collection(as('emp1'), 'companies/legacy/leads'), where('by', '==', 'emp1')))));
+await t('employee CANNOT read a coworker\'s lead', assertFails(getDoc(doc(as('emp1'), 'companies/legacy/leads/L2'))));
+await t('employee CANNOT list all leads', assertFails(getDocs(collection(as('emp1'), 'companies/legacy/leads'))));
+await t('coworker CANNOT see the lead photo', assertFails(getDoc(doc(as('emp2'), 'companies/legacy/leadPhotos/L1'))));
+await t('owner lists all leads', assertSucceeds(getDocs(collection(as('owner1'), 'companies/legacy/leads'))));
+await t('owner sees the lead photo', assertSucceeds(getDoc(doc(as('owner1'), 'companies/legacy/leadPhotos/L1'))));
+await t('owner marks a lead handled', assertSucceeds(updateDoc(doc(as('owner1'), 'companies/legacy/leads/L1'), { status: 'done' })));
+await t('employee CANNOT edit a lead after sending', assertFails(updateDoc(doc(as('emp1'), 'companies/legacy/leads/L1'), { reason: 'x' })));
+await t('outsider CANNOT read leads', assertFails(getDocs(collection(as('outsider'), 'companies/legacy/leads'))));
+await t('owner writes some other company data', assertSucceeds(setDoc(doc(as('owner1'), 'companies/legacy/misc/a'), { x: 1 })));
+await t('employee CANNOT write other company data', assertFails(setDoc(doc(as('emp1'), 'companies/legacy/misc/b'), { x: 1 })));
+await t('Doorline client CANNOT add hangers', assertFails(setDoc(doc(as('acmeowner'), 'companies/acme/pins/9,9'), { status: 'hanger' })));
+await t('Doorline client CANNOT delete billed hangers', assertFails(deleteDoc(doc(as('acmeowner'), 'companies/acme/pins/7,7'))));
+await t('Doorline client CANNOT change a hanger', assertFails(updateDoc(doc(as('acmeowner'), 'companies/acme/pins/7,7'), { status: 'none' })));
+await t('Doorline client CANNOT delete shifts', assertFails(deleteDoc(doc(as('acmeowner'), 'companies/acme/shifts/s1'))));
+await t('Doorline client still saves routes', assertSucceeds(setDoc(doc(as('acmeowner'), 'companies/acme/settings/areas'), { list: [] })));
+await t('crew removes a pin they placed', assertSucceeds(deleteDoc(doc(as('crew1'), 'companies/acme/pins/7,7'))));
+await t('crew CANNOT remove another crew member\'s pin', assertFails(deleteDoc(doc(as('crew1'), 'companies/acme/pins/8,8'))));
+await t('admin removes any client pin', assertSucceeds(deleteDoc(doc(as('admin'), 'companies/acme/pins/8,8'))));
+
 console.log('Removing people and deleting accounts');
 await t('owner removes employee', assertSucceeds(deleteDoc(doc(as('owner1'), 'users/newemp'))));
 await t('owner CANNOT remove another company\'s employee', assertFails(deleteDoc(doc(as('owner1'), 'users/pemp'))));

@@ -30,6 +30,15 @@ service cloud.firestore {
     function isActive(cid) { return companyDoc(cid).get('status', 'active') == 'active'; }
     function ownsCompany(cid) { return signedIn() && companyDoc(cid).ownerId == me(); }
     function onCrew(cid) { return signedIn() && me() in companyDoc(cid).get('crew', []); }
+    function isDoorline(cid) { return companyDoc(cid).get('doorline', false) == true; }
+    // Can see the company's map, shifts and settings.
+    function canRead(cid) { return isAdmin() || ((inCompany(cid) || onCrew(cid)) && isActive(cid)); }
+    // Can mark doors and save shifts. A Doorline client only looks: their crew does the work
+    // (and the client is billed by the door, so they must not be able to change the count).
+    function canWork(cid) { return isAdmin() || (isActive(cid) && (onCrew(cid) || (inCompany(cid) && !isDoorline(cid)))); }
+    function isBoss(cid) { return isAdmin() || (ownsCompany(cid) && isActive(cid)); }
+    // Can remove pins and shifts: you, or the owner of a regular (non-Doorline) company.
+    function canRemove(cid) { return isAdmin() || (ownsCompany(cid) && isActive(cid) && !isDoorline(cid)); }
 
     // ── Admins: only readable by themselves; created by hand in the console ──
     match /admins/{uid} {
@@ -94,17 +103,61 @@ service cloud.firestore {
 
       // Admin: anything (approve, pause, resume, decline, crew). Owner: settings and states only, never status.
       allow update: if isAdmin() || (signedIn() && resource.data.ownerId == me()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'sheetsUrl', 'roofCutoff', 'states']));
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'sheetsUrl', 'roofCutoff', 'states', 'doorRadius']));
 
       allow delete: if isAdmin() || (signedIn() && resource.data.ownerId == me());
 
-      // Pins, shifts, settings: members (or Doorline crew) of an active company. Admins can read (counts).
-      // `{coll}/{rest=**}` needs at least one segment; a bare `{sub=**}` would also match
-      // the company doc itself and let members edit it (including its status).
-      match /{coll}/{rest=**} {
-        allow read: if isAdmin() || ((inCompany(cid) || onCrew(cid)) && isActive(cid));
-        allow write: if (inCompany(cid) || onCrew(cid)) && isActive(cid);
+      // ── Pins: anyone working the company marks doors. Only the owner, you, or whoever
+      // placed a pin can remove it, so nobody can wipe the map or the billed hanger count.
+      // A Doorline client's owner can't remove pins at all: they're billed by the door.
+      match /pins/{pid} {
+        allow read: if canRead(cid);
+        allow create, update: if canWork(cid);
+        allow delete: if canRemove(cid) || (canWork(cid) && resource.data.get('createdBy', '') == me());
       }
+
+      // ── Shifts: each person saves only their own, with real numbers (shift lists show them).
+      match /shifts/{sid} {
+        allow read: if canRead(cid);
+        allow create: if canWork(cid) && request.resource.data.userId == me() && shiftNumbers();
+        allow update: if canWork(cid) && resource.data.userId == me() && request.resource.data.userId == me() && shiftNumbers();
+        allow delete: if canRemove(cid);
+      }
+
+      // ── Hot leads (photo kept in leadPhotos/{same id}): canvassers send them, the owner reads
+      // and updates them. A canvasser sees only their own.
+      match /leads/{lid} {
+        allow read: if isBoss(cid) || (canRead(cid) && resource.data.get('by', '') == me());
+        allow create: if canWork(cid) && request.resource.data.by == me();
+        allow update: if isBoss(cid);
+        allow delete: if isBoss(cid);
+      }
+      match /leadPhotos/{lid} {
+        allow read: if isBoss(cid) || (canRead(cid) && resource.data.get('by', '') == me());
+        allow create: if canWork(cid) && request.resource.data.by == me();
+        allow delete: if isBoss(cid);
+      }
+
+      // ── Settings: the owner's (neighborhood assignments and routes in `areas`). Year-built
+      // zones (`neighborhoodYears`) can still be saved by anyone working the company.
+      match /settings/{sid} {
+        allow read: if canRead(cid);
+        allow write: if isBoss(cid) || (sid == 'neighborhoodYears' && canWork(cid));
+      }
+
+      // ── Anything else under a company: read like the map, written only by the owner or you.
+      // (Rules add up, so the collections above are left out here; otherwise this would let
+      // every canvasser read every hot lead.)
+      match /{coll}/{rest=**} {
+        allow read: if canRead(cid) && !(coll in ['leads', 'leadPhotos']);
+        allow write: if isBoss(cid) && !(coll in ['pins', 'shifts', 'leads', 'leadPhotos', 'settings']);
+      }
+    }
+
+    function shiftNumbers() {
+      let d = request.resource.data;
+      return d.get('hangers', 0) is number && d.get('hangersPerHour', 0) is number
+        && d.get('durationMs', 0) is number && d.get('clockIn', 0) is number;
     }
 
     // ── Invites: one-time join codes ──

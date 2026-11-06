@@ -137,6 +137,25 @@ body.is-client #tabbar{grid-template-columns:repeat(4,1fr)}
 #sheet-set-start{background:transparent;color:var(--accent);border:1px solid rgba(79,110,247,0.35)}
 #sheet-delete{background:transparent;color:#ef4444;border:1px solid rgba(239,68,68,0.35)}
 #sheet-close{background:var(--accent);color:#fff;border:none}
+#sheet-who{padding:0 20px 10px;font-size:13px;color:var(--text2)}
+#lead-photo-box{display:flex;align-items:center;justify-content:center;min-height:150px;border:2px dashed rgba(255,255,255,0.18);border-radius:14px;background:var(--surface);cursor:pointer;overflow:hidden;font-size:17px;font-weight:700;color:var(--text)}
+#lead-photo-box img{display:none;width:100%;max-height:260px;object-fit:cover}
+#lead-photo-box.has-photo img{display:block}
+#lead-photo-box.has-photo span{display:none}
+#lead-reasons .chip{font-size:15px;padding:10px 14px}
+.lead-card{display:flex;flex-direction:column;gap:8px}
+.lead-card .lc-photo{width:100%;max-height:220px;object-fit:cover;border-radius:10px;background:var(--surface2);min-height:60px}
+.lead-card .lc-top{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+.lead-card .lc-tag{font-size:12px;font-weight:700;padding:3px 8px;border-radius:10px;background:rgba(239,68,68,0.15);color:#fca5a5;white-space:nowrap}
+.lead-card .lc-tag.done{background:rgba(16,185,129,0.15);color:#10b981}
+.lead-card .lc-btns{display:flex;gap:8px}
+.lead-card .lc-btns>*{flex:1;text-align:center;text-decoration:none}
+.area-row .a-info .m-email{white-space:normal;overflow:visible;text-overflow:clip}
+.area-row .a-assign{margin-top:8px;flex-wrap:wrap}
+.area-row .a-assign .chip{font-size:12px;padding:6px 10px}
+#sheet-who:empty{display:none}
+#sheet-lead{background:#dc2626;border:none;color:#fff;font-size:16px;font-weight:700;padding:15px;margin-top:12px}
+body.is-client #sheet-lead,body.is-client #sheet-who{display:none}
 body.is-client #sheet .status-btn,body.is-client #sheet .sheet-row,body.is-client #sheet-set-start,body.is-client #sheet-delete,body.is-client #zillow-btn{display:none}
 
 /* Layers panel / banners */
@@ -275,6 +294,15 @@ body.is-client #sheet .status-btn,body.is-client #sheet .sheet-row,body.is-clien
 /* Street sweep (GPS) */
 #sweep-banner{position:fixed;left:12px;right:12px;bottom:calc(var(--tabbar-h) + var(--safe-b) + 12px);z-index:1400;background:var(--surface);border:1px solid var(--c-hanger);border-radius:18px;padding:14px;box-shadow:0 8px 32px rgba(0,0,0,0.55);display:none;flex-direction:column;gap:10px}
 #sweep-banner.show{display:flex}
+#gap-banner{position:fixed;left:12px;right:12px;bottom:calc(var(--tabbar-h) + var(--safe-b) + 12px);z-index:1450;background:var(--surface);border:1px solid #38bdf8;border-radius:18px;padding:14px;box-shadow:0 8px 32px rgba(0,0,0,0.55);display:none;flex-direction:column;gap:10px}
+#gap-banner.show{display:flex}
+#gap-banner.show ~ #sweep-banner{display:none}
+#gap-title{font-size:16px;font-weight:700;cursor:pointer}
+#gap-sub{font-size:13px;color:var(--text2);margin-top:2px;line-height:1.4;cursor:pointer}
+#gap-btns{display:flex;gap:8px}
+#gap-btns button{border:none;border-radius:12px;padding:14px 10px;font-size:15px;font-weight:700;cursor:pointer}
+#gap-yes{flex:2;background:#38bdf8;color:#0b1220}
+#gap-no{flex:1;background:var(--surface2);color:var(--text)}
 #sweep-title{font-size:16px;font-weight:700}
 #sweep-sub{font-size:12px;color:var(--text2);margin-top:2px;line-height:1.4}
 #sweep-btns{display:flex;gap:8px}
@@ -361,7 +389,7 @@ body.is-client #sheet .status-btn,body.is-client #sheet .sheet-row,body.is-clien
     <div id="auth-err" class="err"></div>
     <div id="auth-info" class="info"></div>
   </div>
-  <div class="fine">Business owners: create an account, then set up your company. Team members: create an account, then join with the invite code from your manager.</div>
+  <div class="fine" id="auth-fine">Business owners: create an account, then set up your company. Team members: create an account, then join with the invite code from your manager.</div>
 </div>
 
 <!-- Setup -->
@@ -372,21 +400,21 @@ body.is-client #sheet .status-btn,body.is-client #sheet .sheet-row,body.is-clien
     <h2>Set up your account</h2>
     <input class="auth-input" id="setup-name" type="text" placeholder="Your full name" autocomplete="name">
     <div class="tabs">
-      <div class="tab active" id="tab-create">I'm the owner</div>
-      <div class="tab" id="tab-join">Join my team</div>
+      <div class="tab active" id="tab-join">Join my team</div>
+      <div class="tab" id="tab-create">I'm the owner</div>
     </div>
-    <div id="setup-create-section" class="form">
+    <div id="setup-create-section" class="form" style="display:none">
       <input class="auth-input" id="setup-company" type="text" placeholder="Company name">
       <input class="auth-input" id="setup-phone" type="tel" placeholder="Your phone number" autocomplete="tel">
-      <div class="label" style="margin:4px 0 0">Are you signing up through Doorline Hangers?</div>
-      <div class="seg" id="setup-doorline-seg"><button type="button" data-v="no">No</button><button type="button" data-v="yes">Yes</button></div>
+      <div class="label" id="setup-doorline-q" style="margin:4px 0 0;display:none">Are you signing up through Doorline Hangers?</div>
+      <div class="seg" id="setup-doorline-seg" style="display:none"><button type="button" data-v="no">No</button><button type="button" data-v="yes">Yes</button></div>
       <div class="hint" id="setup-doorline-hint" style="display:none">Doorline Hangers hangs your door hangers for you. You'll see every door they've been hung on, and pick the zip codes and neighborhoods you want covered.</div>
       <div class="hint" id="setup-approval-hint">New companies are approved by KnoxCanvas. We'll call or text you to get set up. Once you're approved, you can invite your canvassers.</div>
       <button class="auth-btn primary" id="setup-create-btn">Request access</button>
     </div>
-    <div id="setup-join-section" class="form" style="display:none">
+    <div id="setup-join-section" class="form">
       <input class="auth-input" id="setup-invite-code" type="text" placeholder="Invite code (e.g. AB12CD34)" autocapitalize="characters" style="text-transform:uppercase;letter-spacing:2px">
-      <div class="hint">Ask your manager for a code. Codes expire after 7 days and work once.</div>
+      <div class="hint" id="setup-join-hint">Ask your manager for a code (or a join link). Codes expire after 7 days and work once.</div>
       <button class="auth-btn primary" id="setup-join-btn">Join team</button>
     </div>
     <div id="setup-err" class="err"></div>
@@ -425,12 +453,14 @@ body.is-client #sheet .status-btn,body.is-client #sheet .sheet-row,body.is-clien
     <div id="sheet-addr">Select a location</div>
     <div id="sheet-coords"></div>
     <div id="sheet-hung" class="client-only" style="padding:0 20px 12px;font-size:14px;color:var(--c-hanger);font-weight:600"></div>
+    <div id="sheet-who"></div>
     <a id="zillow-btn" href="#" target="_blank" rel="noopener">View on Zillow ↗</a>
     <button class="status-btn" data-status="none"><span class="swatch" style="background:var(--c-none)"></span>Not visited<span class="check">✓</span></button>
     <button class="status-btn" data-status="hanger"><span class="swatch" style="background:var(--c-hanger)"></span>Door hanger left<span class="check">✓</span></button>
     <button class="status-btn" data-status="interest"><span class="swatch" style="background:var(--c-interest)"></span>Spoke to someone — interested<span class="check">✓</span></button>
     <button class="status-btn" data-status="no"><span class="swatch" style="background:var(--c-no)"></span>Spoke to someone — not interested<span class="check">✓</span></button>
     <button class="status-btn" data-status="dnr"><span class="swatch" style="background:var(--c-dnr)"></span>Do not return / skip<span class="check">✓</span></button>
+    <button class="sheet-btn" id="sheet-lead">🔥 Hot lead · snap a photo</button>
     <div class="sheet-row"><textarea id="sheet-note" class="field" rows="2" placeholder="Add a note (optional)…"></textarea></div>
     <div class="sheet-row">
       <input id="sheet-year" class="field" type="number" inputmode="numeric" placeholder="Year built (e.g. 1998)" min="1800" max="2100">
@@ -443,6 +473,11 @@ body.is-client #sheet .status-btn,body.is-client #sheet .sheet-row,body.is-clien
 
   <div id="roof-mode-banner">Roofing target mode — zones built in or before <span id="roof-cutoff-label">2012</span></div>
 
+  <div id="gap-banner" role="dialog" aria-live="polite">
+    <div><div id="gap-title">Is this the way you walked?</div><div id="gap-sub"></div></div>
+    <div id="gap-btns"><button id="gap-yes">Yes, add them</button><button id="gap-no">No</button></div>
+  </div>
+
   <div id="sweep-banner" role="dialog" aria-live="polite">
     <div><div id="sweep-title">Houses passed</div><div id="sweep-sub"></div></div>
     <div id="sweep-btns">
@@ -454,10 +489,9 @@ body.is-client #sheet .status-btn,body.is-client #sheet .sheet-row,body.is-clien
 
   <nav id="tabbar">
     <button class="tab-btn client-only" id="hangers-btn" aria-label="Door hangers"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg><span class="tab-label">Hangers</span></button>
-    <button class="tab-btn client-only" id="areas-btn" aria-label="Routes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5 21 9l-3.5 11h-11L3 9z"/></svg><span class="tab-label">Routes</span></button>
     <button class="tab-btn crew-only" id="shifts-btn" aria-label="Shift"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6"/></svg><span class="tab-label" id="shift-tab-label">Clock in</span></button>
     <button class="tab-btn crew-only" id="route-btn" aria-label="Route"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="19" r="2.5"/><circle cx="18" cy="5" r="2.5"/><path d="M8.5 19H16a3.5 3.5 0 0 0 0-7H8a3.5 3.5 0 0 1 0-7h7.5"/></svg><span class="tab-label">Route</span></button>
-    <button class="tab-btn crew-only" id="draw-zone-btn" aria-label="Draw zone"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5 21 9l-3.5 11h-11L3 9z"/></svg><span class="tab-label">Zone</span></button>
+    <button class="tab-btn" id="areas-btn" aria-label="Areas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5 21 9l-3.5 11h-11L3 9z"/></svg><span class="tab-label" id="areas-tab-label">Areas</span></button>
     <button class="tab-btn" id="layers-btn" aria-label="Map layers"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 9 5-9 5-9-5 9-5z"/><path d="m3 13 9 5 9-5"/></svg><span class="tab-label">Layers</span></button>
     <button class="tab-btn" id="menu-btn" aria-label="Menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg><span class="tab-label">Account</span></button>
   </nav>
@@ -486,6 +520,7 @@ body.is-client #sheet .status-btn,body.is-client #sheet .sheet-row,body.is-clien
       <div class="seg" id="basemap-seg"><button data-base="street" class="active">Street</button><button data-base="sat">Satellite</button></div>
       <div class="section-title">Overlays</div>
       <button class="toggle-row" id="roof-mode-btn"><div><div>Roofing target mode</div><div class="tr-sub">Highlight zones built in or before <span id="roof-cutoff-label2">2012</span></div></div><span class="switch"></span></button>
+      <button class="secondary-btn owner-only" id="draw-zone-btn">✏️ Draw a year-built zone</button>
       <div class="section-title">Zip code boundaries</div>
       <div class="box">
         <button id="zip-add-toggle" aria-hidden="true" tabindex="-1"></button>
@@ -507,6 +542,8 @@ body.is-client #sheet .status-btn,body.is-client #sheet .sheet-row,body.is-clien
       </div>
       <button class="menu-item owner-only" id="menu-team">👥 Team and company settings</button>
       <button class="menu-item owner-only" id="menu-metrics">📊 Team metrics</button>
+      <button class="menu-item" id="menu-leads" style="display:none">🔥 Hot leads</button>
+      <button class="menu-item" id="menu-companies" style="display:none">🏢 Companies (admin)</button>
       <button class="menu-item" id="menu-doorline" style="display:none">🚪 Doorline clients</button>
       <button class="menu-item" id="menu-crewshifts" style="display:none">🕒 Doorline crew shifts</button>
       <button class="menu-item crew-only" id="menu-shifts">⏱ My shifts</button>
@@ -524,7 +561,7 @@ body.is-client #sheet .status-btn,body.is-client #sheet .sheet-row,body.is-clien
     <div class="panel-body">
       <div class="section-title">Invite a team member</div>
       <div class="box" style="display:flex;flex-direction:column;gap:10px">
-        <div class="hint">They create an account, choose "Join my team", and enter this code. Each code works once and expires in 7 days.</div>
+        <div class="hint">Tap Share to text them a join link: they create an account and the code is already filled in. Each code works once and expires in 7 days.</div>
         <button class="primary-btn" id="gen-invite-btn">Generate invite code</button>
         <div id="invite-code-box">
           <div id="invite-code-display">--------</div>
@@ -564,8 +601,8 @@ body.is-client #sheet .status-btn,body.is-client #sheet .sheet-row,body.is-clien
         <button id="clock-btn" class="clocked-out">Clock in</button>
       </div>
       <div class="section-title">House detection</div>
-      <div class="hint">While you’re clocked in, a house lights up when you get this close to it:</div>
-      <div id="door-radius-row"><button data-r="15">15 m</button><button data-r="20">20 m</button><button data-r="30">30 m</button><button data-r="45">45 m</button></div>
+      <div class="hint" id="door-radius-intro">While you’re clocked in, a house lights up when you get this close to it:</div>
+      <div id="door-radius-row" class="owner-only"><button data-r="15">15 m</button><button data-r="20">20 m</button><button data-r="30">30 m</button><button data-r="45">45 m</button></div>
       <div class="hint" id="door-radius-hint"></div>
       <div class="section-title">Shift history</div>
       <div id="shifts-history" style="display:flex;flex-direction:column;gap:10px"></div>
@@ -640,14 +677,47 @@ body.is-client #sheet .status-btn,body.is-client #sheet .sheet-row,body.is-clien
 
   <!-- Doorline client: routes (zip codes / neighborhoods they want hung) -->
   <div id="areas-panel" class="panel">
-    <div class="panel-header"><button class="panel-back" data-close="areas-panel" aria-label="Back"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg></button><h2>Routes</h2></div>
+    <div class="panel-header"><button class="panel-back" data-close="areas-panel" aria-label="Back"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg></button><h2 id="areas-title">Routes</h2></div>
     <div class="panel-body">
-      <div class="hint">Pick the zip codes and neighborhoods you want hung. Doorline Hangers sees them right away.</div>
+      <div class="hint" id="areas-hint">Pick the zip codes and neighborhoods you want hung. Doorline Hangers sees them right away.</div>
+      <div id="areas-add" style="display:flex;flex-direction:column;gap:12px">
       <div class="section-title">Add a zip code</div>
       <div class="box"><div style="display:flex;gap:8px"><input id="area-zip-input" class="field" type="text" inputmode="numeric" maxlength="5" placeholder="Zip code, e.g. 37923" style="flex:1;min-width:0"><button id="area-zip-add" class="primary-btn" style="width:auto;padding:0 20px">Add</button></div></div>
       <button class="secondary-btn" id="area-draw-btn">✏️ Draw a neighborhood on the map</button>
-      <div class="section-title">Your routes</div>
+      </div>
+      <div class="section-title" id="areas-list-title">Your routes</div>
       <div id="area-list" style="display:flex;flex-direction:column;gap:8px"></div>
+    </div>
+  </div>
+
+  <!-- Hot lead: a canvasser snaps a photo of a house worth a sales call and sends it to the owner -->
+  <div id="lead-panel" class="panel">
+    <div class="panel-header"><button class="panel-back" data-close="lead-panel" aria-label="Back"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg></button><h2>Hot lead</h2></div>
+    <div class="panel-body">
+      <div class="box"><div class="m-name" id="lead-addr"></div><div class="hint" id="lead-to"></div></div>
+      <label id="lead-photo-box" for="lead-photo-input"><img id="lead-preview" alt=""><span id="lead-photo-label">📷 Take a photo</span></label>
+      <input id="lead-photo-input" type="file" accept="image/*" capture="environment" style="display:none">
+      <div class="section-title">Why is it hot?</div>
+      <div class="chips" id="lead-reasons"><button class="chip" data-r="friendly">🙂 Friendly homeowner</button><button class="chip" data-r="roof">🏚️ Roof damage</button><button class="chip" data-r="gutter">🌧️ Gutter damage</button><button class="chip" data-r="other">Other</button></div>
+      <input class="field" id="lead-name" type="text" placeholder="Homeowner’s name (optional)" autocomplete="off">
+      <input class="field" id="lead-phone" type="tel" placeholder="Their phone number (optional)" autocomplete="off">
+      <textarea class="field" id="lead-note" rows="2" placeholder="Anything else? (optional)"></textarea>
+      <button class="primary-btn" id="lead-send">Send hot lead</button>
+    </div>
+  </div>
+
+  <!-- Hot leads list: everything for the owner, your own for a canvasser -->
+  <div id="leads-panel" class="panel">
+    <div class="panel-header"><button class="panel-back" data-close="leads-panel" aria-label="Back"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg></button><h2 id="leads-title">Hot leads</h2></div>
+    <div class="panel-body"><div id="leads-list" style="display:flex;flex-direction:column;gap:12px"></div></div>
+  </div>
+
+  <!-- KnoxCanvas admin: every company (approve, pause, resume) and hangers per month for invoices -->
+  <div id="companies-panel" class="panel">
+    <div class="panel-header"><button class="panel-back" data-close="companies-panel" aria-label="Back"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg></button><h2>Companies</h2><button class="panel-action-btn" id="companies-csv">⬇ CSV</button></div>
+    <div class="panel-body">
+      <div class="hint">Approve a company once they’ve paid. Pause locks their whole team out (nothing is deleted) and Resume brings it all back. Hangers are counted by the day each door was hung, so you can invoice from these numbers.</div>
+      <div id="companies-list" style="display:flex;flex-direction:column;gap:12px"></div>
     </div>
   </div>
 
@@ -713,7 +783,7 @@ body.is-client #sheet .status-btn,body.is-client #sheet .sheet-row,body.is-clien
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, signInWithRedirect, signInWithCredential, getRedirectResult, GoogleAuthProvider, signOut, onAuthStateChanged, sendPasswordResetEmail, updateProfile, deleteUser } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, getFirestore, doc, setDoc, getDoc, getDocs, addDoc, collection, query, where, onSnapshot, deleteDoc, updateDoc, writeBatch, serverTimestamp, Timestamp, arrayUnion, arrayRemove } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, getFirestore, doc, setDoc, getDoc, getDocs, addDoc, collection, query, where, onSnapshot, deleteDoc, updateDoc, writeBatch, serverTimestamp, Timestamp, arrayUnion, arrayRemove, getCountFromServer } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 // Firebase web config is a public identifier, not a secret. Access is enforced by Firestore security rules.
 const firebaseConfig = {
@@ -754,6 +824,8 @@ const ZIP_COLORS = ['#4f6ef7','#10b981','#f59e0b','#7c3aed','#ef4444','#06b6d4']
 // ── Helpers ───────────────────────────────────────────────
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+// A number from saved data, safe to put in HTML (anything that isn't a number shows as 0).
+const num = v => { const n = Number(v); return Number.isFinite(n) ? String(n) : '0'; };
 let toastTimer;
 function showToast(msg) { const t = $('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2600); }
 function busy(btn, on, label) {
@@ -812,6 +884,7 @@ const isClient = () => !!company?.doorline;
 // they're assigned to (companyId is null, workCids is never empty while they're in the app).
 const isCrewOnly = () => profile?.role === 'crew';
 let crewInApp = false;
+let teamNames = {}; // uid → name, for "Hung by …" on the house sheet
 const workIds = () => workCids.length ? workCids : [companyId];
 const workId = () => workIds()[0]; // the first one: zones, routes and walk paths
 const workLabel = () => workCids.length ? workCids.map(c => workNames[c] || 'Client').join(' + ') : (company.name || 'your company');
@@ -909,7 +982,15 @@ onAuthStateChanged(auth, user => loadSession(user));
 
 async function loadSession(user) {
   currentUser = user;
-  if (!user) { leaveApp(); showScreen('auth-screen'); return; }
+  if (!user) {
+    leaveApp();
+    if (storedJoin()) {
+      // Opened a join link: they're new, so start on "Create an account".
+      $('auth-fine').textContent = 'You’ve been invited to a team. Create an account (or sign in), and your join code is already filled in.';
+      $('login-form').style.display = 'none'; $('register-form').style.display = 'flex';
+    }
+    showScreen('auth-screen'); return;
+  }
   showLoading('Loading your account…');
   try {
     const snap = await getDoc(doc(db, 'users', user.uid));
@@ -939,13 +1020,39 @@ async function loadSession(user) {
 }
 
 // ── Setup (create or join a company) ──────────────────────
+// Join links (app.html?join=CODE) fill in the code; Doorline Hangers clients sign up through
+// app.html?via=doorline. Both are kept on this phone through sign-in (which may reload the page).
+(() => {
+  try {
+    const q = new URLSearchParams(location.search);
+    const j = (q.get('join') || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (j) localStorage.setItem('knoxJoin', j);
+    if (q.get('via') === 'doorline') localStorage.setItem('knoxVia', 'doorline');
+    if (j || q.get('via')) history.replaceState(null, '', location.pathname);
+  } catch (e) {}
+})();
+const storedJoin = () => { try { return localStorage.getItem('knoxJoin') || ''; } catch (e) { return ''; } };
+const viaDoorline = () => { try { return localStorage.getItem('knoxVia') === 'doorline'; } catch (e) { return false; } };
+function showSetupTab(join) {
+  $('tab-join').classList.toggle('active', join); $('tab-create').classList.toggle('active', !join);
+  $('setup-join-section').style.display = join ? 'flex' : 'none'; $('setup-create-section').style.display = join ? 'none' : 'flex';
+}
 function showSetup() {
   $('setup-name').value = pendingName || currentUser.displayName || '';
   $('setup-err').textContent = '';
+  const code = storedJoin();
+  if (code) $('setup-invite-code').value = code;
+  $('setup-join-hint').textContent = code ? 'Your code from the join link is filled in. Just tap Join team.' : 'Ask your manager for a code (or a join link). Codes expire after 7 days and work once.';
+  // Owners of Doorline Hangers clients come through the Doorline link; everyone else is a regular company.
+  const dl = viaDoorline();
+  setupDoorline = dl ? 'yes' : 'no';
+  $('setup-doorline-hint').style.display = dl ? 'block' : 'none';
+  $('setup-approval-hint').style.display = dl ? 'none' : 'block';
+  showSetupTab(!dl || !!code);
   showScreen('setup-screen');
 }
-$('tab-create').addEventListener('click', () => { $('tab-create').classList.add('active'); $('tab-join').classList.remove('active'); $('setup-create-section').style.display = 'flex'; $('setup-join-section').style.display = 'none'; });
-$('tab-join').addEventListener('click', () => { $('tab-join').classList.add('active'); $('tab-create').classList.remove('active'); $('setup-join-section').style.display = 'flex'; $('setup-create-section').style.display = 'none'; });
+$('tab-create').addEventListener('click', () => showSetupTab(false));
+$('tab-join').addEventListener('click', () => showSetupTab(true));
 $('setup-invite-code').addEventListener('input', e => { e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''); });
 $('setup-signout').addEventListener('click', () => signOut(auth));
 document.querySelectorAll('#setup-doorline-seg button').forEach(b => b.addEventListener('click', () => {
@@ -972,6 +1079,7 @@ $('setup-create-btn').addEventListener('click', async () => {
     await batch.commit();
     pendingName = '';
     notifyRequest({ company: companyName, companyId: companyRef.id, owner: name, email: currentUser.email || '', phone, doorline: setupDoorline === 'yes' });
+    try { localStorage.removeItem('knoxVia'); } catch (e) {}
     await loadSession(currentUser);
   } catch (e) {
     console.error(e);
@@ -996,6 +1104,7 @@ $('setup-join-btn').addEventListener('click', async () => {
     batch.delete(doc(db, 'invites', code));
     await batch.commit();
     pendingName = '';
+    try { localStorage.removeItem('knoxJoin'); } catch (e) {}
     await loadSession(currentUser);
     showToast(d.crew === true ? 'You joined the Doorline Hangers crew' : `You joined ${d.companyName || 'the team'}`);
   } catch (e) {
@@ -1051,6 +1160,7 @@ function enterApp() {
   setTimeout(() => map.invalidateSize(), 60);
   document.body.classList.toggle('is-owner', isOwner());
   document.body.classList.toggle('is-client', isClient());
+  $('areas-tab-label').textContent = isClient() ? 'Routes' : 'Areas'; $('areas-btn').setAttribute('aria-label', isClient() ? 'Routes' : 'Areas');
   restoreWork();
   $('user-name-display').textContent = `${profile.name || currentUser.email} · ${company.name || ''}`;
   $('menu-name').textContent = profile.name || '';
@@ -1067,6 +1177,13 @@ function enterApp() {
   setTimeout(retryAddresses, 8000); // after the pins have loaded
   if (!isCrewOnly()) watchCrewJobs(); // crew-only: already running (it opened the app)
   checkAdmin();
+  loadTeamNames();
+  watchLeads();
+}
+async function loadTeamNames() {
+  teamNames = {};
+  if (!companyId || isClient()) return;
+  try { (await fetchMembers()).forEach(m => { teamNames[m.uid] = m.name || m.email || 'Teammate'; }); } catch (e) {}
 }
 
 function leaveApp() {
@@ -1077,9 +1194,10 @@ function leaveApp() {
   areaLayers.forEach(l => map.removeLayer(l)); areaLayers = []; areas = [];
   pathLayers.forEach(l => map.removeLayer(l)); pathLayers = []; pathsOn = false; $('paths-btn').classList.remove('active');
   if (unsubJobs) { unsubJobs(); unsubJobs = null; }
+  if (unsubLeads) { unsubLeads(); unsubLeads = null; } leads = []; $('menu-leads').style.display = 'none';
   crewInApp = false;
   workCids = []; workNames = {}; crewJobs = []; isAdminUser = false;
-  $('menu-doorline').style.display = 'none'; $('menu-crewshifts').style.display = 'none';
+  $('menu-doorline').style.display = 'none'; $('menu-crewshifts').style.display = 'none'; $('menu-companies').style.display = 'none';
   if (crewPathLayer) { map.removeLayer(crewPathLayer); crewPathLayer = null; } $('work-picker').style.display = 'none'; $('work-chip').classList.remove('on');
   clearRoute(true);
   if (drawingMode) stopDrawing();
@@ -1148,7 +1266,7 @@ function subscribePins() {
 // Writes go to every company being worked for. One that doesn't have this house yet gets the
 // whole pin (pins[id] already holds the change), so it never ends up with a partial record.
 function pinWrite(cid, id, data) {
-  const { id: _, updatedAt, ...full } = pins[id] || {};
+  const { id: _, updatedAt, _draft, ...full } = pins[id] || {};
   return { ...(pinsBy[cid]?.[id] ? {} : full), ...data, updatedBy: myUid(), updatedAt: serverTimestamp() };
 }
 function savePin(id, data) {
@@ -1233,7 +1351,7 @@ function renderAllMarkers() {
 }
 function updateStats() {
   const counts = { none:0, hanger:0, interest:0, no:0, dnr:0 };
-  Object.values(pins).forEach(p => { if (counts[p.status] !== undefined) counts[p.status]++; });
+  Object.values(pins).forEach(p => { if (!p._draft && counts[p.status] !== undefined) counts[p.status]++; });
   const total = Object.values(counts).reduce((a, b) => a + b, 0);
   $('cnt-all').textContent = total;
   $('client-count-num').textContent = counts.hanger.toLocaleString();
@@ -1261,20 +1379,38 @@ function openSheet(id) {
   $('zillow-btn').href = zillowUrl(p.addr);
   const hungAt = p.hangerAt || p.ts;
   $('sheet-hung').textContent = p.status === 'hanger' && hungAt ? `Door hanger left ${formatDate(hungAt)}, ${formatTime(hungAt)}` : 'Not hung yet';
+  $('sheet-who').textContent = p._draft ? '' : pinWho(p);
+  $('sheet-delete').style.display = canRemovePin(p) ? '' : 'none';
   markActiveStatus(p.status);
   $('sheet').classList.add('open'); $('overlay').classList.add('visible');
 }
-function closeSheet() { $('sheet').classList.remove('open'); $('overlay').classList.remove('visible'); currentPinId = null; }
+function closeSheet() {
+  const id = currentPinId;
+  $('sheet').classList.remove('open'); $('overlay').classList.remove('visible'); currentPinId = null;
+  if (id) dropDraft(id); // tapped the map but recorded nothing
+}
+// "Hung by Jake · Nov 6, 2:14 PM"
+function personName(uid) { return !uid ? '' : uid === myUid() ? 'you' : (teamNames[uid] || 'a teammate'); }
+function pinWho(p) {
+  const when = t => t ? ` · ${new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}, ${formatTime(t)}` : '';
+  if (p.status === 'hanger') return `Hung by ${personName(p.hangerBy || p.statusBy || p.updatedBy)}${when(p.hangerAt || p.ts)}`;
+  if (p.status !== 'none' && (p.statusBy || p.updatedBy)) return `Marked by ${personName(p.statusBy || p.updatedBy)}${when(p.statusAt || p.ts)}`;
+  return p.createdBy ? `Added by ${personName(p.createdBy)}${when(p.createdAt || p.ts)}` : '';
+}
+// Same as the database rules: the owner, you (admin), or whoever placed the pin.
+function canRemovePin(p) { return !p._draft && (isAdminUser || (isOwner() && !isClient()) || p.createdBy === myUid()); }
 $('overlay').addEventListener('click', closeSheet);
 $('sheet-close').addEventListener('click', closeSheet);
 
 document.querySelectorAll('.status-btn').forEach(btn => btn.addEventListener('click', () => {
   if (!currentPinId || !workId() || isClient()) return;
   const id = currentPinId, status = btn.dataset.status, now = Date.now();
+  keepDraft(id);
   const upd = { status, ts: now, statusBy: myUid(), statusAt: now };
   if (status === 'hanger') { upd.hangerBy = myUid(); upd.hangerAt = now; }
   pins[id] = { ...pins[id], ...upd };
   addOrUpdateMarker(id); updateStats(); markActiveStatus(status);
+  $('sheet-who').textContent = pinWho(pins[id]); $('sheet-delete').style.display = canRemovePin(pins[id]) ? '' : 'none';
   showToast('Saved: ' + LABELS[status]);
   if (navigator.vibrate) navigator.vibrate(15);
   savePin(id, upd);
@@ -1285,12 +1421,14 @@ document.querySelectorAll('.status-btn').forEach(btn => btn.addEventListener('cl
 $('sheet-note').addEventListener('input', () => {
   if (!currentPinId) return;
   const id = currentPinId, note = $('sheet-note').value;
+  keepDraft(id);
   pins[id].note = note;
   clearTimeout(noteDebounce); noteDebounce = setTimeout(() => savePin(id, { note }), 700);
 });
 $('sheet-year').addEventListener('input', () => {
   if (!currentPinId) return;
   const id = currentPinId, yearBuilt = $('sheet-year').value;
+  keepDraft(id);
   pins[id].yearBuilt = yearBuilt;
   $('sheet-coords').textContent = sheetCoords(pins[id]);
   clearTimeout(yearDebounce); yearDebounce = setTimeout(() => savePin(id, { yearBuilt }), 700);
@@ -1332,17 +1470,31 @@ function getNeighborhoodYearForPoint(lat, lng) {
   }
   return '';
 }
-function createPin(lat, lng, addr) {
+// `draft`: a house tapped on the map stays on this phone until something is recorded for it (a
+// status, a note, a year or a hot lead), so a stray tap doesn't leave a pin on everyone's map.
+function createPin(lat, lng, addr, draft) {
   const id = lat.toFixed(6) + ',' + lng.toFixed(6);
   if (!pins[id]) {
     const now = Date.now();
     const p = { lat, lng, addr: addr || 'Loading address…', status: 'none', note: '', yearBuilt: getNeighborhoodYearForPoint(lat, lng), ts: now, createdBy: myUid(), createdAt: now };
-    pins[id] = { ...p, id };
+    pins[id] = { ...p, id, ...(draft ? { _draft: true } : {}) };
     addOrUpdateMarker(id); updateStats();
-    savePin(id, p);
+    if (!draft) savePin(id, p);
     if (!addr) reverseGeocode(lat, lng, id);
   }
   return id;
+}
+// Saves a draft pin the first time something is recorded for it.
+function keepDraft(id) {
+  if (!pins[id]?._draft) return;
+  delete pins[id]._draft;
+  pins[id].ts = pins[id].createdAt = Date.now();
+}
+function dropDraft(id) {
+  if (!pins[id]?._draft) return;
+  if (markers[id]) map.removeLayer(markers[id]);
+  delete markers[id]; delete pins[id];
+  updateStats();
 }
 map.on('click', e => {
   const { lat, lng } = e.latlng;
@@ -1353,7 +1505,7 @@ map.on('click', e => {
   }
   if (crewPathLayer) { map.removeLayer(crewPathLayer); crewPathLayer = null; return; } // tap hides a crew walk, no pin
   if (!workId() || isClient()) return; // Doorline clients look; the crew places pins
-  openSheet(createPin(lat, lng));
+  openSheet(createPin(lat, lng, '', true));
 });
 
 // Pin addresses: the nearest house in our address tiles first (free, and works offline once the
@@ -1397,7 +1549,7 @@ async function reverseGeocode(lat, lng, id, retry) {
   }
   if (pins[id]) {
     pins[id].addr = addr;
-    savePin(id, { addr });
+    if (!pins[id]._draft) savePin(id, { addr });
     if (currentPinId === id) { $('sheet-addr').textContent = addr; $('zillow-btn').href = zillowUrl(addr); }
   }
 }
@@ -1505,12 +1657,12 @@ function startDrawing(forRoute, forArea) {
   $('zone-toolbar').style.top = ($('header').getBoundingClientRect().bottom + 8) + 'px';
   $('zone-toolbar').classList.add('active');
   $('draw-zone-btn').classList.add('active');
-  $('zone-toolbar-title').textContent = forArea ? 'Outline the neighborhood you want hung — tap its corners' : forRoute ? 'Outline the area to route — tap its corners' : 'Outline a neighborhood — tap its corners';
+  $('zone-toolbar-title').textContent = forArea ? (isClient() ? 'Outline the neighborhood you want hung — tap its corners' : 'Outline the neighborhood — tap its corners') : forRoute ? 'Outline the area to route — tap its corners' : 'Outline a neighborhood — tap its corners';
   $('zone-toolbar-fields').style.display = forRoute ? 'none' : 'grid';
   $('zone-toolbar-fields').style.gridTemplateColumns = forArea ? '1fr' : '';
   $('zone-year-input').style.display = forArea ? 'none' : '';
   $('zone-name-input').placeholder = forArea ? 'Neighborhood name' : 'Zone name';
-  $('zone-finish-btn').textContent = forArea ? '✓ Add route' : forRoute ? '✓ Use zone' : '✓ Save zone';
+  $('zone-finish-btn').textContent = forArea ? (isClient() ? '✓ Add route' : '✓ Add neighborhood') : forRoute ? '✓ Use zone' : '✓ Save zone';
   updateDrawingLayers();
   map.getContainer().style.cursor = 'crosshair';
 }
@@ -1525,7 +1677,7 @@ function stopDrawing() {
   $('zone-year-input').value = ''; $('zone-name-input').value = '';
   map.getContainer().style.cursor = '';
 }
-$('draw-zone-btn').addEventListener('click', () => { drawingMode ? stopDrawing() : startDrawing(false); });
+$('draw-zone-btn').addEventListener('click', () => { $('layers-panel').classList.remove('open'); drawingMode ? stopDrawing() : startDrawing(false); });
 $('zone-cancel-btn').addEventListener('click', stopDrawing);
 $('zone-undo-btn').addEventListener('click', () => { if (!drawnPoints.length) return; drawnPoints.pop(); const m = drawnMarkers.pop(); if (m) map.removeLayer(m); updateDrawingLayers(); });
 $('zone-finish-btn').addEventListener('click', () => {
@@ -1672,9 +1824,11 @@ const SWEEP = {
   roadRadius: 25,      // streets within this distance count as "walked" (m)
   dupRadius: 18,       // an existing pin this close means the house is already pinned (m)
   // Where we have address tiles (/addr/v1/: TN + NC), a house counts once the walker comes within
-  // this distance of it (its address point, roughly the middle of the house). Set in the Shift panel.
+  // this distance of it (its address point, roughly the middle of the house). The company owner
+  // sets it (companies/{id}.doorRadius) in the Shift panel: hangers are billed by the door, so
+  // canvassers can't widen it themselves.
   doorRadiusChoices: [15, 20, 30, 45],
-  get doorRadius() { let v = 0; try { v = +localStorage.getItem('knoxDoorRadius'); } catch (e) {} return v > 0 ? v : 20; }
+  get doorRadius() { const v = +(company?.doorRadius || 0); return SWEEP.doorRadiusChoices.includes(v) ? v : 20; }
 };
 let sweepOn = false, sweepWatchId = null, sweepRetryTimer = null, sweepSaveTimer = null;
 let sweepTrail = [], sweepSeg = [], sweepSegDist = 0, sweepSegStart = 0, sweepQueue = [], sweepBusy = false;
@@ -1738,8 +1892,10 @@ function sweepStart() {
       sweepTrail = (saved.pts || []).map(a => ({ lat: a[0], lng: a[1], t: a[2] }));
       sweepSeen = new Set(saved.seen || []);
       (saved.cands || []).forEach(c => sweepAddCandidate(c, true));
-    } else { sweepTrail = []; sweepSeen = new Set(); }
-  } catch (e) { sweepTrail = []; sweepSeen = new Set(); }
+      sweepGaps = saved.gaps || [];
+    } else { sweepTrail = []; sweepSeen = new Set(); sweepGaps = []; }
+  } catch (e) { sweepTrail = []; sweepSeen = new Set(); sweepGaps = []; }
+  renderGap();
   sweepSeg = []; sweepSegDist = 0; sweepSegStart = 0;
   sweepRecent = []; sweepFastSteps = 0; sweepLastDrivingAt = null; sweepLastWasDriving = false;
   drawSweepTrail();
@@ -1776,11 +1932,13 @@ function sweepStop({ keepSaved }) {
     clearTimeout(sweepSaveTimer); // already saved as they walked; the user is signed out now
     Object.keys(sweepGhosts).forEach(removeGhost); sweepCands = {}; sweepQueue = [];
     sweepTrail = []; sweepSeg = []; sweepSegDist = 0;
+    sweepGaps = []; renderGap();
     $('sweep-banner').classList.remove('show'); $('sweep-panel').classList.remove('open');
   } else {
     // Clocking out: look up the last stretch so it can still be offered, then forget the trail.
     if (sweepSeg.length > 1) { sweepQueue.push(sweepSeg.slice()); processSweepQueue(); }
     sweepSeg = []; sweepSegDist = 0; sweepTrail = [];
+    sweepGaps = []; renderGap();
     try { localStorage.removeItem(trailKey()); } catch (e) {}
   }
 }
@@ -1797,9 +1955,18 @@ function sweepAddPoint(p) {
   const last = sweepTrail[sweepTrail.length - 1];
   if (last && distBetween(last, p) < SWEEP.minStep) return;
   const pt = { lat: p.lat, lng: p.lng, t: p.t };
+  // A gap: no GPS for a while (the screen was off, so the browser stopped tracking) and a jump.
+  const isGap = !!last && pt.t - last.t >= GAP.minMs && distBetween(last, pt) >= GAP.minDist;
   const driving = sweepIsDriving(pt, last, p.spd);
   sweepTrail.push(pt);
-  if (driving) {
+  if (!driving && isGap) {
+    // Never draw a straight line across the gap (it cuts through back yards). Work out the route
+    // along real streets instead and ask the canvasser to confirm it.
+    if (sweepSeg.length) sweepFlushSeg();
+    sweepSeg = [pt]; sweepSegDist = 0; sweepSegStart = pt.t;
+    sweepLastWasDriving = false;
+    sweepFillGap(last, pt);
+  } else if (driving) {
     // In a car: close out the walked stretch; houses along the road don't count. The
     // quick step(s) just before this were the car pulling away, not walking.
     if (sweepFastSteps > 1) sweepSeg.splice(Math.max(0, sweepSeg.length - (sweepFastSteps - 1)));
@@ -2054,20 +2221,231 @@ async function tileHousesNear(line, radius) {
   return out;
 }
 
-// House detection setting (Shift panel)
+// ── Filling GPS gaps (the automatic hanger feature on the website) ──
+// Browsers stop GPS while the screen is off, so a walk shows up as dots with gaps. For each gap
+// we find the walking route along real streets (U.S. Census road tiles in /roads/v1/, built by
+// tools/address-tiles/roads.py) between the last dot before and the first dot after, then offer
+// the houses along it: "Is this the way you walked?". Nothing guessed counts until they say yes,
+// and even then the houses are ordinary candidates they can still leave out before marking.
+const GAP = {
+  minMs: 20000,      // no GPS for at least this long...
+  minDist: 30,       // ...and a jump of at least this far (m) = the screen was off
+  maxMs: 45 * 60000, // longer gaps are too much guessing
+  walkMax: 2.5,      // a route faster than this (m/s) over the gap means they drove part of it
+  maxPathM: 3000,
+  snapMax: 60,       // the dots must be this close to a street (m)
+  get corridor() { return SWEEP.houseRadius; } // houses this close to the route, on the street walked
+};
+let sweepGaps = [], gapLayers = [];
+const ROADS_BASE = '/roads/v1/';
+const roadTiles = { index: null, indexAt: 0, failedAt: 0, mem: new Map() };
+async function roadsFetch(path, timeoutMs) {
+  const url = ROADS_BASE + path;
+  let cache = null;
+  try { cache = await caches.open('knox-roads-v1'); } catch (e) {}
+  const fromCache = async () => { try { const r = cache && await cache.match(url); return r ? await r.json() : null; } catch (e) { return null; } };
+  if (path !== 'index.json') { const c = await fromCache(); if (c) return c; }
+  try {
+    const ctrl = new AbortController(); const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    const r = await fetch(url, { signal: ctrl.signal });
+    clearTimeout(timer);
+    if (r.ok) { if (cache) cache.put(url, r.clone()).catch(() => {}); return await r.json(); }
+  } catch (e) {}
+  return path === 'index.json' ? fromCache() : null;
+}
+async function roadsIndex() {
+  const now = Date.now();
+  if (roadTiles.index && now - roadTiles.indexAt < 7 * 86400000) return roadTiles.index;
+  if (now - roadTiles.failedAt < 600000) return roadTiles.index;
+  const i = await roadsFetch('index.json', 10000);
+  if (i && i.tiles) { roadTiles.index = { deg: i.tileDeg, tiles: new Set(i.tiles) }; roadTiles.indexAt = now; }
+  else roadTiles.failedAt = now;
+  return roadTiles.index;
+}
+// A tile's roads as points in whole 1e-5° steps: [{ name, cls, pts: [[x, y], ...] }] (x = lng, y = lat).
+async function roadTile(key) {
+  if (roadTiles.mem.has(key)) return roadTiles.mem.get(key);
+  const t = await roadsFetch(key + '.json', 15000);
+  if (!t || !t.r) return null;
+  const x0 = Math.round(t.lng0 * 1e5), y0 = Math.round(t.lat0 * 1e5);
+  const roads = t.r.map(r => {
+    const pts = []; let x = x0, y = y0;
+    for (let i = 3; i + 1 < r.length; i += 2) { x += r[i]; y += r[i + 1]; pts.push([x, y]); }
+    return { name: t.n[r[1]] || '', cls: r[2], pts };
+  });
+  if (roadTiles.mem.size > 30) roadTiles.mem.clear();
+  roadTiles.mem.set(key, roads);
+  return roads;
+}
+// Small binary heap for the route search.
+class MinHeap {
+  constructor() { this.a = []; }
+  push(k, v) { const a = this.a; a.push([k, v]); let i = a.length - 1; while (i) { const p = (i - 1) >> 1; if (a[p][0] <= a[i][0]) break; [a[p], a[i]] = [a[i], a[p]]; i = p; } }
+  pop() {
+    const a = this.a, top = a[0], last = a.pop();
+    if (a.length) { a[0] = last; let i = 0; for (;;) { const l = 2 * i + 1, r = l + 1; let m = i; if (l < a.length && a[l][0] < a[m][0]) m = l; if (r < a.length && a[r][0] < a[m][0]) m = r; if (m === i) break; [a[m], a[i]] = [a[i], a[m]]; i = m; } }
+    return top;
+  }
+  get size() { return this.a.length; }
+}
+const ROAD_COST = { 1: 1, 2: 1.15, 3: 1.3, 4: 1, 5: 1.2, 6: 1.6, 7: 1.6 }; // prefer neighborhood streets
+// Walking route along real streets from a to b, or null (no road data here, a dot too far from any
+// street, or no connection). Returns { path: [{lat,lng}], names: [Set of street names per step], length }.
+async function roadRoute(a, b) {
+  const idx = await roadsIndex(); if (!idx) return null;
+  const pad = Math.max(300, distBetween(a, b) * 0.4);
+  const dLat = pad / 111000, dLng = pad / (111000 * Math.cos(a.lat * Math.PI / 180));
+  const minLat = Math.min(a.lat, b.lat) - dLat, maxLat = Math.max(a.lat, b.lat) + dLat;
+  const minLng = Math.min(a.lng, b.lng) - dLng, maxLng = Math.max(a.lng, b.lng) + dLng;
+  const keys = [];
+  for (let ty = Math.floor(minLat / idx.deg); ty <= Math.floor(maxLat / idx.deg); ty++)
+    for (let tx = Math.floor(minLng / idx.deg); tx <= Math.floor(maxLng / idx.deg); tx++) if (idx.tiles.has(`${ty}/${tx}`)) keys.push(`${ty}/${tx}`);
+  if (!keys.length || keys.length > 9) return null;
+  const box = [Math.round(minLng * 1e5), Math.round(minLat * 1e5), Math.round(maxLng * 1e5), Math.round(maxLat * 1e5)];
+  const inBox = (x, y) => x >= box[0] && x <= box[2] && y >= box[1] && y <= box[3];
+  const kx = 111320 * Math.cos(a.lat * Math.PI / 180) / 1e5, ky = 110540 / 1e5; // metres per 1e-5° step
+  const nodes = new Map(), nx = [], ny = [], adj = [];
+  const node = (x, y) => { const k = x + ',' + y; let i = nodes.get(k); if (i === undefined) { i = nx.length; nodes.set(k, i); nx.push(x); ny.push(y); adj.push([]); } return i; };
+  const edges = []; // [u, v, name] for snapping
+  for (const k of keys) {
+    const roads = await roadTile(k); if (!roads) return null;
+    for (const rd of roads) for (let i = 1; i < rd.pts.length; i++) {
+      const [ax, ay] = rd.pts[i - 1], [bx, by] = rd.pts[i];
+      if (!inBox(ax, ay) && !inBox(bx, by)) continue;
+      const u = node(ax, ay), v = node(bx, by); if (u === v) continue;
+      const w = Math.hypot((bx - ax) * kx, (by - ay) * ky) * (ROAD_COST[rd.cls] || 1.3);
+      adj[u].push([v, w, rd.name]); adj[v].push([u, w, rd.name]); edges.push([u, v, rd.name]);
+    }
+  }
+  // Nearest point on any street to p (within GAP.snapMax).
+  const snap = p => {
+    const px = p.lng * 1e5, py = p.lat * 1e5; let best = null;
+    for (const [u, v, name] of edges) {
+      const ax = nx[u], ay = ny[u], dx = nx[v] - ax, dy = ny[v] - ay;
+      const len2 = (dx * kx) ** 2 + (dy * ky) ** 2;
+      const t = len2 ? Math.max(0, Math.min(1, (((px - ax) * kx) * (dx * kx) + ((py - ay) * ky) * (dy * ky)) / len2)) : 0;
+      const qx = ax + t * dx, qy = ay + t * dy, d = Math.hypot((px - qx) * kx, (py - qy) * ky);
+      if (!best || d < best.d) best = { u, v, t, x: qx, y: qy, d, name };
+    }
+    return best && best.d <= GAP.snapMax ? best : null;
+  };
+  const sa = snap(a), sb = snap(b); if (!sa || !sb) return null;
+  const segLen = (s, toV) => Math.hypot((nx[toV] - s.x) * kx, (ny[toV] - s.y) * ky);
+  // Virtual start/end nodes on the snapped streets.
+  const S = nx.length; nx.push(sa.x); ny.push(sa.y); adj.push([[sa.u, segLen(sa, sa.u), sa.name], [sa.v, segLen(sa, sa.v), sa.name]]);
+  const E = nx.length; nx.push(sb.x); ny.push(sb.y); adj.push([]);
+  adj[sb.u].push([E, segLen(sb, sb.u), sb.name]); adj[sb.v].push([E, segLen(sb, sb.v), sb.name]);
+  if ((sa.u === sb.u && sa.v === sb.v) || (sa.u === sb.v && sa.v === sb.u)) adj[S].push([E, Math.hypot((sb.x - sa.x) * kx, (sb.y - sa.y) * ky), sa.name]);
+  // A* (straight-line distance never overestimates, since costs are ≥ the real length).
+  const h = i => Math.hypot((nx[i] - nx[E]) * kx, (ny[i] - ny[E]) * ky);
+  const dist = new Map([[S, 0]]), prev = new Map(), heap = new MinHeap(); heap.push(h(S), S);
+  while (heap.size) {
+    const [, u] = heap.pop();
+    if (u === E) break;
+    const du = dist.get(u);
+    for (const [v, w] of adj[u]) {
+      const nd = du + w;
+      if (nd < (dist.get(v) ?? Infinity)) { dist.set(v, nd); prev.set(v, u); heap.push(nd + h(v), v); }
+    }
+  }
+  if (!dist.has(E)) return null;
+  const order = [E]; while (order[0] !== S) order.unshift(prev.get(order[0]));
+  const path = order.map(i => ({ lat: ny[i] / 1e5, lng: nx[i] / 1e5 }));
+  // Every street name on each step (TIGER keeps a second copy of some roads under another name,
+  // e.g. "Providence Rd" and "State Hwy 16").
+  const names = [];
+  for (let i = 1; i < order.length; i++) names.push(new Set(adj[order[i - 1]].filter(e => e[0] === order[i]).map(e => normStreet(e[2])).filter(Boolean)));
+  return { path, names, length: lineLength(path) };
+}
+// Houses along a gap's route that sit on the street being walked.
+async function gapHouses(route) {
+  const near = await tileHousesNear(route.path, GAP.corridor);
+  if (!near) return null;
+  return near.filter(hh => {
+    let best = Infinity, bi = -1;
+    for (let i = 1; i < route.path.length; i++) { const d = distToLine(hh, [route.path[i - 1], route.path[i]]); if (d < best) { best = d; bi = i - 1; } }
+    if (bi < 0) return false;
+    const names = route.names[bi];
+    if (!names || !names.size) return best <= SWEEP.doorRadius; // a street with no name: only right next to it
+    return names.has(normStreet(hh.street));
+  });
+}
+async function sweepFillGap(a, b) {
+  const ms = b.t - a.t, minutes = Math.max(1, Math.round(ms / 60000));
+  if (ms > GAP.maxMs) { showToast(`GPS was off for ${minutes} min, too long to guess the houses in between`); return; }
+  let route = null;
+  try { route = await roadRoute(a, b); } catch (e) { console.warn('route', e); }
+  if (!route) {
+    // No street data (or a dot far from any street): fall back to a straight walk, but only along one
+    // street: the street of the house nearest each end must be the same.
+    try {
+      const nearA = await tileHousesNear([a], 40), nearB = await tileHousesNear([b], 40);
+      const st = list => list?.length ? normStreet(list.reduce((x, y) => (y.dist < x.dist ? y : x)).street) : '';
+      const s1 = st(nearA), s2 = st(nearB);
+      if (s1 && s1 === s2) route = { path: [a, b], names: [new Set([s1])], length: distBetween(a, b) };
+    } catch (e) {}
+  }
+  if (!route) { if (sweepOn) showToast(`Your screen was off for ${minutes} min. Couldn’t tell which way you walked`); return; }
+  // Too far to have walked in that time: they drove part of it. Also skip silly detours.
+  if (route.length > Math.max(80, (ms / 1000) * GAP.walkMax) || route.length > GAP.maxPathM || route.length > 3 * distBetween(a, b) + 200) return;
+  let houses = (await gapHouses(route)) || [];
+  houses = houses.filter(hh => !sweepCands[hh.key || sweepKey(hh)] && !sweepSeen.has(sweepKey(hh)) && !nearestPin(hh));
+  if (!houses.length || !sweepOn) return;
+  sweepGaps.push({ id: Date.now().toString(36), from: a.t, to: b.t, minutes, path: route.path.map(p => ({ lat: +p.lat.toFixed(6), lng: +p.lng.toFixed(6) })),
+    houses: houses.map(hh => ({ lat: hh.lat, lng: hh.lng, num: hh.num, street: hh.street, addr: hh.addr, dist: hh.dist })) });
+  saveSweepState(true);
+  renderGap();
+  buzz();
+}
+// The banner and the map for the first route waiting to be checked.
+function renderGap(focus) {
+  gapLayers.forEach(l => map.removeLayer(l)); gapLayers = [];
+  const g = sweepGaps[0];
+  if (!g) { $('gap-banner').classList.remove('show'); renderSweepBanner(); return; }
+  const route = L.polyline(g.path.map(p => [p.lat, p.lng]), { color: '#38bdf8', weight: 6, opacity: 0.9, dashArray: '10,8', interactive: false }).addTo(map);
+  gapLayers.push(route);
+  g.houses.forEach(hh => gapLayers.push(L.circleMarker([hh.lat, hh.lng], { radius: 9, color: '#38bdf8', weight: 2, dashArray: '3,3', fillColor: '#38bdf8', fillOpacity: 0.2, interactive: false }).addTo(map)));
+  const streets = streetsSummary(g.houses);
+  $('gap-title').textContent = 'Is this the way you walked?';
+  $('gap-sub').textContent = `Your screen was off for ${g.minutes} min. The blue dashed line follows the streets between your dots: ${g.houses.length} house${g.houses.length === 1 ? '' : 's'} on ${streets}.${sweepGaps.length > 1 ? ` (1 of ${sweepGaps.length})` : ''}`;
+  $('gap-yes').textContent = `Yes, add ${g.houses.length}`;
+  $('gap-banner').classList.add('show');
+  // Leave room for the search card on top and this banner at the bottom.
+  if (focus) map.fitBounds(route.getBounds(), { paddingTopLeft: [24, 150], paddingBottomRight: [24, 300], maxZoom: 18 });
+}
+function answerGap(yes) {
+  const g = sweepGaps.shift(); if (!g) return;
+  let added = 0;
+  if (yes) g.houses.forEach(hh => { if (sweepAddCandidate({ ...hh, on: true })) added++; });
+  saveSweepState(true);
+  renderGap();
+  if (yes) { renderSweepBanner(); showToast(added ? `${added} added. Tap any you didn’t hang to leave them out, then mark them.` : 'Those houses were already marked'); }
+}
+$('gap-yes').addEventListener('click', () => answerGap(true));
+$('gap-no').addEventListener('click', () => answerGap(false));
+$('gap-title').addEventListener('click', () => renderGap(true));
+$('gap-sub').addEventListener('click', () => renderGap(true));
+
+// House detection setting (Shift panel). The owner picks it for the whole team.
 function renderDoorRadius() {
   const r = SWEEP.doorRadius;
   document.querySelectorAll('#door-radius-row button').forEach(b => b.classList.toggle('on', +b.dataset.r === r));
-  $('door-radius-hint').textContent = r <= 15 ? 'Only when you’re right at the house.'
+  const what = r <= 15 ? 'Only when you’re right at the house.'
     : r <= 20 ? 'When you walk up to the house (recommended).'
     : r <= 30 ? 'Also catches houses you pass on the sidewalk.'
     : 'Every house along the street, even set back from the road.';
+  const own = isOwner() && !isClient();
+  $('door-radius-intro').textContent = own ? 'While your team is clocked in, a house lights up when they get this close to it:'
+    : `While you’re clocked in, a house lights up when you get within ${r} m of it.`;
+  $('door-radius-hint').textContent = own ? what : `${what} Your manager sets this.`;
 }
-document.querySelectorAll('#door-radius-row button').forEach(b => b.addEventListener('click', () => {
-  try { localStorage.setItem('knoxDoorRadius', b.dataset.r); } catch (e) {}
-  renderDoorRadius();
+document.querySelectorAll('#door-radius-row button').forEach(b => b.addEventListener('click', async () => {
+  if (!isOwner() || isClient() || !companyId) return;
+  const r = +b.dataset.r, before = company.doorRadius;
+  company.doorRadius = r; renderDoorRadius();
+  try { await updateDoc(doc(db, 'companies', companyId), { doorRadius: r }); showToast(`Houses now light up within ${r} m for your whole team`); }
+  catch (e) { company.doorRadius = before; renderDoorRadius(); showToast('Couldn’t save (' + (e.code || 'error') + ')'); }
 }));
-renderDoorRadius();
 
 // "Install KnoxCanvas on this phone" (Android Chrome offers it once the page qualifies).
 let installPrompt = null;
@@ -2100,9 +2478,16 @@ function addGhost(key) {
 }
 function removeGhost(key) { if (sweepGhosts[key]) { map.removeLayer(sweepGhosts[key]); delete sweepGhosts[key]; } }
 function drawSweepTrail() {
-  const ll = sweepTrail.map(p => [p.lat, p.lng]);
-  if (!sweepTrailLine) sweepTrailLine = L.polyline(ll, { color: '#4f6ef7', weight: 4, opacity: 0.45, interactive: false }).addTo(map);
-  else sweepTrailLine.setLatLngs(ll);
+  // One line per stretch of real GPS: gaps (screen off) are left open, their routes drawn separately.
+  const parts = []; let cur = [];
+  sweepTrail.forEach((p, i) => {
+    const prev = sweepTrail[i - 1];
+    if (prev && p.t - prev.t >= GAP.minMs && distBetween(prev, p) >= GAP.minDist) { if (cur.length > 1) parts.push(cur); cur = []; }
+    cur.push([p.lat, p.lng]);
+  });
+  if (cur.length) parts.push(cur);
+  if (!sweepTrailLine) sweepTrailLine = L.polyline(parts, { color: '#4f6ef7', weight: 4, opacity: 0.45, interactive: false }).addTo(map);
+  else sweepTrailLine.setLatLngs(parts);
 }
 
 function streetsSummary(list) {
@@ -2188,7 +2573,8 @@ function saveSweepState(now) {
         start: clockInTime,
         pts: sweepTrail.slice(-5000).map(p => [+p.lat.toFixed(6), +p.lng.toFixed(6), p.t]),
         seen: [...sweepSeen].slice(-3000),
-        cands: Object.values(sweepCands)
+        cands: Object.values(sweepCands),
+        gaps: sweepGaps.map(g => ({ ...g, path: g.path.slice(0, 400), houses: g.houses.slice(0, 300) }))
       }));
     } catch (e) {}
   };
@@ -2245,23 +2631,49 @@ function updateShiftBadges() {
   $('shift-tab-label').textContent = t;
   $('shift-chip').textContent = `On shift ${t} · ${myShiftHangers(clockInTime)} hangers`;
 }
+// The shift start is kept on this phone and in your profile (users/{uid}.activeClockIn, the same
+// field the iPhone app uses), so a dead battery or cleared browser data doesn't lose the hours.
+function saveActiveClock(t) {
+  if (!myUid()) return;
+  const data = t ? { activeClockIn: t, activeWork: workCids.length ? { cids: workCids.slice(), names: { ...workNames } } : null } : { activeClockIn: null, activeWork: null };
+  setDoc(doc(db, 'users', myUid()), data, { merge: true }).catch(e => console.warn('activeClockIn', e));
+}
 function restoreClock() {
   try {
-    const saved = JSON.parse(localStorage.getItem(clockKey()) || 'null');
-    if (saved && saved.time && Date.now() - saved.time < 16 * 3600000) { clockedIn = true; clockInTime = saved.time; startClockTimer(); sweepStart(); renderWorkPicker(); }
-    else { localStorage.removeItem(clockKey()); clockedIn = false; clockInTime = null; }
+    let saved = JSON.parse(localStorage.getItem(clockKey()) || 'null');
+    const remote = +(profile?.activeClockIn || 0);
+    const fresh = t => t && Date.now() - t < 16 * 3600000;
+    if (!(saved && fresh(saved.time)) && fresh(remote)) {
+      // Clocked in on another phone, or this browser's storage was cleared: pick the shift back up.
+      const w = profile.activeWork || {};
+      saved = { time: remote, works: w.cids || [], names: w.names || {} };
+      if (saved.works.length) { workCids = saved.works.slice(); workNames = { ...workNames, ...saved.names }; }
+      localStorage.setItem(clockKey(), JSON.stringify(saved));
+    }
+    if (saved && fresh(saved.time)) {
+      clockedIn = true; clockInTime = saved.time; startClockTimer(); sweepStart(); renderWorkPicker();
+      if (remote !== saved.time) saveActiveClock(saved.time);
+    } else {
+      localStorage.removeItem(clockKey()); clockedIn = false; clockInTime = null;
+      if (remote) saveActiveClock(null);
+    }
   } catch (e) { clockedIn = false; }
   updateClockUI();
 }
 function clockIn() {
   clockedIn = true; clockInTime = Date.now();
   try { localStorage.setItem(clockKey(), JSON.stringify({ time: clockInTime, works: workCids, names: workNames })); } catch (e) {}
+  saveActiveClock(clockInTime);
   updateClockUI(); startClockTimer(); renderWorkPicker();
   showToast(workCids.length ? `Clocked in · hanging for ${workLabel()}` : 'Clocked in');
   sweepStart();
 }
 async function clockOut() {
   if (!clockedIn) return;
+  const pending = sweepGaps.length;
+  if (pending && confirm(`You have ${pending} route${pending === 1 ? '' : 's'} to check from when your screen was off. Check ${pending === 1 ? 'it' : 'them'} before clocking out?`)) {
+    $('shifts-panel').classList.remove('open'); renderGap(true); return;
+  }
   stopClockTimer();
   const clockOutTime = Date.now(), durationMs = clockOutTime - clockInTime;
   const hangers = myShiftHangers(clockInTime);
@@ -2271,6 +2683,7 @@ async function clockOut() {
   sweepStop({ keepSaved: false });
   shifts.unshift(shift);
   try { localStorage.removeItem(clockKey()); } catch (e) {}
+  saveActiveClock(null);
   clockedIn = false; clockInTime = null;
   updateClockUI(); renderShifts(); renderWorkPicker();
   showToast(`Shift saved: ${hangers} hangers · ${hangersPerHour}/hr`);
@@ -2291,10 +2704,10 @@ function renderShifts() {
   c.innerHTML = shifts.map(s => `<div class="shift-card">
     <div class="shift-card-header"><div class="shift-date">${formatDate(s.clockIn)}</div><div class="shift-duration">${formatDuration(s.durationMs)}</div></div>
     <div class="shift-times">${formatTime(s.clockIn)} → ${formatTime(s.clockOut)}</div>
-    <div class="trio"><div class="mini hi"><div class="v">${s.hangers}</div><div class="l">Hangers</div></div><div class="mini"><div class="v">${s.hangersPerHour}</div><div class="l">Per hour</div></div><div class="mini"><div class="v">${(s.durationMs / 3600000).toFixed(2)}h</div><div class="l">Hours</div></div></div>
+    <div class="trio"><div class="mini hi"><div class="v">${num(s.hangers)}</div><div class="l">Hangers</div></div><div class="mini"><div class="v">${num(s.hangersPerHour)}</div><div class="l">Per hour</div></div><div class="mini"><div class="v">${(s.durationMs / 3600000).toFixed(2)}h</div><div class="l">Hours</div></div></div>
   </div>`).join('');
 }
-function openShifts() { renderShifts(); updateClockUI(); $('shifts-panel').classList.add('open'); }
+function openShifts() { renderShifts(); updateClockUI(); renderDoorRadius(); $('shifts-panel').classList.add('open'); }
 $('shifts-btn').addEventListener('click', openShifts);
 $('shift-chip').addEventListener('click', openShifts);
 $('shifts-export-btn').addEventListener('click', () => {
@@ -2400,7 +2813,8 @@ $('gen-invite-btn').addEventListener('click', async () => {
   } catch (e) { showToast('Couldn\u2019t create invite (' + (e.code || 'error') + ')'); }
   finally { busy($('gen-invite-btn'), false); }
 });
-const inviteMessage = code => `Join ${company.name || 'our team'} on KnoxCanvas: open ${location.origin}${location.pathname}, create an account, choose "Join my team", and enter code ${code}`;
+const joinLink = code => `${location.origin}${location.pathname}?join=${code}`;
+const inviteMessage = code => `Join ${company.name || 'our team'} on KnoxCanvas: ${joinLink(code)} (create an account, and your code ${code} is already filled in)`;
 $('copy-invite-btn').addEventListener('click', () => {
   const code = $('invite-code-display').textContent;
   navigator.clipboard?.writeText(code).then(() => showToast('Code copied'), () => showToast(code));
@@ -2507,10 +2921,18 @@ function renderMetrics() {
       return `<div class="box"><div class="m-name" style="margin-bottom:8px">${esc(emp.name || emp.email)}</div><div class="trio"><div class="mini hi"><div class="v">${eh}</div><div class="l">Hangers</div></div><div class="mini"><div class="v">${ehrs > 0 ? (eh / ehrs).toFixed(1) : '—'}</div><div class="l">Per hour</div></div><div class="mini"><div class="v">${ehrs.toFixed(1)}h</div><div class="l">Hours</div></div></div></div>`;
     }).join('') || '<div class="empty">No team data yet</div>';
   }
-  $('metrics-shifts').innerHTML = fShifts.slice(0, 20).map(s => {
+  // Tap a shift to see the walk on the map (the GPS trail saved at clock-out).
+  const wrap = $('metrics-shifts');
+  wrap.innerHTML = fShifts.length ? '' : '<div class="empty">No shifts in this period</div>';
+  fShifts.slice(0, 30).forEach(s => {
     const emp = allEmployees.find(e => e.uid === s.userId);
-    return `<div class="mshift-row"><div><div class="mshift-name">${esc(emp ? (emp.name || emp.email) : (s.userName || 'Former member'))}</div><div class="mshift-date">${new Date(s.clockIn).toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' })} · ${formatDuration(s.durationMs || 0)}${s.forCompanyName ? ' · for ' + esc(s.forCompanyName) : ''}</div></div><div><div class="mshift-hangers">${s.hangers || 0}</div><div class="mshift-rate">${s.hangersPerHour || 0}/hr</div></div></div>`;
-  }).join('') || '<div class="empty">No shifts in this period</div>';
+    const name = emp ? (emp.name || emp.email) : (s.userName || 'Former member');
+    const walked = s.trailMeters ? ` · ${(s.trailMeters / 1609.34).toFixed(1)} mi walked` : '';
+    const row = document.createElement('div'); row.className = 'mshift-row'; if (s.trail) row.style.cursor = 'pointer';
+    row.innerHTML = `<div><div class="mshift-name">${esc(name)}</div><div class="mshift-date">${new Date(s.clockIn).toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' })} · ${formatTime(s.clockIn)}–${formatTime(s.clockOut || s.clockIn)} · ${formatDuration(s.durationMs || 0)}${s.forCompanyName ? ' · for ' + esc(s.forCompanyName) : ''}</div><div class="mshift-date">${s.trail ? `🗺️ See the walk${walked}` : 'No GPS walk saved'}</div></div><div><div class="mshift-hangers">${num(s.hangers)}</div><div class="mshift-rate">${num(s.hangersPerHour)}/hr</div></div>`;
+    if (s.trail) row.addEventListener('click', () => showCrewPath({ ...s, userName: name }));
+    wrap.appendChild(row);
+  });
 }
 
 // ── Doorline Hangers ──────────────────────────────────────
@@ -2620,7 +3042,7 @@ $('work-chip').addEventListener('click', openShifts);
 
 async function checkAdmin() {
   try { isAdminUser = (await getDoc(doc(db, 'admins', myUid()))).exists(); } catch (e) { isAdminUser = false; }
-  if (profile) $('menu-doorline').style.display = $('menu-crewshifts').style.display = isAdminUser && !isClient() ? 'flex' : 'none';
+  if (profile) $('menu-doorline').style.display = $('menu-crewshifts').style.display = $('menu-companies').style.display = isAdminUser && !isClient() ? 'flex' : 'none';
 }
 
 // Routes: zip codes and drawn neighborhoods the client wants hung, in settings/areas
@@ -2664,8 +3086,10 @@ function renderAreas() {
   areas.forEach(a => {
     const layer = areaLayer(a);
     if (!layer) { if (a.kind === 'zip') loadZipShape(a.zip); return; }
+    if ((a.assignees || []).includes(myUid()) && layer.setStyle) layer.setStyle({ weight: 4, fillOpacity: 0.12 });
     layer.addTo(map);
-    const label = L.divIcon({ html: `<div style="background:${AREA_COLOR};color:#fff;padding:3px 8px;border-radius:10px;font-size:11px;font-weight:700;white-space:nowrap">${esc(a.name)}</div>`, className: '', iconAnchor: [0, 0] });
+    const names = isClient() ? [] : assigneeNames(a);
+    const label = L.divIcon({ html: `<div style="background:${AREA_COLOR};color:#fff;padding:3px 8px;border-radius:10px;font-size:11px;font-weight:700;white-space:nowrap">${esc(a.name)}${names.length ? ' · ' + esc(names.join(', ')) : ''}</div>`, className: '', iconAnchor: [0, 0] });
     areaLayers.push(layer, L.marker(layer.getBounds().getCenter(), { icon: label, interactive: false }).addTo(map));
   });
 }
@@ -2712,16 +3136,53 @@ function areaCounts() {
   const list = hangerPins();
   return areas.map(a => list.filter(p => areaHas(a, p)).length);
 }
+// Neighborhoods (regular companies): the owner adds zip codes or draws areas and picks who works
+// each one (`assignees`, uids). Doorline clients use the same list as their "Routes".
+const manageAreas = () => isClient() || (isOwner() && !isClient());
+const assigneeNames = a => (a.assignees || []).map(u => (u === myUid() ? 'you' : (teamNames[u] || 'teammate')).split(' ')[0]);
 function areaRowHtml(a, n, removable) {
+  const houses = areaHouses[a.id];
+  const progress = !isClient() && houses != null ? `${n.toLocaleString()} of ${houses.toLocaleString()} houses hung` : `${n.toLocaleString()} hung`;
+  const who = !isClient() ? (assigneeNames(a).length ? ` · ${esc(assigneeNames(a).join(', '))}` : ' · not assigned yet') : '';
+  const chips = removable && !isClient() ? `<div class="chips a-assign">${Object.entries(teamNames).map(([uid, name]) =>
+    `<button class="chip${(a.assignees || []).includes(uid) ? ' active' : ''}" data-assign="${esc(uid)}">${esc(uid === myUid() ? name + ' (you)' : name)}</button>`).join('') || '<div class="hint">Invite your team first (Account → Team).</div>'}</div>` : '';
   return `<div class="area-row" data-id="${esc(a.id)}"><span class="a-swatch" style="background:${AREA_COLOR}"></span>
-    <div class="a-info"><div class="m-name">${esc(a.name)}</div><div class="m-email">${a.kind === 'zip' ? 'Zip code' : 'Neighborhood'} · ${n.toLocaleString()} hung</div></div>
+    <div class="a-info"><div class="m-name">${esc(a.name)}</div><div class="m-email">${a.kind === 'zip' ? 'Zip code' : 'Neighborhood'} · ${progress}${who}</div>${chips}</div>
     ${removable ? `<button class="m-remove" data-remove="${esc(a.id)}">Remove</button>` : `<div class="a-count">${n.toLocaleString()}</div>`}</div>`;
+}
+// Houses inside an area, from the address tiles (for "84 of 312 houses hung"). Kept per area.
+const areaHouses = {};
+async function countAreaHouses(a) {
+  if (a.id in areaHouses) return;
+  let box;
+  if (a.kind === 'zip') { const z = zipShapes[a.zip]; if (!z) return; box = z.box; }
+  else if (a.points?.length >= 3) { const la = a.points.map(p => p.lat), lo = a.points.map(p => p.lng); box = [Math.min(...la), Math.min(...lo), Math.max(...la), Math.max(...lo)]; }
+  else return;
+  const idx = await addrIndex(); if (!idx) return;
+  const keys = [];
+  for (let ty = Math.floor(box[0] / idx.deg); ty <= Math.floor(box[2] / idx.deg); ty++)
+    for (let tx = Math.floor(box[1] / idx.deg); tx <= Math.floor(box[3] / idx.deg); tx++) if (idx.tiles.has(`${ty}/${tx}`)) keys.push(`${ty}/${tx}`);
+  if (!keys.length || keys.length > 36) return;
+  let count = 0;
+  for (const k of keys) {
+    const houses = await addrTile(k); if (!houses) return;
+    houses.forEach(h => { if (h.lat >= box[0] && h.lat <= box[2] && h.lng >= box[1] && h.lng <= box[3] && areaHas(a, h)) count++; });
+  }
+  areaHouses[a.id] = count;
+  if ($('areas-panel').classList.contains('open')) renderAreaList();
 }
 function wireAreaRows(wrap, panelId) {
   wrap.querySelectorAll('.area-row').forEach(row => row.addEventListener('click', e => {
     const a = areas.find(x => x.id === row.dataset.id); if (!a) return;
+    if (e.target.dataset.assign) {
+      const uid = e.target.dataset.assign, list = new Set(a.assignees || []);
+      list.has(uid) ? list.delete(uid) : list.add(uid);
+      a.assignees = [...list];
+      saveAreas(); renderAreas(); renderAreaList();
+      return;
+    }
     if (e.target.dataset.remove) {
-      if (!confirm(`Remove ${a.name} from your routes?`)) return;
+      if (!confirm(`Remove ${a.name}${isClient() ? ' from your routes' : ''}?`)) return;
       areas = areas.filter(x => x.id !== a.id); saveAreas(); renderAreas(); renderAreaList(); return;
     }
     const b = areaBounds(a); if (!b) { showToast('Still loading that boundary'); return; }
@@ -2729,19 +3190,33 @@ function wireAreaRows(wrap, panelId) {
   }));
 }
 function renderAreaList() {
-  const counts = areaCounts(), wrap = $('area-list');
-  wrap.innerHTML = areas.length ? areas.map((a, i) => areaRowHtml(a, counts[i], true)).join('') : '<div class="empty">No routes yet. Add a zip code or draw a neighborhood.</div>';
+  const counts = areaCounts(), wrap = $('area-list'), manage = manageAreas();
+  const client = isClient(), crewView = isCrewOnly() || (!client && workCids.length);
+  $('areas-title').textContent = client || crewView ? 'Routes' : manage ? 'Neighborhoods' : 'Your neighborhoods';
+  $('areas-hint').textContent = client ? 'Pick the zip codes and neighborhoods you want hung. Doorline Hangers sees them right away.'
+    : crewView ? 'The routes the businesses you hang for picked. Tap one to see it on the map.'
+    : manage ? 'Add a zip code or draw a neighborhood, then tap names to choose who works it. Your canvassers see their neighborhoods on the map.'
+    : 'The neighborhoods your manager gave you. Tap one to see it on the map.';
+  $('areas-add').style.display = manage && !crewView ? 'flex' : 'none';
+  $('areas-list-title').textContent = client || crewView ? 'Routes' : manage ? 'Your neighborhoods' : 'Assigned to you';
+  let order = areas.map((a, i) => i);
+  if (!manage) order.sort((i, j) => ((areas[j].assignees || []).includes(myUid()) ? 1 : 0) - ((areas[i].assignees || []).includes(myUid()) ? 1 : 0));
+  const mine = order.filter(i => (areas[i].assignees || []).includes(myUid()));
+  wrap.innerHTML = !areas.length ? `<div class="empty">${client ? 'No routes yet. Add a zip code or draw a neighborhood.' : manage ? 'No neighborhoods yet. Add a zip code or draw one.' : 'No neighborhoods assigned to you yet.'}</div>`
+    : order.map(i => areaRowHtml(areas[i], counts[i], manage && !crewView)).join('')
+      + (!manage && !mine.length && !crewView ? '<div class="hint" style="margin-top:4px">None assigned to you yet. These are your team’s.</div>' : '');
   wireAreaRows(wrap, 'areas-panel');
+  if (!client) areas.forEach(countAreaHouses);
 }
 function openAreas() { renderAreaList(); $('areas-panel').classList.add('open'); }
 async function addAreaZip() {
   const zip = $('area-zip-input').value.trim();
   if (!/^\d{5}$/.test(zip)) { showToast('Enter a 5-digit zip code'); return; }
-  if (areas.some(a => a.kind === 'zip' && a.zip === zip)) { showToast(`${zip} is already a route`); return; }
+  if (areas.some(a => a.kind === 'zip' && a.zip === zip)) { showToast(`${zip} is already on your list`); return; }
   $('area-zip-input').value = ''; $('area-zip-input').blur();
   areas.push({ id: Date.now().toString(36), kind: 'zip', zip, name: zip, addedAt: Date.now(), addedBy: myUid() });
   saveAreas(); renderAreaList();
-  showToast(`${zip} added`);
+  showToast(isClient() ? `${zip} added` : `${zip} added. Tap names to assign it.`);
   await loadZipShape(zip);
   if (!zipShapes[zip]) showToast(`${zip} is saved, but its boundary didn’t load. It’ll show on the map later.`);
 }
@@ -2909,7 +3384,7 @@ function renderCrewShifts() {
   const wrap = $('crewshifts-list'); wrap.innerHTML = list.length ? '' : '<div class="empty">No shifts in this period</div>';
   list.slice(0, 100).forEach(s => {
     const row = document.createElement('div'); row.className = 'mshift-row'; row.style.cursor = 'pointer';
-    row.innerHTML = `<div style="min-width:0"><div class="mshift-name">${esc(s.userName || 'Unnamed')}</div><div class="mshift-date">${new Date(s.clockIn).toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' })} · ${formatTime(s.clockIn)}–${formatTime(s.clockOut || s.clockIn)} · ${formatDuration(s.durationMs || 0)}</div><div class="mshift-date">For ${esc(s.clients.join(' + '))}${s.trailMeters ? ` · ${(s.trailMeters / 1609.34).toFixed(1)} mi walked` : ''}</div></div><div><div class="mshift-hangers">${s.hangers || 0}</div><div class="mshift-rate">${s.hangersPerHour || 0}/hr</div></div>`;
+    row.innerHTML = `<div style="min-width:0"><div class="mshift-name">${esc(s.userName || 'Unnamed')}</div><div class="mshift-date">${new Date(s.clockIn).toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' })} · ${formatTime(s.clockIn)}–${formatTime(s.clockOut || s.clockIn)} · ${formatDuration(s.durationMs || 0)}</div><div class="mshift-date">For ${esc(s.clients.join(' + '))}${s.trailMeters ? ` · ${(s.trailMeters / 1609.34).toFixed(1)} mi walked` : ''}</div></div><div><div class="mshift-hangers">${num(s.hangers)}</div><div class="mshift-rate">${num(s.hangersPerHour)}/hr</div></div>`;
     row.addEventListener('click', () => showCrewPath(s));
     wrap.appendChild(row);
   });
@@ -2920,7 +3395,7 @@ function showCrewPath(s) {
   const segs = trailSegments(s.trail);
   if (!segs.length) { showToast('No GPS walk saved for this shift'); return; }
   crewPathLayer = L.polyline(segs, { color: '#f59e0b', weight: 5, opacity: 0.85, interactive: false }).addTo(map);
-  $('crewshifts-panel').classList.remove('open'); $('menu-panel').classList.remove('open');
+  document.querySelectorAll('.panel.open').forEach(p => p.classList.remove('open'));
   map.fitBounds(crewPathLayer.getBounds().pad(0.15));
   showToast(`${s.userName || 'Walk'} · ${formatDate(s.clockIn)} · tap the map to hide`);
 }
@@ -2978,6 +3453,202 @@ async function loadDoorline() {
     render(); wrap.appendChild(box);
   });
 }
+
+// ── Hot leads ─────────────────────────────────────────────
+// A canvasser at a door (friendly homeowner, roof or gutter damage) snaps a photo and sends it to the
+// owner: companies/{cid}/leads/{id} plus the photo (shrunk to ~200 KB) in leadPhotos/{id}, so the
+// list stays light. Firestore holds both until there's signal. The owner gets an email too when the
+// request/lead email script is set up (REQUEST_WEBHOOK, admin/request-email.gs).
+const LEAD_REASONS = { friendly: 'Friendly homeowner', roof: 'Roof damage', gutter: 'Gutter damage', other: 'Other' };
+let leadPinId = null, leadPhoto = null, leadReason = '', leads = [], leadPhotoCache = {}, unsubLeads = null, leadsLoaded = false;
+const leadCompany = () => workCids.length ? (crewJobs.find(j => j.id === workId()) || {}) : company;
+function openLead(id) {
+  const p = pins[id]; if (!p || !workId() || isClient()) return;
+  keepDraft(id); if (pins[id] && !pinsBy[workId()]?.[id]) savePin(id, {}); // a lead's house goes on the map
+  leadPinId = id; leadPhoto = null; leadReason = '';
+  $('lead-addr').textContent = p.addr || 'This house';
+  const c = leadCompany();
+  $('lead-to').textContent = `Goes straight to ${c.ownerName ? c.ownerName.split(' ')[0] : 'your manager'}${c.name ? ' at ' + c.name : ''}.`;
+  $('lead-photo-box').classList.remove('has-photo'); $('lead-preview').removeAttribute('src');
+  $('lead-photo-label').textContent = '📷 Take a photo';
+  ['lead-name', 'lead-phone', 'lead-note'].forEach(i => { $(i).value = ''; });
+  document.querySelectorAll('#lead-reasons .chip').forEach(b => b.classList.remove('active'));
+  closeSheet();
+  $('lead-panel').classList.add('open');
+}
+$('sheet-lead').addEventListener('click', () => { if (currentPinId) openLead(currentPinId); });
+document.querySelectorAll('#lead-reasons .chip').forEach(b => b.addEventListener('click', () => {
+  leadReason = b.dataset.r;
+  document.querySelectorAll('#lead-reasons .chip').forEach(x => x.classList.toggle('active', x === b));
+}));
+// Phone photos are several MB: shrink to 1280 px and JPEG so the lead fits in one database record.
+async function shrinkPhoto(file) {
+  let img;
+  try { img = await createImageBitmap(file); }
+  catch (e) { img = await new Promise((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = bad; i.src = URL.createObjectURL(file); }); }
+  const w = img.width, h = img.height, k = Math.min(1, 1280 / Math.max(w, h));
+  const c = document.createElement('canvas'); c.width = Math.round(w * k); c.height = Math.round(h * k);
+  c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+  let q = 0.7, data = c.toDataURL('image/jpeg', q);
+  while (data.length > 700000 && q > 0.3) { q -= 0.15; data = c.toDataURL('image/jpeg', q); }
+  return data;
+}
+$('lead-photo-input').addEventListener('change', async e => {
+  const f = e.target.files && e.target.files[0]; e.target.value = '';
+  if (!f) return;
+  $('lead-photo-label').textContent = 'Getting the photo ready…';
+  try {
+    leadPhoto = await shrinkPhoto(f);
+    $('lead-preview').src = leadPhoto; $('lead-photo-box').classList.add('has-photo');
+  } catch (err) { leadPhoto = null; $('lead-photo-label').textContent = '📷 Couldn’t read that photo. Try again'; }
+});
+$('lead-send').addEventListener('click', async () => {
+  const p = pins[leadPinId], cid = workId();
+  if (!p || !cid) { $('lead-panel').classList.remove('open'); return; }
+  if (!leadReason) { showToast('Pick why it’s hot'); return; }
+  const ref = doc(collection(db, 'companies', cid, 'leads'));
+  const lead = { pinId: leadPinId, addr: p.addr || '', lat: p.lat, lng: p.lng, reason: leadReason, reasonLabel: LEAD_REASONS[leadReason],
+    homeowner: $('lead-name').value.trim(), phone: $('lead-phone').value.trim(), note: $('lead-note').value.trim(),
+    by: myUid(), byName: profile?.name || currentUser?.email || '', at: Date.now(), createdAt: serverTimestamp(), status: 'new', hasPhoto: !!leadPhoto };
+  const batch = writeBatch(db);
+  batch.set(ref, lead);
+  if (leadPhoto) batch.set(doc(db, 'companies', cid, 'leadPhotos', ref.id), { by: myUid(), data: leadPhoto, at: lead.at });
+  batch.commit().catch(e => { console.error(e); showToast('Hot lead couldn’t sync (' + (e.code || 'error') + ')'); });
+  emailLead({ ...lead, id: ref.id }, leadPhoto);
+  $('lead-panel').classList.remove('open');
+  buzz();
+  showToast(navigator.onLine ? '🔥 Hot lead sent' : '🔥 Hot lead saved. It sends when you have signal');
+});
+// The email script looks the lead and the owner's address up in the database itself (it never
+// trusts an address sent to it), so only the ids and the photo go along.
+function emailLead(lead, photo) {
+  if (!REQUEST_WEBHOOK) return;
+  fetch(REQUEST_WEBHOOK, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ action: 'lead', companyId: workId(), id: lead.id, photo: photo || '' }) }).catch(() => {});
+}
+// Owner: every lead, live (and a heads-up when a new one comes in). Canvasser: their own.
+function watchLeads() {
+  if (unsubLeads) { unsubLeads(); unsubLeads = null; }
+  leads = []; leadsLoaded = false;
+  const cid = isCrewOnly() ? null : companyId;
+  $('menu-leads').style.display = cid ? 'flex' : 'none';
+  if (!cid) return;
+  const boss = isOwner();
+  const q = boss ? collection(db, 'companies', cid, 'leads') : query(collection(db, 'companies', cid, 'leads'), where('by', '==', myUid()));
+  unsubLeads = onSnapshot(q, snap => {
+    const fresh = [];
+    snap.docChanges().forEach(ch => { if (ch.type === 'added' && leadsLoaded && !snap.metadata.hasPendingWrites) fresh.push(ch.doc.data()); });
+    leads = []; snap.forEach(d => leads.push({ id: d.id, ...d.data() }));
+    leads.sort((a, b) => (b.at || 0) - (a.at || 0));
+    leadsLoaded = true;
+    const unread = leads.filter(l => l.status === 'new').length;
+    $('menu-leads').textContent = boss ? `🔥 Hot leads${unread ? ` (${unread} new)` : ''}` : '🔥 My hot leads';
+    if (boss && fresh.length) showToast(`🔥 New hot lead from ${(fresh[0].byName || 'your team').split(' ')[0]}: ${fresh[0].addr || ''}`);
+    if ($('leads-panel').classList.contains('open')) renderLeads();
+  }, e => console.warn('leads', e));
+}
+function renderLeads() {
+  const wrap = $('leads-list'), boss = isOwner();
+  $('leads-title').textContent = boss ? 'Hot leads' : 'My hot leads';
+  if (!leads.length) { wrap.innerHTML = `<div class="empty">${boss ? 'No hot leads yet. Your canvassers send them from a house: tap the house, then “Hot lead”.' : 'No hot leads yet. Tap a house, then “Hot lead”.'}</div>`; return; }
+  wrap.innerHTML = '';
+  leads.forEach(l => {
+    const card = document.createElement('div'); card.className = 'box lead-card';
+    const when = l.at ? `${new Date(l.at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}, ${formatTime(l.at)}` : '';
+    const phone = (l.phone || '').replace(/[^\d+]/g, '');
+    card.innerHTML = `${l.hasPhoto ? `<img class="lc-photo" alt="">` : ''}
+      <div class="lc-top"><div><div class="m-name">${esc(l.addr || 'Address unknown')}</div><div class="m-email">${esc(l.reasonLabel || LEAD_REASONS[l.reason] || '')} · ${esc((l.byName || '').split(' ')[0] || 'Teammate')} · ${esc(when)}</div></div>
+      <span class="lc-tag${l.status === 'done' ? ' done' : ''}">${l.status === 'done' ? 'Handled' : 'New'}</span></div>
+      ${l.homeowner || l.phone ? `<div>${esc(l.homeowner || '')}${l.homeowner && l.phone ? ' · ' : ''}${esc(l.phone || '')}</div>` : ''}
+      ${l.note ? `<div class="hint">${esc(l.note)}</div>` : ''}
+      <div class="lc-btns"><button class="secondary-btn" data-act="map">Map</button>${phone ? `<a class="secondary-btn" href="tel:${esc(phone)}">Call</a>` : ''}${boss && l.status !== 'done' ? '<button class="secondary-btn" data-act="done">Mark handled</button>' : ''}</div>`;
+    card.querySelector('[data-act="map"]').addEventListener('click', () => { $('leads-panel').classList.remove('open'); $('menu-panel').classList.remove('open'); map.setView([l.lat, l.lng], 19); });
+    card.querySelector('[data-act="done"]')?.addEventListener('click', () => {
+      updateDoc(doc(db, 'companies', companyId, 'leads', l.id), { status: 'done', doneAt: Date.now(), doneBy: myUid() }).catch(e => showToast('Couldn’t update (' + (e.code || 'error') + ')'));
+    });
+    if (l.hasPhoto) loadLeadPhoto(l.id, card.querySelector('.lc-photo'));
+    wrap.appendChild(card);
+  });
+}
+async function loadLeadPhoto(id, img) {
+  if (!(id in leadPhotoCache)) {
+    try { const d = await getDoc(doc(db, 'companies', companyId, 'leadPhotos', id)); leadPhotoCache[id] = d.exists() ? d.data().data : ''; }
+    catch (e) { leadPhotoCache[id] = ''; }
+  }
+  if (leadPhotoCache[id]) img.src = leadPhotoCache[id]; else img.remove();
+}
+$('menu-leads').addEventListener('click', () => { $('menu-panel').classList.remove('open'); renderLeads(); $('leads-panel').classList.add('open'); });
+
+// ── KnoxCanvas admin: every company ───────────────────────
+// Approve requests, pause and resume teams, and count hangers per month (by the day each door was
+// hung: pins' hangerAt) for invoicing. Only accounts with an admins/{uid} doc can read all companies.
+let adminCompanies = [];
+const COMPANY_ORDER = { pending: 0, active: 1, paused: 2, declined: 3 };
+function monthStarts() {
+  const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(1);
+  const thisMonth = d.getTime(); d.setMonth(d.getMonth() - 1);
+  return { thisMonth, lastMonth: d.getTime() };
+}
+async function openCompanies() {
+  if (!isAdminUser) return;
+  $('menu-panel').classList.remove('open');
+  $('companies-panel').classList.add('open');
+  await loadCompanies();
+}
+async function loadCompanies() {
+  const wrap = $('companies-list');
+  wrap.innerHTML = '<div class="empty">Loading companies…</div>';
+  try {
+    const snap = await getDocs(collection(db, 'companies'));
+    adminCompanies = []; snap.forEach(d => adminCompanies.push({ id: d.id, ...d.data() }));
+  } catch (e) { wrap.innerHTML = `<div class="empty">Couldn’t load companies (${esc(e.code || e.message)})</div>`; return; }
+  renderCompanies();
+  const { thisMonth, lastMonth } = monthStarts();
+  await Promise.all(adminCompanies.map(async c => {
+    try {
+      const pinsCol = collection(db, 'companies', c.id, 'pins');
+      const [a, b] = await Promise.all([
+        getCountFromServer(query(pinsCol, where('hangerAt', '>=', thisMonth))),
+        getCountFromServer(query(pinsCol, where('hangerAt', '>=', lastMonth), where('hangerAt', '<', thisMonth)))]);
+      c._thisMonth = a.data().count; c._lastMonth = b.data().count;
+    } catch (e) { console.warn('count', c.id, e); c._thisMonth = c._lastMonth = null; }
+  }));
+  renderCompanies();
+}
+function renderCompanies() {
+  const wrap = $('companies-list');
+  const list = adminCompanies.slice().sort((a, b) => (COMPANY_ORDER[a.status || 'active'] ?? 9) - (COMPANY_ORDER[b.status || 'active'] ?? 9) || String(a.name || '').localeCompare(String(b.name || '')));
+  if (!list.length) { wrap.innerHTML = '<div class="empty">No companies yet</div>'; return; }
+  const month = new Date().toLocaleDateString('en-US', { month: 'long' });
+  const lastName = new Date(monthStarts().lastMonth).toLocaleDateString('en-US', { month: 'long' });
+  const n = v => v == null ? '…' : Number(v).toLocaleString();
+  wrap.innerHTML = '';
+  list.forEach(c => {
+    const st = c.status || 'active';
+    const actions = { pending: [['active', 'Approve'], ['declined', 'Decline']], active: [['paused', 'Pause']], paused: [['active', 'Resume']], declined: [['active', 'Approve']] }[st] || [];
+    const box = document.createElement('div'); box.className = 'box'; box.style.cssText = 'display:flex;flex-direction:column;gap:10px';
+    box.innerHTML = `<div><div class="m-name">${esc(c.name || 'Unnamed')}<span class="status-tag ${esc(st)}">${esc(st)}</span></div>
+      <div class="m-email">${c.doorline ? 'Doorline Hangers client' : 'KnoxCanvas'} · ${esc([c.ownerName, c.phone, c.ownerEmail].filter(Boolean).join(' · ') || 'no contact saved')}</div></div>
+      <div class="trio"><div class="mini hi"><div class="v">${n(c._thisMonth)}</div><div class="l">Hangers in ${esc(month)}</div></div><div class="mini"><div class="v">${n(c._lastMonth)}</div><div class="l">In ${esc(lastName)}</div></div><div class="mini"><div class="v">${c.requestedAt?.toDate ? esc(c.requestedAt.toDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })) : '—'}</div><div class="l">Signed up</div></div></div>
+      ${actions.length ? `<div style="display:flex;gap:8px">${actions.map(([s, l]) => `<button class="secondary-btn" data-status="${s}">${l}</button>`).join('')}</div>` : ''}`;
+    box.querySelectorAll('[data-status]').forEach(b => b.addEventListener('click', async () => {
+      const to = b.dataset.status, verb = b.textContent;
+      if ((to === 'paused' || to === 'declined') && !confirm(`${verb} ${c.name || 'this company'}? ${to === 'paused' ? 'Their whole team is locked out until you resume. Nothing is deleted.' : 'They’ll see that the request wasn’t approved.'}`)) return;
+      try {
+        await updateDoc(doc(db, 'companies', c.id), { status: to, statusAt: serverTimestamp(), statusBy: myUid() });
+        c.status = to; renderCompanies(); showToast(`${c.name || 'Company'}: ${to === 'active' ? (st === 'paused' ? 'resumed' : 'approved') : to}`);
+      } catch (e) { showToast('Couldn’t update (' + (e.code || 'error') + ')'); }
+    }));
+    wrap.appendChild(box);
+  });
+}
+$('menu-companies').addEventListener('click', openCompanies);
+$('companies-csv').addEventListener('click', () => {
+  if (!adminCompanies.length) { showToast('Nothing to export yet'); return; }
+  const lines = ['Company,Type,Status,Owner,Email,Phone,Hangers this month,Hangers last month'];
+  adminCompanies.forEach(c => lines.push([c.name, c.doorline ? 'Doorline client' : 'KnoxCanvas', c.status || 'active', c.ownerName, c.ownerEmail, c.phone, c._thisMonth ?? '', c._lastMonth ?? ''].map(csvEsc).join(',')));
+  downloadCsv(lines, `companies_${new Date().toISOString().slice(0, 10)}.csv`); showToast('CSV downloaded');
+});
 
 // ── Zip code overlay ──────────────────────────────────────
 let zipLayers = {}, zipColorIdx = 0;

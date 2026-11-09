@@ -761,9 +761,22 @@ body.is-client #sheet .status-btn,body.is-client #sheet .sheet-row,body.is-clien
         <div class="section-title">By person</div>
         <div id="crewshifts-breakdown" style="display:flex;flex-direction:column;gap:8px"></div>
       </div>
-      <div class="section-title">Shifts <span class="hint" style="text-transform:none;letter-spacing:0">· tap one to see the walk on the map</span></div>
+      <div class="section-title">Shifts <span class="hint" style="text-transform:none;letter-spacing:0">· tap one to see every door and the walk</span></div>
       <div id="crewshifts-list" style="display:flex;flex-direction:column;gap:8px"></div>
       <button class="secondary-btn" id="crewshifts-csv">Download shifts (CSV)</button>
+    </div>
+  </div>
+
+  <!-- KnoxCanvas admin: every door in one crew shift, with when it was marked and when they walked past it -->
+  <div id="shiftdoors-panel" class="panel">
+    <div class="panel-header"><button class="panel-back" data-close="shiftdoors-panel" aria-label="Back"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg></button><h2 id="shiftdoors-title">Shift</h2></div>
+    <div class="panel-body">
+      <div class="hint" id="shiftdoors-sub"></div>
+      <div class="metric-grid" id="shiftdoors-summary"></div>
+      <button class="primary-btn" id="shiftdoors-map">Show walk and doors on the map</button>
+      <div class="hint"><b>Passed at</b> is when their GPS came closest to the house. <b>Marked</b> is when the door hanger was saved: GPS sweep houses are saved together when they tap “Mark as hangers”, so passed at is the better proof they were there.</div>
+      <div id="shiftdoors-list" style="display:flex;flex-direction:column;gap:6px"></div>
+      <button class="secondary-btn" id="shiftdoors-csv">Download this shift’s doors (CSV)</button>
     </div>
   </div>
 
@@ -2949,11 +2962,12 @@ function restoreWork() {
   } catch (e) {}
   workCids = (saved?.works || []).filter(c => c && c !== companyId);
   workNames = saved?.names || {};
+  crewJobs.forEach(j => { workNames[j.id] = j.name || 'Client'; }); // crew-only: already loaded (they opened the app)
   if (isCrewOnly()) {
     workCids = workCids.filter(c => crewJobs.some(j => j.id === c));
     if (!workCids.length && crewJobs.length) workCids = [crewJobs[0].id];
   }
-  renderWorkChip();
+  renderWorkChip(); renderWorkPicker();
 }
 // Clients this person is on the crew for. Live, so a new assignment shows up without a reload.
 function watchCrewJobs() {
@@ -3346,8 +3360,9 @@ async function loadCrewShifts() {
     await Promise.all(clients.map(async c => {
       (await getDocs(collection(db, 'companies', c.id, 'shifts'))).forEach(d => {
         const s = d.data(), key = `${s.userId}|${s.clockIn}`;
-        if (!byKey[key]) byKey[key] = { ...s, clients: [] };
+        if (!byKey[key]) byKey[key] = { ...s, clients: [], clientIds: [] };
         byKey[key].clients.push(c.name || 'Client');
+        byKey[key].clientIds.push(c.id);
       });
     }));
     crewShifts = Object.values(byKey).sort((a, b) => (b.clockIn || 0) - (a.clockIn || 0));
@@ -3385,18 +3400,95 @@ function renderCrewShifts() {
   list.slice(0, 100).forEach(s => {
     const row = document.createElement('div'); row.className = 'mshift-row'; row.style.cursor = 'pointer';
     row.innerHTML = `<div style="min-width:0"><div class="mshift-name">${esc(s.userName || 'Unnamed')}</div><div class="mshift-date">${new Date(s.clockIn).toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' })} · ${formatTime(s.clockIn)}–${formatTime(s.clockOut || s.clockIn)} · ${formatDuration(s.durationMs || 0)}</div><div class="mshift-date">For ${esc(s.clients.join(' + '))}${s.trailMeters ? ` · ${(s.trailMeters / 1609.34).toFixed(1)} mi walked` : ''}</div></div><div><div class="mshift-hangers">${num(s.hangers)}</div><div class="mshift-rate">${num(s.hangersPerHour)}/hr</div></div>`;
-    row.addEventListener('click', () => showCrewPath(s));
+    row.addEventListener('click', () => openShiftDoors(s));
     wrap.appendChild(row);
   });
 }
-// One shift's GPS walk on the map (walked stretches only). Tapping another replaces it.
-function showCrewPath(s) {
+// One shift, door by door. Each door hung by that person between clock-in and clock-out, from
+// every client the shift was for (one entry per house). "Passed at" is the time of the walk's
+// GPS point closest to the house; more than 40 m away counts as not passed.
+const PASS_RADIUS = 40;
+let shiftDoors = { shift: null, doors: [] };
+function trailPoints(trail, clockIn) {
+  return String(trail || '').split(';').map(x => x.split(',').map(Number))
+    .filter(a => a.length >= 2 && isFinite(a[0]) && isFinite(a[1]))
+    .map(a => ({ lat: a[0], lng: a[1], t: isFinite(a[2]) ? clockIn + a[2] * 1000 : null }));
+}
+async function openShiftDoors(s) {
+  shiftDoors = { shift: s, doors: [] };
+  $('shiftdoors-title').textContent = s.userName || 'Shift';
+  $('shiftdoors-sub').textContent = `${formatDate(s.clockIn)} · ${formatTime(s.clockIn)}–${formatTime(s.clockOut || s.clockIn)} · for ${s.clients.join(' + ')}`;
+  $('shiftdoors-summary').innerHTML = '';
+  $('shiftdoors-list').innerHTML = '<div class="empty">Loading doors…</div>';
+  $('shiftdoors-panel').classList.add('open');
+  const end = (s.clockOut || s.clockIn) + 5 * 60000; // a few minutes' grace for a last "Mark as hangers"
+  const byId = {};
+  try {
+    await Promise.all((s.clientIds || []).map(async cid => {
+      (await getDocs(query(collection(db, 'companies', cid, 'pins'), where('hangerBy', '==', s.userId)))).forEach(d => {
+        const p = d.data(), at = p.hangerAt || 0;
+        if (at >= s.clockIn && at <= end && !byId[d.id]) byId[d.id] = { ...p, id: d.id };
+      });
+    }));
+  } catch (e) { $('shiftdoors-list').innerHTML = `<div class="empty">Couldn\u2019t load doors (${esc(e.code || e.message)})</div>`; return; }
+  const pts = trailPoints(s.trail, s.clockIn);
+  const doors = Object.values(byId).map(p => {
+    let best = null, bd = Infinity;
+    for (const q of pts) { const d = distBetween(p, q); if (d < bd) { bd = d; best = q; } }
+    const passed = best && bd <= PASS_RADIUS ? best.t : null;
+    return { ...p, passedAt: passed, passDist: isFinite(bd) ? Math.round(bd) : null };
+  }).sort((a, b) => (a.passedAt || a.hangerAt) - (b.passedAt || b.hangerAt));
+  shiftDoors.doors = doors;
+  const passed = doors.filter(d => d.passedAt).length, gps = doors.filter(d => d.source === 'gps-sweep').length;
+  const card = (v, l, c) => `<div class="metric-card"><div class="mc-val"${c ? ` style="color:${c}"` : ''}>${v}</div><div class="mc-label">${l}</div></div>`;
+  $('shiftdoors-summary').innerHTML = card(doors.length, 'Doors', 'var(--c-hanger)')
+    + card(pts.length ? `${passed}/${doors.length}` : '—', 'Walked past', pts.length && passed < doors.length ? 'var(--c-no)' : 'var(--c-interest)')
+    + card(gps, 'From GPS');
+  const timeS = t => t ? new Date(t).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' }) : '—';
+  const wrap = $('shiftdoors-list'); wrap.innerHTML = doors.length ? '' : '<div class="empty">No door hangers saved in this shift</div>';
+  let prev = null;
+  doors.forEach((d, i) => {
+    const t = d.passedAt || d.hangerAt;
+    if (prev && t - prev >= 10 * 60000) {
+      const gap = document.createElement('div'); gap.className = 'hint'; gap.style.cssText = 'text-align:center;padding:2px 0;color:var(--c-hanger)';
+      gap.textContent = `⏸ ${Math.round((t - prev) / 60000)} min with no doors`; wrap.appendChild(gap);
+    }
+    prev = t;
+    const far = pts.length && !d.passedAt;
+    const row = document.createElement('div'); row.className = 'route-stop'; row.style.cursor = 'pointer';
+    row.innerHTML = `<div class="route-num" style="background:${far ? 'var(--c-no)' : 'var(--c-hanger)'}">${i + 1}</div>
+      <div class="route-addr"><div>${esc(d.addr || 'Unknown address')}</div>
+      <div class="hint" style="margin-top:2px">Passed ${d.passedAt ? timeS(d.passedAt) : far ? `<span style="color:var(--c-no)">— not on the walk (${d.passDist} m away)</span>` : '—'} · Marked ${timeS(d.hangerAt)} · ${d.source === 'gps-sweep' ? 'GPS' : 'Tapped'}</div></div>`;
+    row.addEventListener('click', () => showCrewPath(s, doors, d));
+    wrap.appendChild(row);
+  });
+}
+$('shiftdoors-map').addEventListener('click', () => shiftDoors.shift && showCrewPath(shiftDoors.shift, shiftDoors.doors));
+$('shiftdoors-csv').addEventListener('click', () => {
+  const { shift: s, doors } = shiftDoors; if (!s || !doors.length) { showToast('No doors to export'); return; }
+  const timeS = t => t ? new Date(t).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' }) : '';
+  const lines = ['#,Address,Passed At,Marked At,Source,Meters From Walk,Latitude,Longitude'];
+  doors.forEach((d, i) => lines.push([i + 1, d.addr, timeS(d.passedAt), timeS(d.hangerAt), d.source === 'gps-sweep' ? 'GPS' : 'Tapped', d.passDist ?? '', Number(d.lat).toFixed(6), Number(d.lng).toFixed(6)].map(csvEsc).join(',')));
+  downloadCsv(lines, `shift_${(s.userName || 'crew').replace(/\W+/g, '_')}_${new Date(s.clockIn).toISOString().slice(0, 10)}.csv`); showToast('CSV downloaded');
+});
+
+// One shift's GPS walk on the map (walked stretches only), with its doors numbered in order;
+// doors not on the walk are red. Tapping another shift replaces it; tapping the map hides it.
+function showCrewPath(s, doors = [], focus) {
   if (crewPathLayer) { map.removeLayer(crewPathLayer); crewPathLayer = null; }
   const segs = trailSegments(s.trail);
-  if (!segs.length) { showToast('No GPS walk saved for this shift'); return; }
-  crewPathLayer = L.polyline(segs, { color: '#f59e0b', weight: 5, opacity: 0.85, interactive: false }).addTo(map);
+  if (!segs.length && !doors.length) { showToast('No GPS walk saved for this shift'); return; }
+  crewPathLayer = L.featureGroup();
+  if (segs.length) L.polyline(segs, { color: '#4f6ef7', weight: 5, opacity: 0.8, interactive: false }).addTo(crewPathLayer);
+  doors.forEach((d, i) => {
+    const bg = d.passedAt || !segs.length ? '#f59e0b' : '#ef4444';
+    L.marker([d.lat, d.lng], { interactive: false, icon: L.divIcon({ className: '', iconSize: [24, 24], iconAnchor: [12, 12],
+      html: `<div style="background:${bg};color:#111;border:2px solid #fff;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800">${i + 1}</div>` }) }).addTo(crewPathLayer);
+  });
+  crewPathLayer.addTo(map);
   document.querySelectorAll('.panel.open').forEach(p => p.classList.remove('open'));
-  map.fitBounds(crewPathLayer.getBounds().pad(0.15));
+  if (focus) map.setView([focus.lat, focus.lng], 19);
+  else map.fitBounds(crewPathLayer.getBounds().pad(0.15));
   showToast(`${s.userName || 'Walk'} · ${formatDate(s.clockIn)} · tap the map to hide`);
 }
 $('crewshifts-csv').addEventListener('click', () => {

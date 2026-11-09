@@ -56,7 +56,7 @@ it had already run. The iOS app loads the live URL, so it only picks up changes 
   (TN + NC) are an older fallback that builds 2.0.0 and 2.0.1(2) still use. The sweep detects houses within
   `SWEEP.doorRadius` of each GPS step.
 - Zip overlays: Census TIGERweb, with Overpass as the fallback.
-- **Road tiles** (`docs/roads/v1/`, North Carolina, from U.S. Census TIGER/Line, public domain): the website uses them to fill GPS
+- **Road tiles** (`docs/roads/v1/`, North Carolina + Tennessee, from U.S. Census TIGER/Line 2025, public domain): the website uses them to fill GPS
   gaps when the screen was off (see "Website gap filling" below). Built by `tools/address-tiles/roads.py` from the county
   `tl_YYYY_SS*_roads.zip` files; same 0.05° grid as the address tiles; roads are cut per tile and meet at shared points.
 - Google Sheets: an Apps Script webhook (company setting `sheetsUrl`) receives hanger pins and shifts.

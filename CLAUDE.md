@@ -30,6 +30,9 @@ it had already run. The iOS app loads the live URL, so it only picks up changes 
   email/password plus Google (in the iOS app, Google sign-in runs natively; see GoogleSignIn.swift).
   - `users/{uid}` → `{ name, email, role: owner|employee, companyId, companyName }`
   - `companies/{id}` → `{ name, ownerId, roofCutoff, sheetsUrl, status?, ownerName?, ownerEmail?, phone?, requestedAt?, statusAt?, statusBy?, states?, doorline?, crew?, doorRadius? }`
+    - `managers`: uids of company admins, employees the owner promoted (Team → Make admin). They get the owner's team tools (metrics,
+      every hot lead, invites, removing regular employees, neighborhoods, deleting pins/shifts/photos); company settings, detection
+      distance, who's an admin and deleting the company stay with the owner. Website: `isManager()`, `isBossUser()`; rules: `isManager(cid)`.
     - `doorRadius`: house detection distance (15/20/30/45 m, default 20), set by the owner only (billing is per door).
     - `status`: `pending` (new request) · `active` · `paused` · `declined`. **Missing means active**
       (companies made before approvals). Only an admin can change it.
@@ -186,7 +189,7 @@ yet**. Expect to fix small Swift errors on the first build.
   a Doorline client can't change or remove pins or shifts at all (billed by the door). Shifts: only your own, numbers only.
   Hot leads: canvassers create their own and see only theirs; the owner reads and updates all. Settings: owner only,
   except `neighborhoodYears`. House photos (`pinPhotos`): anyone working adds their own (<900 KB); they, the owner or you delete.
-  154 emulator tests in `rules-test/`.
+  173 emulator tests in `rules-test/`.
 - **Draft pins:** tapping the map makes a pin on that phone only; it's saved when a status, note, year or hot lead is added.
 - **House sheet:** "Hung by Jake · Nov 6" (`pinWho`), 🔥 Hot lead button, Remove only shown to people allowed to remove.
 - **Neighborhoods:** the Areas tab (was Zone; year-built zones moved to Layers for owners). Owners add zips or draw areas and tap

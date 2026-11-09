@@ -19,6 +19,7 @@ button{font-family:inherit}
 button:disabled{opacity:0.55;cursor:default}
 .owner-only{display:none!important}
 body.is-owner .owner-only{display:flex!important}
+body:not(.is-company-owner) .company-owner-only{display:none!important}
 /* Doorline clients (businesses paying Doorline Hangers to hang their door hangers) get a simple view */
 .client-only{display:none!important}
 body.is-client .client-only{display:flex!important}
@@ -289,6 +290,7 @@ body.is-client #sheet .status-btn,body.is-client #sheet .sheet-row,body.is-clien
 .member-row .m-info{flex:1;min-width:0}
 .m-name{font-size:14px;font-weight:600}
 .m-email{font-size:12px;color:var(--text2);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.m-promote{background:transparent;border:1px solid rgba(79,110,247,0.45);color:#8ea2ff;border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;margin-right:6px;white-space:nowrap}
 .m-remove{background:transparent;border:1px solid rgba(239,68,68,0.35);color:#ef4444;border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer}
 .chips{display:flex;gap:8px;flex-wrap:wrap}
 .chip{padding:8px 14px;border-radius:20px;border:1px solid var(--border);background:var(--surface);color:var(--text2);font-size:13px;font-weight:600;cursor:pointer}
@@ -596,8 +598,8 @@ body.is-client #sheet .status-btn,body.is-client #sheet .sheet-row,body.is-clien
       </div>
       <div class="section-title">Team members</div>
       <div id="team-list" style="display:flex;flex-direction:column;gap:8px"></div>
-      <div class="section-title">Company settings</div>
-      <div class="box" style="display:flex;flex-direction:column;gap:12px">
+      <div class="section-title company-owner-only">Company settings</div>
+      <div class="box company-owner-only" style="display:flex;flex-direction:column;gap:12px">
         <div><label class="label" for="set-company-name">Company name</label><input id="set-company-name" class="field" type="text"></div>
         <div><label class="label" for="set-roof-cutoff">Roofing target: homes built in or before</label><input id="set-roof-cutoff" class="field" type="number" inputmode="numeric" placeholder="2012"></div>
         <div><label class="label" for="set-sheets-url">Google Sheets webhook URL (optional)</label><input id="set-sheets-url" class="field" type="url" placeholder="https://script.google.com/macros/s/…/exec" autocapitalize="none"></div>
@@ -624,7 +626,7 @@ body.is-client #sheet .status-btn,body.is-client #sheet .sheet-row,body.is-clien
       </div>
       <div class="section-title">House detection</div>
       <div class="hint" id="door-radius-intro">While you’re clocked in, a house lights up when you get this close to it:</div>
-      <div id="door-radius-row" class="owner-only"><button data-r="15">15 m</button><button data-r="20">20 m</button><button data-r="30">30 m</button><button data-r="45">45 m</button></div>
+      <div id="door-radius-row" class="owner-only company-owner-only"><button data-r="15">15 m</button><button data-r="20">20 m</button><button data-r="30">30 m</button><button data-r="45">45 m</button></div>
       <div class="hint" id="door-radius-hint"></div>
       <div class="section-title">Shift history</div>
       <div id="shifts-history" style="display:flex;flex-direction:column;gap:10px"></div>
@@ -914,6 +916,10 @@ let workCids = [], workNames = {}, crewJobs = [], isAdminUser = false;
 let areas = [], areaLayers = [], zipShapes = {}, pathLayers = [], pathsOn = false;
 let drawingForArea = false, setupDoorline = null, unsubJobs = null;
 const isOwner = () => profile?.role === 'owner';
+// A company admin: an employee the owner promoted (companies/{id}.managers). Runs the team like the
+// owner, but company settings, who's an admin and deleting the company stay with the owner.
+const isManager = () => !isOwner() && !!companyId && (company?.managers || []).includes(myUid());
+const isBossUser = () => isOwner() || isManager();
 const isClient = () => !!company?.doorline;
 // Doorline crew who joined with a crew invite belong to no company: they only work the clients
 // they're assigned to (companyId is null, workCids is never empty while they're in the app).
@@ -1172,10 +1178,17 @@ function watchCompany(cid) {
   if (unsubCompany) unsubCompany();
   unsubCompany = onSnapshot(doc(db, 'companies', cid), snap => {
     if (!snap.exists() || cid !== companyId) return;
-    const was = companyStatus();
+    const was = companyStatus(), wasBoss = isBossUser();
     company = { ...company, ...snap.data() };
     const now = companyStatus();
-    if (was === now) return;
+    if (was === now) {
+      // Promoted to (or no longer) company admin: owner tools appear or go away right away.
+      if (wasBoss !== isBossUser() && now === 'active') {
+        document.body.classList.toggle('is-owner', isBossUser()); renderDoorRadius(); watchLeads();
+        showToast(isBossUser() ? 'You’re now an admin for ' + (company.name || 'your company') : 'You’re no longer an admin');
+      }
+      return;
+    }
     if (now === 'active') { enterApp(); return; }
     // Paused (or otherwise locked) mid-session: stop everything, keep the shift and trail on this device.
     const user = currentUser;
@@ -1193,7 +1206,8 @@ $('locked-startover').addEventListener('click', async () => {
 function enterApp() {
   showScreen('app-root');
   setTimeout(() => map.invalidateSize(), 60);
-  document.body.classList.toggle('is-owner', isOwner());
+  document.body.classList.toggle('is-owner', isBossUser());
+  document.body.classList.toggle('is-company-owner', isOwner());
   document.body.classList.toggle('is-client', isClient());
   $('areas-tab-label').textContent = isClient() ? 'Routes' : 'Areas'; $('areas-btn').setAttribute('aria-label', isClient() ? 'Routes' : 'Areas');
   restoreWork();
@@ -1242,7 +1256,7 @@ function leaveApp() {
   document.querySelectorAll('.panel.open').forEach(p => p.classList.remove('open'));
   profile = null; companyId = null; company = {}; neighborhoodYears = []; shifts = [];
   didInitialView = false;
-  document.body.classList.remove('is-owner', 'is-client');
+  document.body.classList.remove('is-owner', 'is-company-owner', 'is-client');
   updateStats();
 }
 
@@ -1486,7 +1500,7 @@ function pinWho(p) {
   return p.createdBy ? `Added by ${personName(p.createdBy)}${when(p.createdAt || p.ts)}` : '';
 }
 // Same as the database rules: the owner, you (admin), or whoever placed the pin.
-function canRemovePin(p) { return !p._draft && (isAdminUser || (isOwner() && !isClient()) || p.createdBy === myUid()); }
+function canRemovePin(p) { return !p._draft && (isAdminUser || (isBossUser() && !isClient() && !workCids.length) || p.createdBy === myUid()); }
 $('overlay').addEventListener('click', closeSheet);
 $('sheet-close').addEventListener('click', closeSheet);
 
@@ -2858,7 +2872,7 @@ async function fetchMembers() {
   return list.sort((a, b) => (a.role === 'owner' ? -1 : 1) - (b.role === 'owner' ? -1 : 1) || String(a.name).localeCompare(String(b.name)));
 }
 async function openTeam() {
-  if (!isOwner()) return;
+  if (!isBossUser()) return;
   $('team-panel').classList.add('open');
   $('set-company-name').value = company.name || '';
   $('set-roof-cutoff').value = roofCutoff();
@@ -2869,12 +2883,32 @@ async function openTeam() {
     $('team-list').innerHTML = '';
     members.forEach(m => {
       const row = document.createElement('div'); row.className = 'member-row';
-      row.innerHTML = `<div class="m-info"><div class="m-name">${esc(m.name || 'Unnamed')}${m.uid === myUid() ? ' (you)' : ''}</div><div class="m-email">${esc(m.email)} · ${esc(m.role)}</div></div>`;
-      if (m.role === 'employee') {
+      const admin = (company.managers || []).includes(m.uid);
+      const roleLabel = m.role === 'owner' ? 'owner' : admin ? 'admin' : m.role;
+      row.innerHTML = `<div class="m-info"><div class="m-name">${esc(m.name || 'Unnamed')}${m.uid === myUid() ? ' (you)' : ''}</div><div class="m-email">${esc(m.email)} · ${esc(roleLabel)}</div></div>`;
+      // Owner: promote an employee to company admin, or take it back.
+      if (m.role === 'employee' && isOwner()) {
+        const pr = document.createElement('button'); pr.className = 'm-promote'; pr.textContent = admin ? 'Remove admin' : 'Make admin';
+        pr.addEventListener('click', async () => {
+          const on = !(company.managers || []).includes(m.uid);
+          if (on && !confirm(`Make ${m.name || m.email} an admin? They'll see team metrics and every hot lead, invite and remove employees, assign neighborhoods and delete pins. Company settings stay with you.`)) return;
+          try {
+            await updateDoc(doc(db, 'companies', companyId), { managers: on ? arrayUnion(m.uid) : arrayRemove(m.uid) });
+            company.managers = on ? [...(company.managers || []), m.uid] : (company.managers || []).filter(u => u !== m.uid);
+            openTeam(); showToast(on ? `${m.name || 'They'} can now manage the team` : `${m.name || 'They'} is back to a regular employee`);
+          } catch (e) { showToast('Couldn\u2019t save (' + (e.code || 'error') + ')'); }
+        });
+        row.appendChild(pr);
+      }
+      // The owner removes anyone; an admin removes regular employees (not other admins).
+      if (m.role === 'employee' && m.uid !== myUid() && (isOwner() || !admin)) {
         const rm = document.createElement('button'); rm.className = 'm-remove'; rm.textContent = 'Remove';
         rm.addEventListener('click', async () => {
           if (!confirm(`Remove ${m.name || m.email} from your team? They'll lose access to your company's data.`)) return;
-          try { await deleteDoc(doc(db, 'users', m.uid)); row.remove(); showToast('Removed'); }
+          try {
+            await deleteDoc(doc(db, 'users', m.uid)); row.remove(); showToast('Removed');
+            if (admin && isOwner()) updateDoc(doc(db, 'companies', companyId), { managers: arrayRemove(m.uid) }).catch(() => {});
+          }
           catch (e) { showToast('Couldn\u2019t remove (' + (e.code || 'error') + ')'); }
         });
         row.appendChild(rm);
@@ -2889,7 +2923,7 @@ function makeInviteCode() {
   return Array.from(bytes, b => chars[b % chars.length]).join('');
 }
 $('gen-invite-btn').addEventListener('click', async () => {
-  if (!isOwner()) return;
+  if (!isBossUser()) return;
   busy($('gen-invite-btn'), true, 'Generating…');
   try {
     const code = makeInviteCode();
@@ -2962,7 +2996,7 @@ function getRangeMs(range) {
   return 0;
 }
 async function openMetrics() {
-  if (!isOwner()) return;
+  if (!isBossUser()) return;
   $('metrics-panel').classList.add('open');
   await loadMetrics();
 }
@@ -3227,7 +3261,7 @@ function areaCounts() {
 }
 // Neighborhoods (regular companies): the owner adds zip codes or draws areas and picks who works
 // each one (`assignees`, uids). Doorline clients use the same list as their "Routes".
-const manageAreas = () => isClient() || (isOwner() && !isClient());
+const manageAreas = () => isClient() || (isBossUser() && !isClient());
 const assigneeNames = a => (a.assignees || []).map(u => (u === myUid() ? 'you' : (teamNames[u] || 'teammate')).split(' ')[0]);
 function areaRowHtml(a, n, removable) {
   const houses = areaHouses[a.id];
@@ -3700,7 +3734,7 @@ function watchLeads() {
   const cid = isCrewOnly() ? null : companyId;
   $('menu-leads').style.display = cid ? 'flex' : 'none';
   if (!cid) return;
-  const boss = isOwner();
+  const boss = isBossUser();
   const q = boss ? collection(db, 'companies', cid, 'leads') : query(collection(db, 'companies', cid, 'leads'), where('by', '==', myUid()));
   unsubLeads = onSnapshot(q, snap => {
     const fresh = [];
@@ -3715,7 +3749,7 @@ function watchLeads() {
   }, e => console.warn('leads', e));
 }
 function renderLeads() {
-  const wrap = $('leads-list'), boss = isOwner();
+  const wrap = $('leads-list'), boss = isBossUser();
   $('leads-title').textContent = boss ? 'Hot leads' : 'My hot leads';
   if (!leads.length) { wrap.innerHTML = `<div class="empty">${boss ? 'No hot leads yet. Your canvassers send them from a house: tap the house, then “Hot lead”.' : 'No hot leads yet. Tap a house, then “Hot lead”.'}</div>`; return; }
   wrap.innerHTML = '';
@@ -3788,7 +3822,7 @@ $('pin-photo-input').addEventListener('change', async e => {
   showToast(navigator.onLine ? '📷 Photo saved' : '📷 Photo saved. It uploads when you have signal');
 });
 // Same as the database rules: whoever took it, the owner of a regular company, or you (admin).
-const canDeletePhoto = ph => !isClient() && (ph.by === myUid() || isAdminUser || (isOwner() && !workCids.length));
+const canDeletePhoto = ph => !isClient() && (ph.by === myUid() || isAdminUser || (isBossUser() && !workCids.length));
 function openPhoto(ph) {
   photoShown = ph;
   $('photo-view-img').src = ph.data;

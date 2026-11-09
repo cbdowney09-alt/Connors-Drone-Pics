@@ -279,6 +279,35 @@ await t('user deletes self (delete account / start over)', assertSucceeds(delete
 await t('owner deletes own company', assertSucceeds(deleteDoc(doc(as('outsider'), 'companies/other'))));
 await t('removed employee CANNOT read pins', assertFails(getDocs(collection(as('emp1'), 'companies/legacy/pins'))));
 
+console.log('Company admins (owner promotes employees)');
+await env.withSecurityRulesDisabled(async ctx => {
+  const db = ctx.firestore();
+  await setDoc(doc(db, 'companies/mco'), { name: 'Mgr Co', ownerId: 'mo', status: 'active' });
+  for (const [u, role] of [['mo', 'owner'], ['mm', 'employee'], ['mm2', 'employee'], ['me1', 'employee'], ['me2', 'employee']]) await setDoc(doc(db, 'users/' + u), { name: u, role, companyId: 'mco' });
+  await setDoc(doc(db, 'companies/mco/pins/5,5'), { status: 'hanger', createdBy: 'me1' });
+  await setDoc(doc(db, 'companies/mco/leads/ML'), { by: 'me1', reason: 'roof' });
+  await setDoc(doc(db, 'companies/mco/shifts/ms'), { userId: 'me1', hangers: 3 });
+});
+await t('employee CANNOT promote themselves', assertFails(updateDoc(doc(as('mm'), 'companies/mco'), { managers: ['mm'] })));
+await t('owner makes an employee admin', assertSucceeds(updateDoc(doc(as('mo'), 'companies/mco'), { managers: ['mm', 'mm2'] })));
+await t('admin CANNOT promote others', assertFails(updateDoc(doc(as('mm'), 'companies/mco'), { managers: ['mm', 'mm2', 'me1'] })));
+await t('admin CANNOT change company settings', assertFails(updateDoc(doc(as('mm'), 'companies/mco'), { name: 'Mine now' })));
+await t('admin reads every hot lead', assertSucceeds(getDocs(collection(as('mm'), 'companies/mco/leads'))));
+await t('regular employee still CANNOT list all leads', assertFails(getDocs(collection(as('me2'), 'companies/mco/leads'))));
+await t('admin marks a lead handled', assertSucceeds(updateDoc(doc(as('mm'), 'companies/mco/leads/ML'), { status: 'done' })));
+await t('admin assigns neighborhoods', assertSucceeds(setDoc(doc(as('mm'), 'companies/mco/settings/areas'), { list: [] })));
+await t('admin deletes a coworker\'s pin', assertSucceeds(deleteDoc(doc(as('mm'), 'companies/mco/pins/5,5'))));
+await t('admin deletes a shift', assertSucceeds(deleteDoc(doc(as('mm'), 'companies/mco/shifts/ms'))));
+await t('admin makes an invite', assertSucceeds(setDoc(doc(as('mm'), 'invites/MGRCODE1'), { companyId: 'mco', companyName: 'Mgr Co', createdBy: 'mm', expiresAt: Timestamp.fromMillis(Date.now() + 86400000) })));
+await t('admin CANNOT remove another admin', assertFails(deleteDoc(doc(as('mm'), 'users/mm2'))));
+await t('admin CANNOT remove the owner', assertFails(deleteDoc(doc(as('mm'), 'users/mo'))));
+await t('admin removes an employee', assertSucceeds(deleteDoc(doc(as('mm'), 'users/me1'))));
+await t('regular employee CANNOT remove anyone', assertFails(deleteDoc(doc(as('me2'), 'users/mm2'))));
+await t('owner removes an admin', assertSucceeds(deleteDoc(doc(as('mo'), 'users/mm2'))));
+await t('owner takes admin away', assertSucceeds(updateDoc(doc(as('mo'), 'companies/mco'), { managers: [] })));
+await t('ex-admin CANNOT read all leads', assertFails(getDocs(collection(as('mm'), 'companies/mco/leads'))));
+await t('ex-admin CANNOT delete pins', assertFails(deleteDoc(doc(as('mm'), 'companies/mco/pins/6,6'))));
+
 console.log(`\n${pass} passed, ${fail} failed`);
 await env.cleanup();
 process.exit(fail ? 1 : 0);

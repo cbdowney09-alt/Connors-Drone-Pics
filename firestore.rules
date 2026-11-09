@@ -15,6 +15,9 @@ rules_version = '2';
 //   change `crew` or `doorline`.
 // - Doorline crew members can also belong to no company at all: they join with a crew invite
 //   (`invites/{code}.crew == true`, made only by an admin) and get `role: 'crew'`, `companyId: ''`.
+// - Company admins: the owner can promote employees (`companies/{id}.managers`, uids). They run the team
+//   like the owner (metrics, every hot lead, invites, removing employees, neighborhoods, deleting pins) but
+//   can't change the company doc (settings, who's an admin) or remove another admin.
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -30,15 +33,17 @@ service cloud.firestore {
     function isActive(cid) { return companyDoc(cid).get('status', 'active') == 'active'; }
     function ownsCompany(cid) { return signedIn() && companyDoc(cid).ownerId == me(); }
     function onCrew(cid) { return signedIn() && me() in companyDoc(cid).get('crew', []); }
+    // A company admin: an employee the owner promoted. Leaving the company ends it (inCompany).
+    function isManager(cid) { return inCompany(cid) && me() in companyDoc(cid).get('managers', []); }
     function isDoorline(cid) { return companyDoc(cid).get('doorline', false) == true; }
     // Can see the company's map, shifts and settings.
     function canRead(cid) { return isAdmin() || ((inCompany(cid) || onCrew(cid)) && isActive(cid)); }
     // Can mark doors and save shifts. A Doorline client only looks: their crew does the work
     // (and the client is billed by the door, so they must not be able to change the count).
     function canWork(cid) { return isAdmin() || (isActive(cid) && (onCrew(cid) || (inCompany(cid) && !isDoorline(cid)))); }
-    function isBoss(cid) { return isAdmin() || (ownsCompany(cid) && isActive(cid)); }
-    // Can remove pins and shifts: you, or the owner of a regular (non-Doorline) company.
-    function canRemove(cid) { return isAdmin() || (ownsCompany(cid) && isActive(cid) && !isDoorline(cid)); }
+    function isBoss(cid) { return isAdmin() || ((ownsCompany(cid) || isManager(cid)) && isActive(cid)); }
+    // Can remove pins and shifts: you, or the owner or an admin of a regular (non-Doorline) company.
+    function canRemove(cid) { return isAdmin() || ((ownsCompany(cid) || isManager(cid)) && isActive(cid) && !isDoorline(cid)); }
 
     // ── Admins: only readable by themselves; created by hand in the console ──
     match /admins/{uid} {
@@ -82,9 +87,12 @@ service cloud.firestore {
         && request.resource.data.get('role', '') == resource.data.get('role', '')
         && request.resource.data.get('companyId', '') == resource.data.get('companyId', ''));
 
-      // Yourself (delete account / start over), the owner removing an employee, or an admin.
+      // Yourself (delete account / start over), the owner (or a company admin) removing an employee,
+      // or an admin. A company admin can't remove another company admin.
       allow delete: if isAdmin() || (signedIn() && (me() == uid
-        || (resource.data.get('role', '') == 'employee' && ownsCompany(resource.data.get('companyId', '')))));
+        || (resource.data.get('role', '') == 'employee' && ownsCompany(resource.data.get('companyId', '')))
+        || (resource.data.get('role', '') == 'employee' && isManager(resource.data.get('companyId', ''))
+          && !(uid in companyDoc(resource.data.get('companyId', '')).get('managers', [])))));
     }
 
     // ── Companies ──
@@ -101,9 +109,10 @@ service cloud.firestore {
         && !exists(/databases/$(database)/documents/users/$(me()))
         && getAfter(/databases/$(database)/documents/users/$(me())).data.companyId == cid;
 
-      // Admin: anything (approve, pause, resume, decline, crew). Owner: settings and states only, never status.
+      // Admin: anything (approve, pause, resume, decline, crew). Owner: settings, states and company admins
+      // (`managers`), never status.
       allow update: if isAdmin() || (signedIn() && resource.data.ownerId == me()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'sheetsUrl', 'roofCutoff', 'states', 'doorRadius']));
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'sheetsUrl', 'roofCutoff', 'states', 'doorRadius', 'managers']));
 
       allow delete: if isAdmin() || (signedIn() && resource.data.ownerId == me());
 
@@ -177,7 +186,7 @@ service cloud.firestore {
       allow create: if signedIn() && request.resource.data.createdBy == me() && (
         (request.resource.data.get('crew', false) != true
           && request.resource.data.companyId is string
-          && ownsCompany(request.resource.data.companyId)
+          && (ownsCompany(request.resource.data.companyId) || isManager(request.resource.data.companyId))
           && isActive(request.resource.data.companyId))
         ||
         // Doorline crew invite: admins only.

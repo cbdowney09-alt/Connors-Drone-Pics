@@ -92,6 +92,8 @@ Pin statuses (keep these five; exports and Sheets depend on them):
   target mode switch, and zip boundaries.
 - **Pins:** `L.circleMarker` dots on a shared canvas renderer (`pinRenderer`), sized by zoom.
   Use `setStyle`, not `setIcon`.
+  Zoomed out (≥1 m per pixel, below about zoom 17) they're grouped like the iPhone app: pins sharing a 56 px grid square become
+  a count bubble colored by the most common status (`recluster()`, `clusterLayer`); tap zooms in. Call `reclusterSoon()` after adding or removing markers.
 - **Preview harness:** render with Playwright using stubbed Firebase modules. Check at 390×844
   before shipping UI changes.
 

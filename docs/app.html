@@ -156,6 +156,7 @@ body.is-client #tabbar{grid-template-columns:repeat(4,1fr)}
 #sheet-who:empty{display:none}
 #sheet-lead{background:#dc2626;border:none;color:#fff;font-size:16px;font-weight:700;padding:15px;margin-top:12px}
 body.is-client #sheet-lead,body.is-client #sheet-who{display:none}
+#map .pin-cluster{width:34px;height:34px;border-radius:50%;border:2px solid #fff;box-sizing:border-box;display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:800;text-shadow:0 1px 2px rgba(0,0,0,0.55);box-shadow:0 1px 4px rgba(0,0,0,0.35);cursor:pointer}
 #sheet-photos{display:flex;gap:8px;margin:10px 20px 0;overflow-x:auto;-webkit-overflow-scrolling:touch}
 #sheet-photos:empty{display:none}
 #sheet-photos img{flex:0 0 auto;width:76px;height:76px;object-fit:cover;border-radius:10px;background:var(--surface2);cursor:pointer}
@@ -1223,7 +1224,7 @@ async function loadTeamNames() {
 function leaveApp() {
   unsubPins.forEach(u => u()); unsubPins = []; pinsBy = {};
   if (unsubCompany) { unsubCompany(); unsubCompany = null; }
-  Object.values(markers).forEach(m => map.removeLayer(m)); markers = {}; pins = {};
+  Object.values(markers).forEach(m => map.removeLayer(m)); markers = {}; pins = {}; reclusterSoon();
   zonePolygonLayers.forEach(l => map.removeLayer(l)); zonePolygonLayers = [];
   areaLayers.forEach(l => map.removeLayer(l)); areaLayers = []; areas = [];
   pathLayers.forEach(l => map.removeLayer(l)); pathLayers = []; pathsOn = false; $('paths-btn').classList.remove('active');
@@ -1268,7 +1269,7 @@ function mergePin(id) {
   let best = null;
   workIds().forEach(cid => { const p = pinsBy[cid]?.[id]; if (p && (!best || (p.ts || 0) >= (best.ts || 0))) best = p; });
   if (best) { pins[id] = { ...best, id }; addOrUpdateMarker(id); }
-  else { if (markers[id]) { map.removeLayer(markers[id]); delete markers[id]; } delete pins[id]; }
+  else { if (markers[id]) { map.removeLayer(markers[id]); delete markers[id]; } delete pins[id]; reclusterSoon(); }
 }
 function subscribePins() {
   unsubPins.forEach(u => u()); unsubPins = []; pinsBy = {};
@@ -1373,14 +1374,66 @@ function pinStyle(status) {
 }
 function addOrUpdateMarker(id) {
   const p = pins[id]; if (!p) return;
-  if (hiddenStatuses.has(p.status)) { if (markers[id]) { map.removeLayer(markers[id]); delete markers[id]; } return; }
-  if (markers[id]) { markers[id].setStyle(pinStyle(p.status)); return; }
+  if (hiddenStatuses.has(p.status)) { if (markers[id]) { map.removeLayer(markers[id]); delete markers[id]; } reclusterSoon(); return; }
+  if (markers[id]) { markers[id].setStyle(pinStyle(p.status)); reclusterSoon(); return; }
   const m = L.circleMarker([p.lat, p.lng], pinStyle(p.status));
   m.on('click', () => openSheet(id));
-  m.addTo(map); markers[id] = m;
+  m._pinId = id; markers[id] = m;
+  reclusterSoon();
 }
+// Same as the iPhone app: zoomed out, pins that share a grid square (about 56 px across) become one
+// count bubble, colored by the most common status inside; tapping it zooms in. From street level
+// in (under ~1 m per pixel, about zoom 17) every pin shows. The pin being looked at and a just-tapped
+// draft always show on their own.
+const CLUSTER_PX = 56;
+const clusterLayer = L.layerGroup().addTo(map);
+let reclusterQueued = false;
+function reclusterSoon() {
+  if (reclusterQueued) return;
+  reclusterQueued = true;
+  requestAnimationFrame(() => { reclusterQueued = false; recluster(); });
+}
+function recluster() {
+  clusterLayer.clearLayers();
+  const z = map.getZoom(), c = map.getCenter();
+  const metersPerPx = 40075016.686 * Math.cos(c.lat * Math.PI / 180) / Math.pow(2, z + 8);
+  const ids = Object.keys(markers);
+  if (metersPerPx < 1) { ids.forEach(id => { if (!map.hasLayer(markers[id])) markers[id].addTo(map); }); return; }
+  // Pins a little past the edges too, so a short pan doesn't show empty space.
+  const area = map.getBounds().pad(0.5), cells = {};
+  ids.forEach(id => {
+    const m = markers[id], p = pins[id], ll = m.getLatLng();
+    if (!area.contains(ll) || !p) { if (map.hasLayer(m)) map.removeLayer(m); return; }
+    if (p._draft || id === currentPinId) { if (!map.hasLayer(m)) m.addTo(map); return; }
+    const pt = map.project(ll, z), key = Math.floor(pt.x / CLUSTER_PX) + ':' + Math.floor(pt.y / CLUSTER_PX);
+    (cells[key] = cells[key] || []).push(id);
+  });
+  Object.values(cells).forEach(members => {
+    if (members.length === 1) { const m = markers[members[0]]; if (!map.hasLayer(m)) m.addTo(map); return; }
+    const tally = {}; let lat = 0, lng = 0;
+    const bounds = L.latLngBounds([]);
+    members.forEach(id => {
+      const m = markers[id], ll = m.getLatLng(), st = pins[id].status;
+      if (map.hasLayer(m)) map.removeLayer(m);
+      tally[st] = (tally[st] || 0) + 1; lat += ll.lat; lng += ll.lng; bounds.extend(ll);
+    });
+    const top = Object.keys(tally).sort((a, b) => tally[b] - tally[a] || a.localeCompare(b))[0], n = members.length;
+    const label = n > 999 ? '999+' : String(n);
+    const icon = L.divIcon({ className: '', iconSize: [34, 34], iconAnchor: [17, 17],
+      html: `<div class="pin-cluster" style="background:${COLORS[top] || COLORS.none}">${label}</div>` });
+    const cm = L.marker([lat / n, lng / n], { icon, keyboard: false, bubblingMouseEvents: false });
+    cm.on('click', e => {
+      if (e.originalEvent) L.DomEvent.stopPropagation(e.originalEvent);
+      // Zoom to the bubble's pins, at least far enough in that they split apart.
+      const zz = Math.max(map.getBoundsZoom(bounds, false, L.point(80, 310)), z + 2);
+      map.setView(bounds.getCenter(), Math.min(zz, 18));
+    });
+    clusterLayer.addLayer(cm);
+  });
+}
+map.on('moveend zoomend', reclusterSoon);
 function renderAllMarkers() {
-  Object.values(markers).forEach(m => map.removeLayer(m)); markers = {};
+  Object.values(markers).forEach(m => map.removeLayer(m)); markers = {}; reclusterSoon();
   Object.keys(pins).forEach(addOrUpdateMarker); updateStats();
 }
 function updateStats() {
@@ -1421,7 +1474,7 @@ function openSheet(id) {
 }
 function closeSheet() {
   const id = currentPinId;
-  $('sheet').classList.remove('open'); $('overlay').classList.remove('visible'); currentPinId = null;
+  $('sheet').classList.remove('open'); $('overlay').classList.remove('visible'); currentPinId = null; reclusterSoon();
   if (id) dropDraft(id); // tapped the map but recorded nothing
 }
 // "Hung by Jake · Nov 6, 2:14 PM"
@@ -1491,7 +1544,7 @@ $('sheet-delete').addEventListener('click', () => {
   if (!currentPinId) return;
   const id = currentPinId;
   if (markers[id]) map.removeLayer(markers[id]);
-  delete markers[id]; delete pins[id];
+  delete markers[id]; delete pins[id]; reclusterSoon();
   updateStats(); closeSheet(); showToast('Pin removed');
   deletePinFromDb(id);
   syncToSheets('delete', null, id);
@@ -1528,7 +1581,7 @@ function keepDraft(id) {
 function dropDraft(id) {
   if (!pins[id]?._draft) return;
   if (markers[id]) map.removeLayer(markers[id]);
-  delete markers[id]; delete pins[id];
+  delete markers[id]; delete pins[id]; reclusterSoon();
   updateStats();
 }
 map.on('click', e => {
@@ -3026,7 +3079,7 @@ function setWork(cids) {
   workCids = cids.filter(c => c !== companyId);
   if (isCrewOnly() && !workCids.length && crewJobs.length) workCids = [crewJobs[0].id];
   try { localStorage.setItem(workKey(), JSON.stringify({ works: workCids, names: workNames })); } catch (e) {}
-  Object.values(markers).forEach(m => map.removeLayer(m)); markers = {}; pins = {};
+  Object.values(markers).forEach(m => map.removeLayer(m)); markers = {}; pins = {}; reclusterSoon();
   pathLayers.forEach(l => map.removeLayer(l)); pathLayers = []; pathsOn = false;
   closeSheet(); clearRoute(true);
   didInitialView = false; neighborhoodYears = []; renderZonePolygons();

@@ -156,6 +156,18 @@ body.is-client #tabbar{grid-template-columns:repeat(4,1fr)}
 #sheet-who:empty{display:none}
 #sheet-lead{background:#dc2626;border:none;color:#fff;font-size:16px;font-weight:700;padding:15px;margin-top:12px}
 body.is-client #sheet-lead,body.is-client #sheet-who{display:none}
+#sheet-photos{display:flex;gap:8px;margin:10px 20px 0;overflow-x:auto;-webkit-overflow-scrolling:touch}
+#sheet-photos:empty{display:none}
+#sheet-photos img{flex:0 0 auto;width:76px;height:76px;object-fit:cover;border-radius:10px;background:var(--surface2);cursor:pointer}
+#sheet-photo-add{background:var(--surface2);border:1px solid var(--border);color:var(--text);font-size:16px;font-weight:700;padding:15px}
+body.is-client #sheet-photo-add{display:none}
+#photo-view{position:fixed;inset:0;z-index:4000;background:rgba(0,0,0,0.94);display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:calc(16px + env(safe-area-inset-top)) 16px calc(16px + env(safe-area-inset-bottom))}
+#photo-view.open{display:flex}
+#photo-view img{max-width:100%;max-height:calc(100% - 130px);object-fit:contain;border-radius:10px}
+#photo-view-cap{color:#d1d5f0;font-size:14px;text-align:center}
+#photo-view-btns{display:flex;gap:10px;width:100%;max-width:420px}
+#photo-view-btns button{flex:1;min-height:52px;border-radius:12px;font-size:16px;font-weight:700;border:1px solid rgba(255,255,255,0.2);background:#22253a;color:#fff;cursor:pointer}
+#photo-view-del{color:#fca5a5!important}
 body.is-client #sheet .status-btn,body.is-client #sheet .sheet-row,body.is-client #sheet-set-start,body.is-client #sheet-delete,body.is-client #zillow-btn{display:none}
 
 /* Layers panel / banners */
@@ -461,6 +473,9 @@ body.is-client #sheet .status-btn,body.is-client #sheet .sheet-row,body.is-clien
     <button class="status-btn" data-status="no"><span class="swatch" style="background:var(--c-no)"></span>Spoke to someone — not interested<span class="check">✓</span></button>
     <button class="status-btn" data-status="dnr"><span class="swatch" style="background:var(--c-dnr)"></span>Do not return / skip<span class="check">✓</span></button>
     <button class="sheet-btn" id="sheet-lead">🔥 Hot lead · snap a photo</button>
+    <button class="sheet-btn" id="sheet-photo-add">📷 Add a photo</button>
+    <input id="pin-photo-input" type="file" accept="image/*" capture="environment" style="display:none">
+    <div id="sheet-photos"></div>
     <div class="sheet-row"><textarea id="sheet-note" class="field" rows="2" placeholder="Add a note (optional)…"></textarea></div>
     <div class="sheet-row">
       <input id="sheet-year" class="field" type="number" inputmode="numeric" placeholder="Year built (e.g. 1998)" min="1800" max="2100">
@@ -469,6 +484,12 @@ body.is-client #sheet .status-btn,body.is-client #sheet .sheet-row,body.is-clien
     <button class="sheet-btn" id="sheet-set-start">📍 Set as route start</button>
     <button class="sheet-btn" id="sheet-delete">Remove this pin</button>
     <button class="sheet-btn" id="sheet-close">Done</button>
+  </div>
+
+  <div id="photo-view" role="dialog" aria-label="Photo">
+    <img id="photo-view-img" alt="House photo">
+    <div id="photo-view-cap"></div>
+    <div id="photo-view-btns"><button id="photo-view-del">Delete</button><button id="photo-view-close">Close</button></div>
   </div>
 
   <div id="roof-mode-banner">Roofing target mode — zones built in or before <span id="roof-cutoff-label">2012</span></div>
@@ -1395,6 +1416,7 @@ function openSheet(id) {
   $('sheet-who').textContent = p._draft ? '' : pinWho(p);
   $('sheet-delete').style.display = canRemovePin(p) ? '' : 'none';
   markActiveStatus(p.status);
+  loadPinPhotos(id);
   $('sheet').classList.add('open'); $('overlay').classList.add('visible');
 }
 function closeSheet() {
@@ -3669,6 +3691,70 @@ async function loadLeadPhoto(id, img) {
   }
   if (leadPhotoCache[id]) img.src = leadPhotoCache[id]; else img.remove();
 }
+// ── House photos ─────────────────────────────────────────
+// Anyone working a company can add photos to a house: companies/{cid}/pinPhotos/{id} →
+// { pinId, addr, lat, lng, by, byName, at, data } (shrunk like hot lead photos, ~200 KB). A crew
+// hanging for several businesses saves the same photo (same id) to each. Firestore holds it until
+// there's signal. Doorline clients see the photos but can't add or delete them.
+let pinPhotos = [], pinPhotoReq = 0, photoShown = null;
+const pinPhotoCid = id => workIds().find(c => pinsBy[c]?.[id]) || workId();
+async function loadPinPhotos(id) {
+  const req = ++pinPhotoReq; pinPhotos = []; renderPinPhotos();
+  const p = pins[id]; if (!p || p._draft || !workId()) return;
+  const cid = pinPhotoCid(id), list = [];
+  try { (await getDocs(query(collection(db, 'companies', cid, 'pinPhotos'), where('pinId', '==', id)))).forEach(d => list.push({ ...d.data(), id: d.id })); }
+  catch (e) { console.warn('photos', e); }
+  if (req !== pinPhotoReq || currentPinId !== id) return;
+  pinPhotos = list.sort((a, b) => (a.at || 0) - (b.at || 0)); renderPinPhotos();
+}
+function renderPinPhotos() {
+  const wrap = $('sheet-photos'); wrap.innerHTML = '';
+  pinPhotos.forEach(ph => {
+    const img = document.createElement('img'); img.src = ph.data; img.alt = 'House photo'; img.loading = 'lazy';
+    img.addEventListener('click', () => openPhoto(ph));
+    wrap.appendChild(img);
+  });
+  $('sheet-photo-add').textContent = pinPhotos.length ? `📷 Add a photo (${pinPhotos.length})` : '📷 Add a photo';
+}
+$('sheet-photo-add').addEventListener('click', () => { if (currentPinId && workId() && !isClient()) $('pin-photo-input').click(); });
+$('pin-photo-input').addEventListener('change', async e => {
+  const f = e.target.files && e.target.files[0]; e.target.value = '';
+  const id = currentPinId; if (!f || !id || !pins[id]) return;
+  showToast('Getting the photo ready…');
+  let data;
+  try { data = await shrinkPhoto(f); } catch (err) { showToast('Couldn’t read that photo. Try again'); return; }
+  if (!pins[id]) return;
+  keepDraft(id); if (!workIds().every(c => pinsBy[c]?.[id])) savePin(id, {}); // the house goes on the map
+  const ref = doc(collection(db, 'companies', workId(), 'pinPhotos')), p = pins[id];
+  const ph = { pinId: id, addr: p.addr || '', lat: p.lat, lng: p.lng, by: myUid(), byName: profile?.name || currentUser?.email || '', at: Date.now(), data };
+  const batch = writeBatch(db);
+  workIds().forEach(cid => batch.set(doc(db, 'companies', cid, 'pinPhotos', ref.id), ph));
+  batch.commit().catch(e => { console.error(e); setSync('error'); showToast('Photo couldn’t sync (' + (e.code || 'error') + ')'); });
+  if (currentPinId === id) { pinPhotos.push({ ...ph, id: ref.id }); renderPinPhotos(); $('sheet-who').textContent = pinWho(pins[id]); }
+  buzz();
+  showToast(navigator.onLine ? '📷 Photo saved' : '📷 Photo saved. It uploads when you have signal');
+});
+// Same as the database rules: whoever took it, the owner of a regular company, or you (admin).
+const canDeletePhoto = ph => !isClient() && (ph.by === myUid() || isAdminUser || (isOwner() && !workCids.length));
+function openPhoto(ph) {
+  photoShown = ph;
+  $('photo-view-img').src = ph.data;
+  $('photo-view-cap').textContent = `${ph.by === myUid() ? 'You' : ph.byName || 'A teammate'} · ${formatDate(ph.at)}, ${formatTime(ph.at)}`;
+  $('photo-view-del').style.display = canDeletePhoto(ph) ? '' : 'none';
+  $('photo-view').classList.add('open');
+}
+function closePhoto() { $('photo-view').classList.remove('open'); $('photo-view-img').removeAttribute('src'); photoShown = null; }
+$('photo-view-close').addEventListener('click', closePhoto);
+$('photo-view').addEventListener('click', e => { if (e.target.id === 'photo-view') closePhoto(); });
+$('photo-view-del').addEventListener('click', () => {
+  const ph = photoShown; if (!ph || !confirm('Delete this photo?')) return;
+  // Each business that got a copy; one that never did just refuses, which is fine.
+  Promise.allSettled(workIds().map(cid => deleteDoc(doc(db, 'companies', cid, 'pinPhotos', ph.id))))
+    .then(r => { if (r.every(x => x.status === 'rejected')) showToast('Couldn’t delete (' + (r[0].reason?.code || 'error') + ')'); });
+  pinPhotos = pinPhotos.filter(x => x.id !== ph.id); renderPinPhotos(); closePhoto();
+  showToast('Photo deleted');
+});
+
 $('menu-leads').addEventListener('click', () => { $('menu-panel').classList.remove('open'); renderLeads(); $('leads-panel').classList.add('open'); });
 
 // ── KnoxCanvas admin: every company ───────────────────────

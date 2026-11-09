@@ -41,6 +41,8 @@ it had already run. The iOS app loads the live URL, so it only picks up changes 
     (Doorline client routes; for regular companies these are the owner's neighborhoods, `assignees` = uids who work each one)
   - `companies/{id}/leads/{id}` → `{ pinId, addr, lat, lng, reason: friendly|roof|gutter|other, reasonLabel, homeowner, phone, note, by, byName, at, status: new|done, hasPhoto }`
     and `companies/{id}/leadPhotos/{same id}` → `{ by, data: 'data:image/jpeg;base64,…' (~200 KB), at }` (hot leads)
+  - `companies/{id}/pinPhotos/{id}` → `{ pinId, addr, lat, lng, by, byName, at, data: 'data:image/jpeg;base64,…' }` (house photos from
+    the pin sheet, shrunk like hot lead photos; a crew hanging for several businesses saves the same id to each; clients see, can't add/delete)
   - `users/{uid}.activeClockIn` (+ `activeWork`) → the open shift, written by the website and the iPhone app so a dead phone doesn't lose hours
   - Shifts may also have `forCompanyId`, `forCompanyName` (a Doorline crew shift, copied to the crew's own company)
   - `invites/{code}` → one-time join codes, expire in 7 days
@@ -181,7 +183,8 @@ yet**. Expect to fix small Swift errors on the first build.
 - **Rules** (`firestore.rules`): pins can be removed only by the owner of a regular company, you, or whoever placed them;
   a Doorline client can't change or remove pins or shifts at all (billed by the door). Shifts: only your own, numbers only.
   Hot leads: canvassers create their own and see only theirs; the owner reads and updates all. Settings: owner only,
-  except `neighborhoodYears`. 139 emulator tests in `rules-test/`.
+  except `neighborhoodYears`. House photos (`pinPhotos`): anyone working adds their own (<900 KB); they, the owner or you delete.
+  154 emulator tests in `rules-test/`.
 - **Draft pins:** tapping the map makes a pin on that phone only; it's saved when a status, note, year or hot lead is added.
 - **House sheet:** "Hung by Jake · Nov 6" (`pinWho`), 🔥 Hot lead button, Remove only shown to people allowed to remove.
 - **Neighborhoods:** the Areas tab (was Zone; year-built zones moved to Layers for owners). Owners add zips or draw areas and tap

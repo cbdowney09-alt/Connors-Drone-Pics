@@ -138,6 +138,16 @@ service cloud.firestore {
         allow delete: if isBoss(cid);
       }
 
+      // ── House photos: anyone working the company adds them (shrunk to ~200 KB in the browser);
+      // whoever took one, the owner of a regular company, or you can delete it.
+      match /pinPhotos/{phid} {
+        allow read: if canRead(cid);
+        allow create: if canWork(cid) && request.resource.data.by == me()
+          && request.resource.data.pinId is string && request.resource.data.data is string
+          && request.resource.data.data.size() < 900000;
+        allow delete: if canRemove(cid) || (canWork(cid) && resource.data.get('by', '') == me());
+      }
+
       // ── Settings: the owner's (neighborhood assignments and routes in `areas`). Year-built
       // zones (`neighborhoodYears`) can still be saved by anyone working the company.
       match /settings/{sid} {
@@ -150,7 +160,7 @@ service cloud.firestore {
       // every canvasser read every hot lead.)
       match /{coll}/{rest=**} {
         allow read: if canRead(cid) && !(coll in ['leads', 'leadPhotos']);
-        allow write: if isBoss(cid) && !(coll in ['pins', 'shifts', 'leads', 'leadPhotos', 'settings']);
+        allow write: if isBoss(cid) && !(coll in ['pins', 'shifts', 'leads', 'leadPhotos', 'pinPhotos', 'settings']);
       }
     }
 

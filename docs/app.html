@@ -657,7 +657,7 @@ body.is-client #pinarea-draw-btn{display:none}
       <div class="route-status" id="route-start-label"><span id="route-start-text">Tap a pin, then "Set as route start" — or just draw a zone</span></div>
       <div class="route-status" id="route-zone-status"><span id="route-zone-text">No zone drawn</span></div>
       <button class="secondary-btn" id="route-draw-zone-btn">Draw route zone on map</button>
-      <button class="secondary-btn" id="pinarea-draw-btn">📍 Drop pins in an area</button>
+      <button class="secondary-btn" id="pinarea-draw-btn">📍 Drop hangers in an area</button>
       <div class="box" style="padding:4px 14px">
         <div class="option-row"><label for="route-unvisited">Skip houses already visited</label><input type="checkbox" id="route-unvisited" checked></div>
         <div class="option-row" style="border-top:1px solid var(--border)"><label for="route-skip-dnr">Skip do not return</label><input type="checkbox" id="route-skip-dnr" checked></div>
@@ -1785,7 +1785,7 @@ function startDrawing(forRoute, forArea, forPins) {
   $('zone-year-input').style.display = forArea ? 'none' : '';
   $('zone-name-input').placeholder = forArea ? 'Neighborhood name' : 'Zone name';
   $('zone-finish-btn').textContent = forArea ? (isClient() ? '✓ Add route' : '✓ Add neighborhood') : forPins ? '✓ Find houses' : forRoute ? '✓ Use zone' : '✓ Save zone';
-  if (forPins) $('zone-toolbar-title').textContent = 'Outline the houses to pin — tap its corners';
+  if (forPins) $('zone-toolbar-title').textContent = 'Outline the houses you hung — tap its corners';
   updateDrawingLayers();
   map.getContainer().style.cursor = 'crosshair';
 }
@@ -1932,9 +1932,8 @@ $('route-go-btn').addEventListener('click', async () => {
 // ── Drop pins in an area ──────────────────────────────────
 // Like the route planner: outline a block or neighborhood, and every house inside gets a pin in one
 // go. Houses come from our address tiles (/addr/v1/, works offline once cached), else OpenStreetMap.
-// Houses that already have a pin (within 8 m) are left alone. Everyone working can drop "Not visited"
-// pins; marking a whole area as door hangers is for the owner and company admins (clients are billed
-// by the door).
+// Houses that already have a pin (within 8 m) are left alone. They go in as door hangers (counted in
+// the shift like swept ones); "Not visited" is there for planning an area before working it.
 const PINAREA_MAX = 500;
 let pinArea = null; // { poly, houses, existing, status, layer }
 async function tileHousesInPolygon(poly) {
@@ -1957,7 +1956,7 @@ async function findAreaHouses(poly) {
   if (!workId() || isClient()) return;
   const layer = L.featureGroup().addTo(map);
   L.polygon(poly, { color: '#4f6ef7', weight: 2, fillColor: '#4f6ef7', fillOpacity: 0.08, dashArray: '6,4', interactive: false }).addTo(layer);
-  pinArea = { poly, houses: [], existing: 0, status: 'none', layer };
+  pinArea = { poly, houses: [], existing: 0, status: 'hanger', layer };
   $('pinarea-title').textContent = 'Finding houses…'; $('pinarea-sub').textContent = '';
   $('pinarea-status').innerHTML = ''; $('pinarea-yes').disabled = true; $('pinarea-yes').textContent = 'Drop pins';
   $('pinarea-banner').classList.add('show');
@@ -1987,9 +1986,9 @@ async function findAreaHouses(poly) {
     $('pinarea-sub').textContent = existing ? `${existing} house${existing === 1 ? '' : 's'} already pinned.` : `Nothing in ${from} for this outline.`;
     $('pinarea-yes').textContent = 'Nothing to drop'; return;
   }
-  $('pinarea-title').textContent = `${fresh.length} house${fresh.length === 1 ? '' : 's'} to pin`;
+  $('pinarea-title').textContent = `${fresh.length} house${fresh.length === 1 ? '' : 's'} in this area`;
   $('pinarea-sub').textContent = `From ${from}.${existing ? ` ${existing} already ha${existing === 1 ? 's' : 've'} a pin and stay as they are.` : ''}`;
-  const choices = [['none', 'Not visited'], ...(isBossUser() || isAdminUser ? [['hanger', 'Door hanger']] : [])];
+  const choices = [['hanger', 'Door hanger'], ['none', 'Not visited']];
   $('pinarea-status').innerHTML = '';
   if (choices.length > 1) choices.forEach(([st, label]) => {
     const b = document.createElement('button'); b.className = 'chip' + (st === pinArea.status ? ' active' : ''); b.textContent = label;

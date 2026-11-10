@@ -198,7 +198,7 @@ yet**. Expect to fix small Swift errors on the first build.
   email via the Apps Script in `admin/request-email.gs` (`REQUEST_WEBHOOK`), which looks the owner up in Firestore itself.
 - **Drop hangers in an area** (Route panel → 📍): outline a block like a route zone; every house inside (address tiles, else Overpass)
   without a pin within 8 m gets one in a batch (`source: 'area'`, max 500), as a door hanger by default (anyone working;
-  "Not visited" is the other choice). Code: `findAreaHouses`, `dropAreaPins`, `#pinarea-banner`.
+  "Not visited" is the other choice). Marking hangers also turns "Not visited" pins already inside into hangers; other statuses stay. Code: `findAreaHouses`, `dropAreaPins`, `#pinarea-banner`.
 - **Owner tools:** tap a shift in Team metrics to see the walk; set the detection distance in the Shift panel.
 - **Admin (you):** Account → Companies: approve, decline, pause, resume every company and see hangers this month / last month
   (counted by `hangerAt`) for invoicing, with a CSV.

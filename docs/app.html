@@ -1932,8 +1932,9 @@ $('route-go-btn').addEventListener('click', async () => {
 // ── Drop pins in an area ──────────────────────────────────
 // Like the route planner: outline a block or neighborhood, and every house inside gets a pin in one
 // go. Houses come from our address tiles (/addr/v1/, works offline once cached), else OpenStreetMap.
-// Houses that already have a pin (within 8 m) are left alone. They go in as door hangers (counted in
-// the shift like swept ones); "Not visited" is there for planning an area before working it.
+// Houses that already have a pin (within 8 m) get no new one. They go in as door hangers (counted in
+// the shift like swept ones), and "Not visited" pins already inside become hangers too; pins already
+// marked anything else stay as they are. "Not visited" is there for planning an area before working it.
 const PINAREA_MAX = 500;
 let pinArea = null; // { poly, houses, existing, status, layer }
 async function tileHousesInPolygon(poly) {
@@ -1956,7 +1957,7 @@ async function findAreaHouses(poly) {
   if (!workId() || isClient()) return;
   const layer = L.featureGroup().addTo(map);
   L.polygon(poly, { color: '#4f6ef7', weight: 2, fillColor: '#4f6ef7', fillOpacity: 0.08, dashArray: '6,4', interactive: false }).addTo(layer);
-  pinArea = { poly, houses: [], existing: 0, status: 'hanger', layer };
+  pinArea = { poly, houses: [], upgrade: [], kept: 0, status: 'hanger', layer };
   $('pinarea-title').textContent = 'Finding houses…'; $('pinarea-sub').textContent = '';
   $('pinarea-status').innerHTML = ''; $('pinarea-yes').disabled = true; $('pinarea-yes').textContent = 'Drop pins';
   $('pinarea-banner').classList.add('show');
@@ -1978,16 +1979,18 @@ async function findAreaHouses(poly) {
     fresh.push({ ...h, id });
   });
   if (fresh.length > PINAREA_MAX) { showToast(`That’s ${fresh.length} houses. Draw a smaller area (${PINAREA_MAX} at a time)`); clearPinArea(); return; }
-  pinArea.houses = fresh; pinArea.existing = existing;
+  const inside = Object.values(pins).filter(p => !p._draft && pointInPolygon(p.lat, p.lng, poly));
+  const upgrade = inside.filter(p => p.status === 'none').map(p => p.id), kept = inside.length - upgrade.length;
+  pinArea.houses = fresh; pinArea.upgrade = upgrade; pinArea.kept = kept; pinArea.from = from;
+  upgrade.forEach(id => L.circleMarker([pins[id].lat, pins[id].lng], { radius: 9, color: '#4f6ef7', weight: 2, dashArray: '3,3', fill: false, interactive: false }).addTo(layer));
   fresh.forEach(h => L.circleMarker([h.lat, h.lng], { radius: 6, color: '#4f6ef7', weight: 2, dashArray: '3,3', fillColor: '#4f6ef7', fillOpacity: 0.2, interactive: false }).addTo(layer));
   map.fitBounds(layer.getBounds(), { paddingTopLeft: [24, 150], paddingBottomRight: [24, 300], maxZoom: 18 });
-  if (!fresh.length) {
-    $('pinarea-title').textContent = existing ? 'Every house here already has a pin' : 'No houses found in this area';
-    $('pinarea-sub').textContent = existing ? `${existing} house${existing === 1 ? '' : 's'} already pinned.` : `Nothing in ${from} for this outline.`;
+  if (!fresh.length && !upgrade.length) {
+    $('pinarea-title').textContent = kept || existing ? 'Every house here is already marked' : 'No houses found in this area';
+    $('pinarea-sub').textContent = kept || existing ? `${kept || existing} house${(kept || existing) === 1 ? '' : 's'} already marked.` : `Nothing in ${from} for this outline.`;
     $('pinarea-yes').textContent = 'Nothing to drop'; return;
   }
-  $('pinarea-title').textContent = `${fresh.length} house${fresh.length === 1 ? '' : 's'} in this area`;
-  $('pinarea-sub').textContent = `From ${from}.${existing ? ` ${existing} already ha${existing === 1 ? 's' : 've'} a pin and stay as they are.` : ''}`;
+  $('pinarea-title').textContent = `${fresh.length + upgrade.length} house${fresh.length + upgrade.length === 1 ? '' : 's'} in this area`;
   const choices = [['hanger', 'Door hanger'], ['none', 'Not visited']];
   $('pinarea-status').innerHTML = '';
   if (choices.length > 1) choices.forEach(([st, label]) => {
@@ -1998,16 +2001,21 @@ async function findAreaHouses(poly) {
   renderPinAreaYes();
 }
 function renderPinAreaYes() {
-  const n = pinArea.houses.length;
+  const hang = pinArea.status === 'hanger', up = pinArea.upgrade.length, n = pinArea.houses.length + (hang ? up : 0);
   $('pinarea-yes').disabled = !n;
-  $('pinarea-yes').textContent = pinArea.status === 'hanger' ? `Mark ${n} as hangers` : `Drop ${n} pin${n === 1 ? '' : 's'}`;
+  $('pinarea-yes').textContent = hang ? `Mark ${n} as hangers` : n ? `Drop ${n} pin${n === 1 ? '' : 's'}` : 'Nothing to drop';
+  const bits = [];
+  if (pinArea.houses.length && up) bits.push(hang ? `${pinArea.houses.length} new, and ${up} Not visited pin${up === 1 ? '' : 's'} become${up === 1 ? 's' : ''} a hanger${up === 1 ? '' : 's'}.` : `${up} already ha${up === 1 ? 's' : 've'} a Not visited pin.`);
+  else if (up) bits.push(hang ? `${up} Not visited pin${up === 1 ? '' : 's'} become${up === 1 ? 's' : ''} hanger${up === 1 ? '' : 's'}.` : `${up} already ha${up === 1 ? 's' : 've'} a Not visited pin.`);
+  if (pinArea.kept) bits.push(`${pinArea.kept} already marked stay as they are.`);
+  $('pinarea-sub').textContent = [`From ${pinArea.from}.`, ...bits].join(' ');
 }
 function clearPinArea() {
   if (pinArea?.layer) map.removeLayer(pinArea.layer);
   pinArea = null; $('pinarea-banner').classList.remove('show');
 }
 function dropAreaPins() {
-  if (!pinArea || !pinArea.houses.length || !workId()) return;
+  if (!pinArea || !workId()) return;
   const status = pinArea.status, now = Date.now(), ids = [];
   const per = Math.max(1, Math.floor(400 / workIds().length)); // a batch holds 500 writes
   const list = pinArea.houses.filter(h => !pins[h.id]);
@@ -2023,7 +2031,15 @@ function dropAreaPins() {
     });
     batch.commit().catch(e => { console.error(e); setSync('error'); showToast('Couldn’t save the pins (' + (e.code || 'error') + ')'); });
   }
-  if (status === 'hanger') { ids.forEach(id => syncToSheets('upsert', pins[id], id)); if (clockedIn) updateLiveHangers(); }
+  if (status === 'hanger') {
+    // Not visited pins already in the area: hung now too.
+    pinArea.upgrade.forEach(id => {
+      if (pins[id]?.status !== 'none') return;
+      const upd = { status: 'hanger', ts: now, statusBy: myUid(), statusAt: now, hangerBy: myUid(), hangerAt: now };
+      pins[id] = { ...pins[id], ...upd }; addOrUpdateMarker(id); savePin(id, upd); ids.push(id);
+    });
+    ids.forEach(id => syncToSheets('upsert', pins[id], id)); if (clockedIn) updateLiveHangers();
+  }
   ids.forEach(id => { if (!pins[id].addr || /^-?\d+\.\d+, /.test(pins[id].addr)) reverseGeocode(pins[id].lat, pins[id].lng, id, true); });
   updateStats(); clearPinArea(); buzz();
   showToast(`${status === 'hanger' ? 'Marked' : 'Dropped'} ${ids.length} pin${ids.length === 1 ? '' : 's'}${navigator.onLine ? '' : '. They save when you have signal'}`);

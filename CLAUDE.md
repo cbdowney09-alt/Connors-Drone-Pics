@@ -196,6 +196,9 @@ yet**. Expect to fix small Swift errors on the first build.
   names to assign; progress = hangers inside / houses inside from the address tiles. Canvassers see theirs outlined.
 - **Hot leads:** photo shrunk to ~200 KB in the browser, saved in Firestore (works offline). Owner gets a live list and a toast;
   email via the Apps Script in `admin/request-email.gs` (`REQUEST_WEBHOOK`), which looks the owner up in Firestore itself.
+- **Drop pins in an area** (Route panel → 📍): outline a block like a route zone; every house inside (address tiles, else Overpass)
+  without a pin within 8 m gets one in a batch (`source: 'area'`, max 500). "Not visited" for everyone; owners/company admins can
+  pick "Door hanger" instead. Code: `findAreaHouses`, `dropAreaPins`, `#pinarea-banner`.
 - **Owner tools:** tap a shift in Team metrics to see the walk; set the detection distance in the Shift panel.
 - **Admin (you):** Account → Companies: approve, decline, pause, resume every company and see hangers this month / last month
   (counted by `hangerAt`) for invoicing, with a CSV.

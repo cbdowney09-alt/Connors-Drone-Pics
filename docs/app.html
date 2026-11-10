@@ -311,6 +311,17 @@ body.is-client #sheet .status-btn,body.is-client #sheet .sheet-row,body.is-clien
 #sweep-banner.show{display:flex}
 #gap-banner{position:fixed;left:12px;right:12px;bottom:calc(var(--tabbar-h) + var(--safe-b) + 12px);z-index:1450;background:var(--surface);border:1px solid #38bdf8;border-radius:18px;padding:14px;box-shadow:0 8px 32px rgba(0,0,0,0.55);display:none;flex-direction:column;gap:10px}
 #gap-banner.show{display:flex}
+#pinarea-banner{position:fixed;left:12px;right:12px;bottom:calc(var(--tabbar-h) + var(--safe-b) + 12px);z-index:1460;background:var(--surface);border:1px solid var(--accent);border-radius:18px;padding:14px;box-shadow:0 8px 32px rgba(0,0,0,0.55);display:none;flex-direction:column;gap:10px}
+#pinarea-banner.show{display:flex}
+#pinarea-title{font-size:16px;font-weight:700}
+#pinarea-sub{font-size:13px;color:var(--text2);margin-top:2px;line-height:1.4}
+#pinarea-status{display:flex;gap:8px;flex-wrap:wrap}
+#pinarea-btns{display:flex;gap:8px}
+#pinarea-btns button{border:none;border-radius:12px;padding:14px 10px;font-size:15px;font-weight:700;cursor:pointer}
+#pinarea-yes{flex:2;background:var(--accent);color:#fff}
+#pinarea-yes:disabled{opacity:0.5}
+#pinarea-no{flex:1;background:var(--surface2);color:var(--text)}
+body.is-client #pinarea-draw-btn{display:none}
 #gap-banner.show ~ #sweep-banner{display:none}
 #gap-title{font-size:16px;font-weight:700;cursor:pointer}
 #gap-sub{font-size:13px;color:var(--text2);margin-top:2px;line-height:1.4;cursor:pointer}
@@ -497,6 +508,12 @@ body.is-client #sheet .status-btn,body.is-client #sheet .sheet-row,body.is-clien
 
   <div id="roof-mode-banner">Roofing target mode — zones built in or before <span id="roof-cutoff-label">2012</span></div>
 
+  <div id="pinarea-banner" role="dialog" aria-live="polite">
+    <div><div id="pinarea-title"></div><div id="pinarea-sub"></div></div>
+    <div id="pinarea-status" class="chips"></div>
+    <div id="pinarea-btns"><button id="pinarea-yes">Drop pins</button><button id="pinarea-no">Cancel</button></div>
+  </div>
+
   <div id="gap-banner" role="dialog" aria-live="polite">
     <div><div id="gap-title">Is this the way you walked?</div><div id="gap-sub"></div></div>
     <div id="gap-btns"><button id="gap-yes">Yes, add them</button><button id="gap-no">No</button></div>
@@ -640,6 +657,7 @@ body.is-client #sheet .status-btn,body.is-client #sheet .sheet-row,body.is-clien
       <div class="route-status" id="route-start-label"><span id="route-start-text">Tap a pin, then "Set as route start" — or just draw a zone</span></div>
       <div class="route-status" id="route-zone-status"><span id="route-zone-text">No zone drawn</span></div>
       <button class="secondary-btn" id="route-draw-zone-btn">Draw route zone on map</button>
+      <button class="secondary-btn" id="pinarea-draw-btn">📍 Drop pins in an area</button>
       <div class="box" style="padding:4px 14px">
         <div class="option-row"><label for="route-unvisited">Skip houses already visited</label><input type="checkbox" id="route-unvisited" checked></div>
         <div class="option-row" style="border-top:1px solid var(--border)"><label for="route-skip-dnr">Skip do not return</label><input type="checkbox" id="route-skip-dnr" checked></div>
@@ -914,7 +932,7 @@ let locateMarker = null, didInitialView = false;
 // marked is written to each of them. `companyId` stays their own company.
 let workCids = [], workNames = {}, crewJobs = [], isAdminUser = false;
 let areas = [], areaLayers = [], zipShapes = {}, pathLayers = [], pathsOn = false;
-let drawingForArea = false, setupDoorline = null, unsubJobs = null;
+let drawingForArea = false, drawingForPins = false, setupDoorline = null, unsubJobs = null;
 const isOwner = () => profile?.role === 'owner';
 // A company admin: an employee the owner promoted (companies/{id}.managers). Runs the team like the
 // owner, but company settings, who's an admin and deleting the company stay with the owner.
@@ -1236,6 +1254,7 @@ async function loadTeamNames() {
 }
 
 function leaveApp() {
+  clearPinArea();
   unsubPins.forEach(u => u()); unsubPins = []; pinsBy = {};
   if (unsubCompany) { unsubCompany(); unsubCompany = null; }
   Object.values(markers).forEach(m => map.removeLayer(m)); markers = {}; pins = {}; reclusterSoon();
@@ -1753,9 +1772,10 @@ function updateDrawingLayers() {
   if (drawnPoints.length >= 3) drawnPolygon = L.polygon(drawnPoints, { color: '#4f6ef7', weight: 2, fillColor: '#4f6ef7', fillOpacity: 0.1, interactive: false }).addTo(map);
   $('zone-point-count').textContent = drawnPoints.length === 0 ? 'Tap the map to start' : drawnPoints.length < 3 ? `${drawnPoints.length} point(s) — need at least 3` : `${drawnPoints.length} points — ready to save`;
 }
-function startDrawing(forRoute, forArea) {
-  closeSheet();
-  drawingMode = true; drawingForRoute = !!forRoute; drawingForArea = !!forArea; drawnPoints = []; drawnMarkers = [];
+function startDrawing(forRoute, forArea, forPins) {
+  closeSheet(); clearPinArea();
+  drawingMode = true; drawingForRoute = !!forRoute; drawingForArea = !!forArea; drawingForPins = !!forPins; drawnPoints = []; drawnMarkers = [];
+  if (forPins) forRoute = true; // same toolbar: no name or year
   $('zone-toolbar').style.top = ($('header').getBoundingClientRect().bottom + 8) + 'px';
   $('zone-toolbar').classList.add('active');
   $('draw-zone-btn').classList.add('active');
@@ -1764,12 +1784,13 @@ function startDrawing(forRoute, forArea) {
   $('zone-toolbar-fields').style.gridTemplateColumns = forArea ? '1fr' : '';
   $('zone-year-input').style.display = forArea ? 'none' : '';
   $('zone-name-input').placeholder = forArea ? 'Neighborhood name' : 'Zone name';
-  $('zone-finish-btn').textContent = forArea ? (isClient() ? '✓ Add route' : '✓ Add neighborhood') : forRoute ? '✓ Use zone' : '✓ Save zone';
+  $('zone-finish-btn').textContent = forArea ? (isClient() ? '✓ Add route' : '✓ Add neighborhood') : forPins ? '✓ Find houses' : forRoute ? '✓ Use zone' : '✓ Save zone';
+  if (forPins) $('zone-toolbar-title').textContent = 'Outline the houses to pin — tap its corners';
   updateDrawingLayers();
   map.getContainer().style.cursor = 'crosshair';
 }
 function stopDrawing() {
-  drawingMode = false; drawingForArea = false; drawnPoints = [];
+  drawingMode = false; drawingForArea = false; drawingForPins = false; drawnPoints = [];
   $('zone-year-input').style.display = ''; $('zone-toolbar-fields').style.gridTemplateColumns = '';
   drawnMarkers.forEach(m => map.removeLayer(m)); drawnMarkers = [];
   if (drawnPolyline) { map.removeLayer(drawnPolyline); drawnPolyline = null; }
@@ -1793,6 +1814,7 @@ $('zone-finish-btn').addEventListener('click', () => {
     showToast(`"${name}" added`);
     return;
   }
+  if (drawingForPins) { stopDrawing(); findAreaHouses(poly); return; }
   if (drawingForRoute) {
     if (routeZoneLayer) map.removeLayer(routeZoneLayer);
     routeZonePolygon = poly;
@@ -1906,6 +1928,113 @@ $('route-go-btn').addEventListener('click', async () => {
     showToast(`Route: ${route.length} houses`);
   } finally { $('route-loading').style.display = 'none'; $('route-go-btn').style.display = 'flex'; }
 });
+
+// ── Drop pins in an area ──────────────────────────────────
+// Like the route planner: outline a block or neighborhood, and every house inside gets a pin in one
+// go. Houses come from our address tiles (/addr/v1/, works offline once cached), else OpenStreetMap.
+// Houses that already have a pin (within 8 m) are left alone. Everyone working can drop "Not visited"
+// pins; marking a whole area as door hangers is for the owner and company admins (clients are billed
+// by the door).
+const PINAREA_MAX = 500;
+let pinArea = null; // { poly, houses, existing, status, layer }
+async function tileHousesInPolygon(poly) {
+  const idx = await addrIndex(); if (!idx) return null;
+  const la = poly.map(p => p[0]), lo = poly.map(p => p[1]);
+  const keys = [];
+  for (let ty = Math.floor(Math.min(...la) / idx.deg); ty <= Math.floor(Math.max(...la) / idx.deg); ty++)
+    for (let tx = Math.floor(Math.min(...lo) / idx.deg); tx <= Math.floor(Math.max(...lo) / idx.deg); tx++) keys.push(`${ty}/${tx}`);
+  if (keys.length > 36) return 'big';
+  const covered = keys.filter(k => idx.tiles.has(k)); if (!covered.length) return null;
+  const out = [];
+  for (const k of covered) {
+    const houses = await addrTile(k); if (!houses) return null;
+    houses.forEach(h => { if (pointInPolygon(h.lat, h.lng, poly)) out.push(h); });
+  }
+  return out;
+}
+const pinNear = (h, m) => Object.values(pins).some(p => !p._draft && distBetween(h, p) < m);
+async function findAreaHouses(poly) {
+  if (!workId() || isClient()) return;
+  const layer = L.featureGroup().addTo(map);
+  L.polygon(poly, { color: '#4f6ef7', weight: 2, fillColor: '#4f6ef7', fillOpacity: 0.08, dashArray: '6,4', interactive: false }).addTo(layer);
+  pinArea = { poly, houses: [], existing: 0, status: 'none', layer };
+  $('pinarea-title').textContent = 'Finding houses…'; $('pinarea-sub').textContent = '';
+  $('pinarea-status').innerHTML = ''; $('pinarea-yes').disabled = true; $('pinarea-yes').textContent = 'Drop pins';
+  $('pinarea-banner').classList.add('show');
+  let houses = null, from = 'our house data';
+  try { houses = await tileHousesInPolygon(poly); } catch (e) { houses = null; }
+  if (houses === 'big') { showToast('That area is too big. Draw a smaller one'); clearPinArea(); return; }
+  if (!houses) {
+    from = 'OpenStreetMap';
+    try { houses = await fetchHousesFromOSM(0, 0, poly); }
+    catch (e) { if (pinArea?.layer === layer) { showToast('Couldn’t load houses here. Try again with signal'); clearPinArea(); } return; }
+  }
+  if (pinArea?.layer !== layer) return; // cancelled meanwhile
+  const seen = new Set(), fresh = [];
+  let existing = 0;
+  houses.forEach(h => {
+    const id = h.lat.toFixed(6) + ',' + h.lng.toFixed(6);
+    if (seen.has(id)) return; seen.add(id);
+    if (pins[id] || pinNear(h, 8)) { existing++; return; }
+    fresh.push({ ...h, id });
+  });
+  if (fresh.length > PINAREA_MAX) { showToast(`That’s ${fresh.length} houses. Draw a smaller area (${PINAREA_MAX} at a time)`); clearPinArea(); return; }
+  pinArea.houses = fresh; pinArea.existing = existing;
+  fresh.forEach(h => L.circleMarker([h.lat, h.lng], { radius: 6, color: '#4f6ef7', weight: 2, dashArray: '3,3', fillColor: '#4f6ef7', fillOpacity: 0.2, interactive: false }).addTo(layer));
+  map.fitBounds(layer.getBounds(), { paddingTopLeft: [24, 150], paddingBottomRight: [24, 300], maxZoom: 18 });
+  if (!fresh.length) {
+    $('pinarea-title').textContent = existing ? 'Every house here already has a pin' : 'No houses found in this area';
+    $('pinarea-sub').textContent = existing ? `${existing} house${existing === 1 ? '' : 's'} already pinned.` : `Nothing in ${from} for this outline.`;
+    $('pinarea-yes').textContent = 'Nothing to drop'; return;
+  }
+  $('pinarea-title').textContent = `${fresh.length} house${fresh.length === 1 ? '' : 's'} to pin`;
+  $('pinarea-sub').textContent = `From ${from}.${existing ? ` ${existing} already ha${existing === 1 ? 's' : 've'} a pin and stay as they are.` : ''}`;
+  const choices = [['none', 'Not visited'], ...(isBossUser() || isAdminUser ? [['hanger', 'Door hanger']] : [])];
+  $('pinarea-status').innerHTML = '';
+  if (choices.length > 1) choices.forEach(([st, label]) => {
+    const b = document.createElement('button'); b.className = 'chip' + (st === pinArea.status ? ' active' : ''); b.textContent = label;
+    b.addEventListener('click', () => { pinArea.status = st; renderPinAreaYes(); $('pinarea-status').querySelectorAll('.chip').forEach(x => x.classList.toggle('active', x === b)); });
+    $('pinarea-status').appendChild(b);
+  });
+  renderPinAreaYes();
+}
+function renderPinAreaYes() {
+  const n = pinArea.houses.length;
+  $('pinarea-yes').disabled = !n;
+  $('pinarea-yes').textContent = pinArea.status === 'hanger' ? `Mark ${n} as hangers` : `Drop ${n} pin${n === 1 ? '' : 's'}`;
+}
+function clearPinArea() {
+  if (pinArea?.layer) map.removeLayer(pinArea.layer);
+  pinArea = null; $('pinarea-banner').classList.remove('show');
+}
+function dropAreaPins() {
+  if (!pinArea || !pinArea.houses.length || !workId()) return;
+  const status = pinArea.status, now = Date.now(), ids = [];
+  const per = Math.max(1, Math.floor(400 / workIds().length)); // a batch holds 500 writes
+  const list = pinArea.houses.filter(h => !pins[h.id]);
+  for (let i = 0; i < list.length; i += per) {
+    const batch = writeBatch(db);
+    list.slice(i, i + per).forEach(h => {
+      const p = { lat: h.lat, lng: h.lng, addr: h.addr || `${h.lat.toFixed(4)}, ${h.lng.toFixed(4)}`, status, note: '', yearBuilt: getNeighborhoodYearForPoint(h.lat, h.lng),
+        ts: now, createdBy: myUid(), createdAt: now, source: 'area', ...(status !== 'none' ? { statusBy: myUid(), statusAt: now } : {}),
+        ...(status === 'hanger' ? { hangerBy: myUid(), hangerAt: now } : {}) };
+      pins[h.id] = { ...p, id: h.id };
+      addOrUpdateMarker(h.id); ids.push(h.id);
+      workIds().forEach(cid => batch.set(doc(db, 'companies', cid, 'pins', h.id), { ...p, updatedBy: myUid(), updatedAt: serverTimestamp() }, { merge: true }));
+    });
+    batch.commit().catch(e => { console.error(e); setSync('error'); showToast('Couldn’t save the pins (' + (e.code || 'error') + ')'); });
+  }
+  if (status === 'hanger') { ids.forEach(id => syncToSheets('upsert', pins[id], id)); if (clockedIn) updateLiveHangers(); }
+  ids.forEach(id => { if (!pins[id].addr || /^-?\d+\.\d+, /.test(pins[id].addr)) reverseGeocode(pins[id].lat, pins[id].lng, id, true); });
+  updateStats(); clearPinArea(); buzz();
+  showToast(`${status === 'hanger' ? 'Marked' : 'Dropped'} ${ids.length} pin${ids.length === 1 ? '' : 's'}${navigator.onLine ? '' : '. They save when you have signal'}`);
+}
+$('pinarea-draw-btn').addEventListener('click', () => {
+  if (!workId() || isClient()) return;
+  $('route-panel').classList.remove('open'); startDrawing(false, false, true);
+});
+$('pinarea-yes').addEventListener('click', dropAreaPins);
+$('pinarea-no').addEventListener('click', clearPinArea);
 
 // ── Street sweep: GPS trail → houses passed → ask to pin ──
 // While clocked in, the phone's GPS builds a walking trail. Every ~120 m of walking, the

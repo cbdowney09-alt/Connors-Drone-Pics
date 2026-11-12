@@ -113,6 +113,9 @@ await t('then its owner is locked out', assertFails(getDocs(collection(as('newow
 await t('admin resumes', assertSucceeds(updateDoc(doc(as('admin'), 'companies/paused'), { status: 'active' })));
 await t('resumed employee reads pins again', assertSucceeds(getDocs(collection(as('pemp'), 'companies/paused/pins'))));
 await t('admin counts members of any company', assertSucceeds(getDocs(query(collection(as('admin'), 'users'), where('companyId', '==', 'other')))));
+await t('admin lists every user (team sizes on Companies)', assertSucceeds(getDocs(collection(as('admin'), 'users'))));
+await t('owner CANNOT list every user', assertFails(getDocs(collection(as('owner1'), 'users'))));
+await t('owner CANNOT list another company\'s team', assertFails(getDocs(query(collection(as('owner1'), 'users'), where('companyId', '==', 'other')))));
 await t('admin reads any company pins (counts)', assertSucceeds(getDocs(collection(as('admin'), 'companies/other/pins'))));
 await t('admin reads owner profile', assertSucceeds(getDoc(doc(as('admin'), 'users/outsider'))));
 

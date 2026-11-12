@@ -189,7 +189,7 @@ yet**. Expect to fix small Swift errors on the first build.
   a Doorline client can't change or remove pins or shifts at all (billed by the door). Shifts: only your own, numbers only.
   Hot leads: canvassers create their own and see only theirs; the owner reads and updates all. Settings: owner only,
   except `neighborhoodYears`. House photos (`pinPhotos`): anyone working adds their own (<900 KB); they, the owner or you delete.
-  173 emulator tests in `rules-test/`.
+  176 emulator tests in `rules-test/`.
 - **Draft pins:** tapping the map makes a pin on that phone only; it's saved when a status, note, year or hot lead is added.
 - **House sheet:** "Hung by Jake · Nov 6" (`pinWho`), 🔥 Hot lead button, Remove only shown to people allowed to remove.
 - **Neighborhoods:** the Areas tab (was Zone; year-built zones moved to Layers for owners). Owners add zips or draw areas and tap
@@ -201,7 +201,9 @@ yet**. Expect to fix small Swift errors on the first build.
   "Not visited" is the other choice). Marking hangers also turns "Not visited" pins already inside into hangers; other statuses stay. Code: `findAreaHouses`, `dropAreaPins`, `#pinarea-banner`.
 - **Owner tools:** tap a shift in Team metrics to see the walk; set the detection distance in the Shift panel.
 - **Admin (you):** Account → Companies: approve, decline, pause, resume every company and see hangers this month / last month
-  (counted by `hangerAt`) for invoicing, with a CSV.
+  (counted by `hangerAt`) for invoicing, with a CSV. Each company also shows its team members: everyone in `users` with that `companyId`,
+  split into owner / admins / employees (one `users` listing, `loadCompanyPeople`); tap to see names, emails and join dates. Doorline crew
+  aren't counted (no company); a client's `crew` count is noted. The iPhone app's admin sheet shows the same total as "N members".
 - **Join links:** Share in Team sends `app.html?join=CODE`; the code is filled in and the visitor starts on Create an account.
   Sign-up opens on "Join my team". Doorline clients sign up through `app.html?via=doorline` (the Doorline question is hidden otherwise).
 

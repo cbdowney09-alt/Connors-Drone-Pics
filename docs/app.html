@@ -282,6 +282,25 @@ body.is-client #sheet .status-btn,body.is-client #sheet .sheet-row,body.is-clien
 .mini .v{font-size:18px;font-weight:700}
 .mini .l{font-size:10px;color:var(--text2);margin-top:2px}
 .mini.hi .v{color:var(--c-hanger)}
+/* Admin → Companies: team size, tap to list who's on it */
+.co-people{background:var(--surface2);border-radius:10px}
+.co-people summary,.co-people .cp-sum{display:flex;align-items:center;gap:12px;padding:9px 12px;min-height:52px}
+.co-people summary{list-style:none;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.co-people summary::-webkit-details-marker{display:none}
+.cp-n{font-size:22px;font-weight:800;min-width:30px;text-align:center}
+.cp-t{flex:1;min-width:0}
+.cp-h{font-size:14px;font-weight:600}
+.cp-s{font-size:12px;color:var(--text2);margin-top:1px}
+.cp-chev{color:var(--text2);flex:0 0 auto;transition:transform .2s}
+.co-people[open] .cp-chev{transform:rotate(180deg)}
+.cp-list{border-top:1px solid var(--border);padding:2px 12px 6px}
+.cp-row{display:flex;align-items:center;gap:10px;padding:9px 0}
+.cp-row+.cp-row{border-top:1px solid var(--border)}
+.cp-row .m-info{flex:1;min-width:0}
+.cp-r{flex:0 0 auto;text-align:right}
+.cp-role{font-size:12px;font-weight:600;color:var(--text2);text-transform:capitalize}
+.cp-role.owner,.cp-role.admin{color:#8ea2ff}
+.cp-when{font-size:11px;color:var(--text2);margin-top:2px}
 
 /* Team / metrics */
 #invite-code-box{display:none;text-align:center}
@@ -758,7 +777,7 @@ body.is-client #pinarea-draw-btn{display:none}
   <div id="companies-panel" class="panel">
     <div class="panel-header"><button class="panel-back" data-close="companies-panel" aria-label="Back"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg></button><h2>Companies</h2><button class="panel-action-btn" id="companies-csv">⬇ CSV</button></div>
     <div class="panel-body">
-      <div class="hint">Approve a company once they’ve paid. Pause locks their whole team out (nothing is deleted) and Resume brings it all back. Hangers are counted by the day each door was hung, so you can invoice from these numbers.</div>
+      <div class="hint">Approve a company once they’ve paid. Pause locks their whole team out (nothing is deleted) and Resume brings it all back. Hangers are counted by the day each door was hung, so you can invoice from these numbers. Tap Team members to see who’s on each team.</div>
       <div id="companies-list" style="display:flex;flex-direction:column;gap:12px"></div>
     </div>
   </div>
@@ -3992,6 +4011,7 @@ $('menu-leads').addEventListener('click', () => { $('menu-panel').classList.remo
 // Approve requests, pause and resume teams, and count hangers per month (by the day each door was
 // hung: pins' hangerAt) for invoicing. Only accounts with an admins/{uid} doc can read all companies.
 let adminCompanies = [];
+const peopleOpen = new Set(); // companies whose member list is open, kept when the list redraws
 const COMPANY_ORDER = { pending: 0, active: 1, paused: 2, declined: 3 };
 function monthStarts() {
   const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(1);
@@ -4012,6 +4032,8 @@ async function loadCompanies() {
     adminCompanies = []; snap.forEach(d => adminCompanies.push({ id: d.id, ...d.data() }));
   } catch (e) { wrap.innerHTML = `<div class="empty">Couldn’t load companies (${esc(e.code || e.message)})</div>`; return; }
   renderCompanies();
+  const list = adminCompanies;
+  loadCompanyPeople(list).then(() => { if (list === adminCompanies) renderCompanies(); });
   const { thisMonth, lastMonth } = monthStarts();
   await Promise.all(adminCompanies.map(async c => {
     try {
@@ -4023,6 +4045,46 @@ async function loadCompanies() {
     } catch (e) { console.warn('count', c.id, e); c._thisMonth = c._lastMonth = null; }
   }));
   renderCompanies();
+}
+// Everyone signed up under each company: the owner, company admins and employees (the same count
+// as the iPhone app's "members"). Doorline crew belong to no client company; a client's crew list counts them.
+async function loadCompanyPeople(list) {
+  let by = null;
+  try {
+    const snap = await getDocs(collection(db, 'users'));
+    by = {};
+    snap.forEach(d => { const u = d.data(), cid = u.companyId || ''; if (cid) (by[cid] = by[cid] || []).push({ uid: d.id, ...u }); });
+  } catch (e) { console.warn('people', e); }
+  list.forEach(c => { c._people = by ? (by[c.id] || []) : null; });
+}
+const ROLE_ORDER = { owner: 0, admin: 1, employee: 2 };
+// null while loading or if it failed; otherwise the counts and the people, owner first.
+function companyPeople(c) {
+  if (!Array.isArray(c._people)) return null;
+  const k = { owner: 0, admin: 0, employee: 0 };
+  const rows = c._people.map(u => ({ ...u, _role: u.role === 'owner' || u.uid === c.ownerId ? 'owner' : (c.managers || []).includes(u.uid) ? 'admin' : 'employee' }))
+    .sort((a, b) => ROLE_ORDER[a._role] - ROLE_ORDER[b._role] || String(a.name || '').localeCompare(String(b.name || '')));
+  rows.forEach(u => { k[u._role]++; });
+  return { ...k, total: rows.length, rows };
+}
+function companyPeopleHtml(c) {
+  const p = companyPeople(c);
+  if (!p) return `<div class="co-people"><div class="cp-sum"><div class="cp-n">${c._people === null ? '—' : '…'}</div><div class="cp-t"><div class="cp-h">Team members</div><div class="cp-s">${c._people === null ? 'Couldn’t load the team' : 'Counting…'}</div></div></div></div>`;
+  const many = (n, one, more) => `${n} ${n === 1 ? one : more}`;
+  const crew = c.doorline ? (c.crew || []).length : 0;
+  const mix = [p.owner && many(p.owner, 'owner', 'owners'), p.admin && many(p.admin, 'admin', 'admins'), p.employee && many(p.employee, 'employee', 'employees'),
+    crew && `${crew} Doorline crew`].filter(Boolean).join(' · ') || 'No one has joined yet';
+  const joined = u => {
+    const t = u.createdAt?.toMillis ? u.createdAt.toMillis() : typeof u.createdAt === 'number' ? u.createdAt : 0;
+    if (!t) return '';
+    const d = new Date(t);
+    return 'Joined ' + d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', ...(d.getFullYear() !== new Date().getFullYear() ? { year: 'numeric' } : {}) });
+  };
+  const rows = p.rows.map(u => `<div class="cp-row"><div class="m-info"><div class="m-name">${esc(u.name || 'Unnamed')}${u.uid === myUid() ? ' (you)' : ''}</div><div class="m-email">${esc(u.email)}</div></div>`
+    + `<div class="cp-r"><div class="cp-role ${u._role}">${u._role}</div>${joined(u) ? `<div class="cp-when">${esc(joined(u))}</div>` : ''}</div></div>`).join('');
+  return `<details class="co-people"${peopleOpen.has(c.id) ? ' open' : ''}><summary><div class="cp-n">${p.total}</div><div class="cp-t"><div class="cp-h">${p.total === 1 ? 'Team member' : 'Team members'}</div><div class="cp-s">${esc(mix)}</div></div>`
+    + `<svg class="cp-chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m6 9 6 6 6-6"/></svg></summary>`
+    + (rows ? `<div class="cp-list">${rows}</div>` : '') + `</details>`;
 }
 function renderCompanies() {
   const wrap = $('companies-list');
@@ -4039,7 +4101,10 @@ function renderCompanies() {
     box.innerHTML = `<div><div class="m-name">${esc(c.name || 'Unnamed')}<span class="status-tag ${esc(st)}">${esc(st)}</span></div>
       <div class="m-email">${c.doorline ? 'Doorline Hangers client' : 'KnoxCanvas'} · ${esc([c.ownerName, c.phone, c.ownerEmail].filter(Boolean).join(' · ') || 'no contact saved')}</div></div>
       <div class="trio"><div class="mini hi"><div class="v">${n(c._thisMonth)}</div><div class="l">Hangers in ${esc(month)}</div></div><div class="mini"><div class="v">${n(c._lastMonth)}</div><div class="l">In ${esc(lastName)}</div></div><div class="mini"><div class="v">${c.requestedAt?.toDate ? esc(c.requestedAt.toDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })) : '—'}</div><div class="l">Signed up</div></div></div>
+      ${companyPeopleHtml(c)}
       ${actions.length ? `<div style="display:flex;gap:8px">${actions.map(([s, l]) => `<button class="secondary-btn" data-status="${s}">${l}</button>`).join('')}</div>` : ''}`;
+    const people = box.querySelector('details.co-people');
+    if (people) people.addEventListener('toggle', () => { if (people.open) peopleOpen.add(c.id); else peopleOpen.delete(c.id); });
     box.querySelectorAll('[data-status]').forEach(b => b.addEventListener('click', async () => {
       const to = b.dataset.status, verb = b.textContent;
       if ((to === 'paused' || to === 'declined') && !confirm(`${verb} ${c.name || 'this company'}? ${to === 'paused' ? 'Their whole team is locked out until you resume. Nothing is deleted.' : 'They’ll see that the request wasn’t approved.'}`)) return;
@@ -4054,8 +4119,12 @@ function renderCompanies() {
 $('menu-companies').addEventListener('click', openCompanies);
 $('companies-csv').addEventListener('click', () => {
   if (!adminCompanies.length) { showToast('Nothing to export yet'); return; }
-  const lines = ['Company,Type,Status,Owner,Email,Phone,Hangers this month,Hangers last month'];
-  adminCompanies.forEach(c => lines.push([c.name, c.doorline ? 'Doorline client' : 'KnoxCanvas', c.status || 'active', c.ownerName, c.ownerEmail, c.phone, c._thisMonth ?? '', c._lastMonth ?? ''].map(csvEsc).join(',')));
+  const lines = ['Company,Type,Status,Owner,Email,Phone,Hangers this month,Hangers last month,Team members,Admins,Employees'];
+  adminCompanies.forEach(c => {
+    const p = companyPeople(c);
+    lines.push([c.name, c.doorline ? 'Doorline client' : 'KnoxCanvas', c.status || 'active', c.ownerName, c.ownerEmail, c.phone, c._thisMonth ?? '', c._lastMonth ?? '',
+      p ? p.total : '', p ? p.admin : '', p ? p.employee : ''].map(csvEsc).join(','));
+  });
   downloadCsv(lines, `companies_${new Date().toISOString().slice(0, 10)}.csv`); showToast('CSV downloaded');
 });
 
